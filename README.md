@@ -27,7 +27,7 @@ cmake --build build/simulator --parallel
 | `kinetis_k22::firmware_image` | Static Library | ELF and raw binary image loader. |
 | `kinetis_k22::firmware_runner` | Executable | CLI tool to load and run firmware images. |
 | `test` | Utility | Run all tests. |
-| `test-coverage` | Utility | Run all tests and write source coverage reports. |
+| `test-coverage` | Utility | Run all tests and print a source coverage summary. |
 
 ## Run Firmware
 
@@ -68,5 +68,4 @@ Run all tests with simulator source coverage:
 cmake --build build/simulator --target test-coverage
 ```
 
-The coverage target requires GCC and gcov.
-Coverage reports are stored in `build/coverage/`.
+The coverage target requires GCC and gcov. It prints the summary after all tests pass.
