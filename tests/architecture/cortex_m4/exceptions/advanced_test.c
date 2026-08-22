@@ -40,6 +40,10 @@ static bool bus_write(void* context, uint32_t address, uint8_t size, CortexM4Acc
     for (uint8_t index = 0; index < size; index++) {
         bus->memory[address + index] = (uint8_t)(value >> (index * 8u));
     }
+    if (bus->inject_interrupt && address == bus->interrupt_address) {
+        bus->inject_interrupt = false;
+        cortex_m4_set_irq(bus->cpu, 0u, true);
+    }
     return true;
 }
 
@@ -60,6 +64,59 @@ static void write_vector(TestBus* bus, uint16_t exception, uint32_t vector) {
     for (uint8_t index = 0; index < 4u; index++) {
         bus->memory[address + index] = (uint8_t)(vector >> (index * 8u));
     }
+}
+
+static void write_halfword(TestBus* bus, uint32_t address, uint16_t value) {
+    bus->memory[address] = (uint8_t)value;
+    bus->memory[address + 1u] = (uint8_t)(value >> 8u);
+}
+
+static void write_word(TestBus* bus, uint32_t address, uint32_t value) {
+    for (uint8_t index = 0; index < 4u; index++) {
+        bus->memory[address + index] = (uint8_t)(value >> (index * 8u));
+    }
+}
+
+static uint32_t read_word(const TestBus* bus, uint32_t address) {
+    uint32_t value = 0u;
+    for (uint8_t index = 0; index < 4u; index++) {
+        value |= (uint32_t)bus->memory[address + index] << (index * 8u);
+    }
+    return value;
+}
+
+static CortexM4* prepare_ici_execution(TestState* state, TestBus* bus, uint16_t first,
+                                       uint16_t second) {
+    CortexM4* cpu = create_cpu(state, bus);
+    cpu->msp = 0x800u;
+    cpu->registers[15] = 0x100u;
+    cpu->irq_enabled[0] = 1u;
+    write_vector(bus, 16u, 0x301u);
+    write_halfword(bus, 0x100u, first);
+    if (second != 0u) {
+        write_halfword(bus, 0x102u, second);
+    }
+    write_halfword(bus, 0x300u, 0x4770u);
+    return cpu;
+}
+
+static void expect_ici_suspended(TestState* state, CortexM4* cpu, uint8_t next_register,
+                                 uint32_t next_address) {
+    expect(state, cpu->registers[15] == 0x100u, "cpu->registers[15] == 0x100u");
+    expect(state, cpu->ici_valid, "cpu->ici_valid");
+    expect(state, cpu->ici_register == next_register, "cpu->ici_register == next_register");
+    expect(state, cpu->ici_address == next_address, "cpu->ici_address == next_address");
+}
+
+static void complete_ici_interrupt(TestState* state, CortexM4* cpu, uint8_t next_register,
+                                   uint32_t next_address, uint32_t final_pc) {
+    cortex_m4_step(cpu);
+    expect_ici_suspended(state, cpu, next_register, next_address);
+    cortex_m4_step(cpu);
+    expect(state, cpu->registers[15] == final_pc, "cpu->registers[15] == final_pc");
+    expect(state, !cpu->ici_valid, "!cpu->ici_valid");
+    expect(state, (cpu->irq_active[0] & 1u) == 0u, "(cpu->irq_active[0] & 1u) == 0u");
+    expect(state, (cpu->irq_pending[0] & 1u) == 0u, "(cpu->irq_pending[0] & 1u) == 0u");
 }
 
 static void prepare_frame(CortexM4* cpu, uint32_t return_value) {
@@ -480,6 +537,133 @@ static void test_ici_execution_address(TestState* state) {
     cortex_m4_destroy(cpu);
 }
 
+static void test_ici_push_pop_execution(TestState* state) {
+    TestBus bus = {0};
+    CortexM4* cpu = prepare_ici_execution(state, &bus, 0xb403u, 0u);
+    cpu->control = CORTEX_M4_CONTROL_SPSEL;
+    cpu->psp = 0x900u;
+    cpu->registers[0] = 0x11223344u;
+    cpu->registers[1] = 0x55667788u;
+    write_word(&bus, 0x8d4u, 0xdecafbad);
+    write_word(&bus, 0x900u, 0xdecafbad);
+    bus.interrupt_address = 0x8f8u;
+    bus.inject_interrupt = true;
+    cortex_m4_step(cpu);
+    expect_ici_suspended(state, cpu, 1u, 0x8fcu);
+    expect(state, read_word(&bus, 0x8f8u) == 0x11223344u, "read_word(&bus, 0x8f8u) == 0x11223344u");
+    complete_ici_interrupt(state, cpu, 1u, 0x8fcu, 0x102u);
+    expect(state, cpu->psp == 0x8f8u, "cpu->psp == 0x8f8u");
+    expect(state, read_word(&bus, 0x8d4u) == 0xdecafbadu, "read_word(&bus, 0x8d4u) == 0xdecafbadu");
+    expect(state, read_word(&bus, 0x8f8u) == 0x11223344u, "read_word(&bus, 0x8f8u) == 0x11223344u");
+    expect(state, read_word(&bus, 0x8fcu) == 0x55667788u, "read_word(&bus, 0x8fcu) == 0x55667788u");
+    expect(state, read_word(&bus, 0x900u) == 0xdecafbadu, "read_word(&bus, 0x900u) == 0xdecafbadu");
+    cortex_m4_destroy(cpu);
+
+    memset(&bus, 0, sizeof(bus));
+    cpu = prepare_ici_execution(state, &bus, 0xbc03u, 0u);
+    cpu->control = CORTEX_M4_CONTROL_SPSEL;
+    cpu->psp = 0x900u;
+    write_word(&bus, 0x8dcu, 0xdecafbad);
+    write_word(&bus, 0x900u, 0x12345678u);
+    write_word(&bus, 0x904u, 0x89abcdefu);
+    bus.interrupt_address = 0x900u;
+    bus.inject_interrupt = true;
+    cortex_m4_step(cpu);
+    expect_ici_suspended(state, cpu, 1u, 0x904u);
+    expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+    expect(state, cpu->registers[1] == 0u, "cpu->registers[1] == 0u");
+    complete_ici_interrupt(state, cpu, 1u, 0x904u, 0x102u);
+    expect(state, cpu->psp == 0x908u, "cpu->psp == 0x908u");
+    expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+    expect(state, cpu->registers[1] == 0x89abcdefu, "cpu->registers[1] == 0x89abcdefu");
+    expect(state, read_word(&bus, 0x8dcu) == 0xdecafbadu, "read_word(&bus, 0x8dcu) == 0xdecafbadu");
+    cortex_m4_destroy(cpu);
+}
+
+static void test_ici_increment_after_execution(TestState* state) {
+    for (uint8_t load = 0u; load <= 1u; load++) {
+        TestBus bus = {0};
+        CortexM4* cpu = prepare_ici_execution(state, &bus, load != 0u ? 0xe8b2u : 0xe8a2u, 0x0003u);
+        cpu->registers[0] = 0x11223344u;
+        cpu->registers[1] = 0x55667788u;
+        cpu->registers[2] = 0x400u;
+        write_word(&bus, 0x3fcu, 0xdecafbad);
+        write_word(&bus, 0x400u, load != 0u ? 0x12345678u : 0u);
+        write_word(&bus, 0x404u, load != 0u ? 0x89abcdefu : 0u);
+        write_word(&bus, 0x408u, 0xdecafbad);
+        bus.interrupt_address = 0x400u;
+        bus.inject_interrupt = true;
+        cortex_m4_step(cpu);
+        expect_ici_suspended(state, cpu, 1u, 0x404u);
+        if (load != 0u) {
+            expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+            expect(state, cpu->registers[1] == 0x55667788u, "cpu->registers[1] == 0x55667788u");
+        } else {
+            expect(state, read_word(&bus, 0x400u) == 0x11223344u,
+                   "read_word(&bus, 0x400u) == 0x11223344u");
+            expect(state, read_word(&bus, 0x404u) == 0u, "read_word(&bus, 0x404u) == 0u");
+        }
+        complete_ici_interrupt(state, cpu, 1u, 0x404u, 0x104u);
+        expect(state, cpu->registers[2] == 0x408u, "cpu->registers[2] == 0x408u");
+        expect(state, read_word(&bus, 0x3fcu) == 0xdecafbadu,
+               "read_word(&bus, 0x3fcu) == 0xdecafbadu");
+        expect(state, read_word(&bus, 0x408u) == 0xdecafbadu,
+               "read_word(&bus, 0x408u) == 0xdecafbadu");
+        if (load != 0u) {
+            expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+            expect(state, cpu->registers[1] == 0x89abcdefu, "cpu->registers[1] == 0x89abcdefu");
+        } else {
+            expect(state, read_word(&bus, 0x400u) == 0x11223344u,
+                   "read_word(&bus, 0x400u) == 0x11223344u");
+            expect(state, read_word(&bus, 0x404u) == 0x55667788u,
+                   "read_word(&bus, 0x404u) == 0x55667788u");
+        }
+        cortex_m4_destroy(cpu);
+    }
+}
+
+static void test_ici_decrement_before_execution(TestState* state) {
+    for (uint8_t load = 0u; load <= 1u; load++) {
+        TestBus bus = {0};
+        CortexM4* cpu = prepare_ici_execution(state, &bus, load != 0u ? 0xe932u : 0xe922u, 0x0003u);
+        cpu->registers[0] = 0x11223344u;
+        cpu->registers[1] = 0x55667788u;
+        cpu->registers[2] = 0x408u;
+        write_word(&bus, 0x3fcu, 0xdecafbad);
+        write_word(&bus, 0x400u, load != 0u ? 0x12345678u : 0u);
+        write_word(&bus, 0x404u, load != 0u ? 0x89abcdefu : 0u);
+        write_word(&bus, 0x408u, 0xdecafbad);
+        bus.interrupt_address = 0x400u;
+        bus.inject_interrupt = true;
+        cortex_m4_step(cpu);
+        expect_ici_suspended(state, cpu, 1u, 0x404u);
+        if (load != 0u) {
+            expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+            expect(state, cpu->registers[1] == 0x55667788u, "cpu->registers[1] == 0x55667788u");
+        } else {
+            expect(state, read_word(&bus, 0x400u) == 0x11223344u,
+                   "read_word(&bus, 0x400u) == 0x11223344u");
+            expect(state, read_word(&bus, 0x404u) == 0u, "read_word(&bus, 0x404u) == 0u");
+        }
+        complete_ici_interrupt(state, cpu, 1u, 0x404u, 0x104u);
+        expect(state, cpu->registers[2] == 0x400u, "cpu->registers[2] == 0x400u");
+        expect(state, read_word(&bus, 0x3fcu) == 0xdecafbadu,
+               "read_word(&bus, 0x3fcu) == 0xdecafbadu");
+        expect(state, read_word(&bus, 0x408u) == 0xdecafbadu,
+               "read_word(&bus, 0x408u) == 0xdecafbadu");
+        if (load != 0u) {
+            expect(state, cpu->registers[0] == 0x12345678u, "cpu->registers[0] == 0x12345678u");
+            expect(state, cpu->registers[1] == 0x89abcdefu, "cpu->registers[1] == 0x89abcdefu");
+        } else {
+            expect(state, read_word(&bus, 0x400u) == 0x11223344u,
+                   "read_word(&bus, 0x400u) == 0x11223344u");
+            expect(state, read_word(&bus, 0x404u) == 0x55667788u,
+                   "read_word(&bus, 0x404u) == 0x55667788u");
+        }
+        cortex_m4_destroy(cpu);
+    }
+}
+
 static void test_boundaries(TestState* state) {
     TestBus bus = {0};
     CortexM4* cpu = create_cpu(state, &bus);
@@ -561,6 +745,9 @@ int main(void) {
     test_unstack_failure_classification(&state);
     test_ici_state(&state);
     test_ici_execution_address(&state);
+    test_ici_push_pop_execution(&state);
+    test_ici_increment_after_execution(&state);
+    test_ici_decrement_before_execution(&state);
     test_faultmask_and_sleep(&state);
     test_boundaries(&state);
     return test_finish(&state);

@@ -308,6 +308,7 @@ static bool execute_push_pop(CortexM4* cpu, uint16_t opcode) {
     const bool extra = (opcode & (1u << 8)) != 0;
     const uint8_t list = (uint8_t)opcode;
     uint32_t stack_pointer = cortex_m4_read_register_internal(cpu, 13);
+    const bool resuming = cpu->ici_valid;
     const uint8_t resume = cortex_m4_exception_advanced_multiple_resume(cpu);
     if (!pop) {
         uint32_t count = extra ? 1u : 0u;
@@ -315,7 +316,7 @@ static bool execute_push_pop(CortexM4* cpu, uint16_t opcode) {
             if ((list & (1u << index)) != 0)
                 count++;
         }
-        uint32_t address = stack_pointer - count * 4u;
+        uint32_t address = resuming ? stack_pointer : stack_pointer - count * 4u;
         const uint32_t new_stack = address;
         address = cortex_m4_exception_advanced_multiple_address(cpu, address);
         for (uint8_t index = 0; index < 8; index++) {
@@ -335,8 +336,10 @@ static bool execute_push_pop(CortexM4* cpu, uint16_t opcode) {
                 if (next == 0u && extra) {
                     next = 14u;
                 }
-                if (cortex_m4_exception_advanced_multiple_suspend(cpu, next, 2u, address))
+                if (cortex_m4_exception_advanced_multiple_suspend(cpu, next, 2u, address)) {
+                    cortex_m4_write_register_internal(cpu, 13, new_stack);
                     return true;
+                }
             }
         }
         if (extra && resume <= 14u) {
