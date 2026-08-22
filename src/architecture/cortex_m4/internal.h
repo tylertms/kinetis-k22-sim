@@ -220,6 +220,7 @@ struct CortexM4 {
     uint8_t ici_register;
     bool ici_valid;
     bool exception_unstack_memory_fault;
+    bool exception_frame_memory_management_fault;
     CortexM4Debug debug;
 };
 

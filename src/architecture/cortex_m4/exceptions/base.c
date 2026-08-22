@@ -30,10 +30,8 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     uint32_t exception_return = 0;
     if (!cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &exception_return)) {
         cortex_m4_timing_abort(cpu);
-        cortex_m4_exception_advanced_entry_fault(
-            cpu, exception, CORTEX_M4_FAULT_STACKING,
-            !cortex_m4_mpu_access_permitted(cpu, stack_pointer - 4u, 4, CORTEX_M4_ACCESS_DATA,
-                                            true));
+        cortex_m4_exception_advanced_entry_fault(cpu, exception, CORTEX_M4_FAULT_STACKING,
+                                                 cpu->exception_frame_memory_management_fault);
         return false;
     }
     if (used_psp) {
@@ -130,10 +128,8 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value) {
     if (!cortex_m4_system_unstack_exception_frame(cpu, &stack_pointer, value, current_exception)) {
         cortex_m4_timing_abort(cpu);
         if (cpu->exception_unstack_memory_fault) {
-            cortex_m4_exception_advanced_fault(
-                cpu, CORTEX_M4_FAULT_UNSTACKING,
-                !cortex_m4_mpu_access_permitted(cpu, stack_pointer, 4, CORTEX_M4_ACCESS_DATA,
-                                                false));
+            cortex_m4_exception_advanced_fault(cpu, CORTEX_M4_FAULT_UNSTACKING,
+                                               cpu->exception_frame_memory_management_fault);
         } else {
             cortex_m4_raise_fault(cpu, 6u);
         }

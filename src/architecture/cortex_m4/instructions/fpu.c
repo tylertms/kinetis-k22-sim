@@ -1,5 +1,6 @@
 #include "architecture/cortex_m4/internal.h"
 
+#include <fenv.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -163,6 +164,41 @@ static uint32_t rounded_float(CortexM4* cpu, double exact) {
     return bits;
 }
 
+static int host_rounding_mode(const CortexM4* cpu) {
+    const uint8_t rounding = (uint8_t)(cpu->fpscr >> FPSCR_RMODE_SHIFT) & 3u;
+    static const int modes[] = {FE_TONEAREST, FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO};
+    return modes[rounding];
+}
+
+static uint32_t fused_float(CortexM4* cpu, float left, float right, float accumulator) {
+    fenv_t environment;
+    if (fegetenv(&environment) != 0 || fesetround(host_rounding_mode(cpu)) != 0) {
+        return rounded_float(cpu, fma((double)left, (double)right, (double)accumulator));
+    }
+    feclearexcept(FE_ALL_EXCEPT);
+    volatile float result = fmaf(left, right, accumulator);
+    const int exceptions = fetestexcept(FE_INVALID | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
+    fesetenv(&environment);
+    if ((exceptions & FE_INVALID) != 0) {
+        cpu->fpscr |= FPSCR_IOC;
+    }
+    if ((exceptions & FE_OVERFLOW) != 0) {
+        cpu->fpscr |= FPSCR_OFC;
+    }
+    if ((exceptions & FE_UNDERFLOW) != 0) {
+        cpu->fpscr |= FPSCR_UFC;
+    }
+    if ((exceptions & FE_INEXACT) != 0) {
+        cpu->fpscr |= FPSCR_IXC;
+    }
+    const uint32_t bits = float_to_bits(result);
+    if ((cpu->fpscr & FPSCR_FZ) != 0 && float_is_subnormal(bits)) {
+        cpu->fpscr |= FPSCR_UFC | FPSCR_IXC;
+        return bits & FLOAT_SIGN;
+    }
+    return bits;
+}
+
 static uint32_t expand_vfp_immediate(uint8_t immediate) {
     const uint32_t sign = (uint32_t)(immediate >> 7) << 31;
     const uint32_t exponent_head = (uint32_t)(~immediate >> 6 & 1u) << 30;
@@ -240,6 +276,13 @@ static uint32_t rounded_half_fraction(CortexM4* cpu, double value, bool negative
         return lower + 1u;
     }
     return (lower & 1u) == 0 ? lower : lower + 1u;
+}
+
+static uint16_t half_overflow_result(CortexM4* cpu, uint16_t sign) {
+    const uint8_t rounding = (uint8_t)(cpu->fpscr >> FPSCR_RMODE_SHIFT) & 3u;
+    const bool infinity =
+        rounding == 0u || (rounding == 1u && sign == 0u) || (rounding == 2u && sign != 0u);
+    return sign | (infinity ? 0x7c00u : 0x7bffu);
 }
 
 static uint32_t convert_float_to_integer(CortexM4* cpu, uint32_t source, bool unsigned_result,
@@ -333,10 +376,9 @@ static uint16_t float_to_half(CortexM4* cpu, uint32_t bits) {
         return sign | 0x7c00u;
     }
     const double magnitude = fabs((double)bits_to_float(bits));
-    const double maximum = (cpu->fpscr & FPSCR_AHP) != 0 ? 131008.0 : 65504.0;
-    if (magnitude > maximum) {
+    if ((cpu->fpscr & FPSCR_AHP) != 0 && magnitude > 131008.0) {
         cpu->fpscr |= FPSCR_OFC | FPSCR_IXC;
-        return sign | ((cpu->fpscr & FPSCR_AHP) != 0 ? 0x7fffu : 0x7c00u);
+        return sign | 0x7fffu;
     }
     if (magnitude == 0) {
         return sign;
@@ -352,9 +394,13 @@ static uint16_t float_to_half(CortexM4* cpu, uint32_t bits) {
         scaled = (normalized * 2.0 - 1.0) * 1024.0;
     }
     uint32_t fraction = rounded_half_fraction(cpu, scaled, sign != 0);
-    if (fraction >= 1024u && half_exponent != 0) {
+    if (fraction >= 1024u) {
         fraction = 0;
         half_exponent++;
+    }
+    if ((cpu->fpscr & FPSCR_AHP) == 0 && half_exponent >= 31) {
+        cpu->fpscr |= FPSCR_OFC | FPSCR_IXC;
+        return half_overflow_result(cpu, sign);
     }
     if ((double)fraction != scaled) {
         cpu->fpscr |= FPSCR_IXC;
@@ -438,7 +484,7 @@ static uint32_t multiply_accumulate(CortexM4* cpu, uint32_t accumulator, uint32_
         const uint32_t product = rounded_float(cpu, signed_left * right_value);
         return binary_result(cpu, float_to_bits((float)signed_accumulator), product, 2);
     }
-    return rounded_float(cpu, fma(signed_left, right_value, signed_accumulator));
+    return fused_float(cpu, (float)signed_left, (float)right_value, (float)signed_accumulator);
 }
 
 static bool execute_scalar_memory(CortexM4* cpu, uint16_t first, uint16_t second) {
@@ -719,9 +765,8 @@ bool cortex_m4_execute_fpu(CortexM4* cpu, uint16_t first, uint16_t second) {
         return true;
     }
     if (!cortex_m4_system_materialize_lazy_fp(cpu)) {
-        cortex_m4_exception_advanced_fault(
-            cpu, CORTEX_M4_FAULT_LAZY_FP,
-            !cortex_m4_mpu_access_permitted(cpu, cpu->fpcar, 4, CORTEX_M4_ACCESS_DATA, true));
+        cortex_m4_exception_advanced_fault(cpu, CORTEX_M4_FAULT_LAZY_FP,
+                                           cpu->exception_frame_memory_management_fault);
         return true;
     }
     if (execute_core_transfers(cpu, first, second) || execute_scalar_memory(cpu, first, second) ||

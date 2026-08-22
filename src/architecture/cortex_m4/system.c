@@ -748,10 +748,14 @@ void cortex_m4_system_reset(CortexM4* cpu) {
 }
 
 static bool write_stack_word(CortexM4* cpu, uint32_t address, uint32_t value) {
+    cpu->exception_frame_memory_management_fault =
+        !cortex_m4_mpu_access_permitted(cpu, address, 4u, CORTEX_M4_ACCESS_DATA, true);
     return cortex_m4_bus_write(cpu, address, 4, CORTEX_M4_ACCESS_DATA, value);
 }
 
 static bool read_stack_word(CortexM4* cpu, uint32_t address, uint32_t* value) {
+    cpu->exception_frame_memory_management_fault =
+        !cortex_m4_mpu_access_permitted(cpu, address, 4u, CORTEX_M4_ACCESS_DATA, false);
     return cortex_m4_bus_read(cpu, address, 4, CORTEX_M4_ACCESS_DATA, value);
 }
 
@@ -767,6 +771,9 @@ static bool write_fp_frame(CortexM4* cpu, uint32_t address) {
 
 bool cortex_m4_system_stack_exception_frame(CortexM4* cpu, uint32_t* stack_pointer,
                                             uint32_t* return_value) {
+    if (cpu != NULL) {
+        cpu->exception_frame_memory_management_fault = false;
+    }
     if (cpu == NULL || stack_pointer == NULL || return_value == NULL ||
         cpu->exception_frame_depth >= CORTEX_M4_EXCEPTION_FRAME_LIMIT) {
         return false;
@@ -818,6 +825,9 @@ bool cortex_m4_system_stack_exception_frame(CortexM4* cpu, uint32_t* stack_point
 }
 
 bool cortex_m4_system_materialize_lazy_fp(CortexM4* cpu) {
+    if (cpu != NULL) {
+        cpu->exception_frame_memory_management_fault = false;
+    }
     if (cpu == NULL || (cpu->fpccr & FPCCR_LSPACT) == 0 || cpu->exception_frame_depth == 0) {
         return true;
     }
@@ -860,6 +870,7 @@ bool cortex_m4_system_unstack_exception_frame(CortexM4* cpu, uint32_t* stack_poi
                                               uint32_t value, uint16_t current_exception) {
     if (cpu != NULL) {
         cpu->exception_unstack_memory_fault = false;
+        cpu->exception_frame_memory_management_fault = false;
     }
     if (!cortex_m4_exception_advanced_valid_return(cpu, value) || stack_pointer == NULL) {
         if (cpu != NULL) {

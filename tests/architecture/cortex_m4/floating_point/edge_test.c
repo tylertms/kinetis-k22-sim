@@ -142,12 +142,18 @@ static void test_half_precision(TestState* state, KinetisK22* device) {
            "single_to_half(state, device, 0x7f800000u, FPSCR_AHP) == 0x7fffu");
     expect(state, single_to_half(state, device, 0x4788b800u, 0u) == 0x7c00u,
            "single_to_half(state, device, 0x4788b800u, 0u) == 0x7c00u");
+    expect(state, single_to_half(state, device, 0x477fe001u, 0u) == 0x7bffu,
+           "single_to_half(state, device, 0x477fe001u, 0u) == 0x7bffu");
+    expect(state, single_to_half(state, device, 0x4788b800u, FPSCR_ROUND_ZERO) == 0x7bffu,
+           "single_to_half(state, device, 0x4788b800u, FPSCR_ROUND_ZERO) == 0x7bffu");
     expect(state, single_to_half(state, device, 0x48000000u, FPSCR_AHP) == 0x7fffu,
            "single_to_half(state, device, 0x48000000u, FPSCR_AHP) == 0x7fffu");
     expect(state, single_to_half(state, device, 0x33800000u, 0u) == 1u,
            "single_to_half(state, device, 0x33800000u, 0u) == 1u");
     expect(state, single_to_half(state, device, 0x33800000u, FPSCR_FZ) == 0u,
            "single_to_half(state, device, 0x33800000u, FPSCR_FZ) == 0u");
+    expect(state, single_to_half(state, device, 0x387fe000u, 0u) == 0x0400u,
+           "single_to_half(state, device, 0x387fe000u, 0u) == 0x0400u");
     expect(state, single_to_half(state, device, 0x3fffffffu, 0u) == 0x4000u,
            "single_to_half(state, device, 0x3fffffffu, 0u) == 0x4000u");
     expect(state, single_to_half(state, device, 0x3f801000u, 0u) == 0x3c00u,
@@ -192,6 +198,20 @@ static void add(TestState* state, KinetisK22* device, uint32_t left, uint32_t ri
            "cortex_m4_get_fp_register(cpu, 14u) == expected");
 }
 
+static void fused_multiply_add(TestState* state, KinetisK22* device, uint32_t accumulator,
+                               uint32_t left, uint32_t right, uint32_t fpscr, uint32_t expected) {
+    CortexM4* cpu = prepare(state, device, 0xeea1u, 0x0a02u);
+    cortex_m4_set_fp_register(cpu, 0u, accumulator);
+    cortex_m4_set_fp_register(cpu, 2u, left);
+    cortex_m4_set_fp_register(cpu, 4u, right);
+    cortex_m4_set_fpscr(cpu, fpscr);
+    run(state, cpu);
+    expect(state,
+           cortex_m4_get_fp_register(cpu, 0u) == expected &&
+               (cortex_m4_get_fpscr(cpu) & FPSCR_IXC) != 0u,
+           "fused multiply-add rounds once and reports inexact");
+}
+
 static void test_float_rounding(TestState* state, KinetisK22* device) {
     multiply(state, device, 0xff7fffffu, 0x40000000u, FPSCR_ROUND_PLUS_INFINITY, 0xff7fffffu);
     multiply(state, device, 1u, 0x3f000000u, FPSCR_ROUND_PLUS_INFINITY, 1u);
@@ -199,6 +219,7 @@ static void test_float_rounding(TestState* state, KinetisK22* device) {
     multiply(state, device, 1u, 0x3fc00000u, 0u, 2u);
     add(state, device, 0x3f800000u, 0x33c00000u, FPSCR_ROUND_MINUS_INFINITY, 0x3f800000u);
     add(state, device, 0xbf800000u, 0xb3c00000u, FPSCR_ROUND_ZERO, 0xbf800000u);
+    fused_multiply_add(state, device, 0x00000001u, 0x3f800800u, 0x3f800800u, 0u, 0x3f801001u);
 }
 
 static void test_invalid_arithmetic(TestState* state, KinetisK22* device) {
