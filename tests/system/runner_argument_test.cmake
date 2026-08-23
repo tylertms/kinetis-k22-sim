@@ -5,5 +5,6 @@ execute_process(
   ERROR_VARIABLE error)
 
 if(result EQUAL 0 OR NOT error MATCHES "^usage: ")
-  message(FATAL_ERROR "runner accepted a missing --reset-address: ${output}${error}")
+  message(
+    FATAL_ERROR "runner accepted a missing --reset-address: ${output}${error}")
 endif()

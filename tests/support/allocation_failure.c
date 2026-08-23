@@ -20,9 +20,7 @@ static bool reject_allocation(void) {
     return false;
 }
 
-void* __wrap_malloc(size_t size) {
-    return reject_allocation() ? NULL : __real_malloc(size);
-}
+void* __wrap_malloc(size_t size) { return reject_allocation() ? NULL : __real_malloc(size); }
 
 void* __wrap_calloc(size_t count, size_t size) {
     return reject_allocation() ? NULL : __real_calloc(count, size);
@@ -40,7 +38,5 @@ void test_fail_allocation_after(size_t successful_allocations) {
 #else
 void test_allow_allocations(void) {}
 
-void test_fail_allocation_after(size_t successful_allocations) {
-    (void)successful_allocations;
-}
+void test_fail_allocation_after(size_t successful_allocations) { (void)successful_allocations; }
 #endif

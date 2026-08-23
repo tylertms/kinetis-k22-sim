@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-#include "device/kinetis_k22/internal.h"
 #include "allocation_failure.h"
+#include "device/kinetis_k22/internal.h"
 #include "test.h"
 
 enum {
@@ -221,13 +221,12 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
 
     uint8_t uart_value = 0u;
     uint16_t spi_value = 0u;
-    expect(state, !kinetis_k22_uart1_receive(NULL, 0u, 0u) &&
-                      !kinetis_k22_uart1_transmit(NULL, &uart_value) &&
-                      !kinetis_k22_uart1_transmit(device, NULL) &&
-                      !kinetis_k22_spi0_receive(NULL, 0u) &&
-                      !kinetis_k22_spi0_transmit(NULL, &spi_value) &&
-                      !kinetis_k22_spi0_transmit(device, NULL) &&
-                      !kinetis_k22_i2c0_receive(NULL, 0u),
+    expect(state,
+           !kinetis_k22_uart1_receive(NULL, 0u, 0u) &&
+               !kinetis_k22_uart1_transmit(NULL, &uart_value) &&
+               !kinetis_k22_uart1_transmit(device, NULL) && !kinetis_k22_spi0_receive(NULL, 0u) &&
+               !kinetis_k22_spi0_transmit(NULL, &spi_value) &&
+               !kinetis_k22_spi0_transmit(device, NULL) && !kinetis_k22_i2c0_receive(NULL, 0u),
            "legacy serial APIs reject null arguments");
     uint16_t uart_accepted = 0u;
     uint16_t spi_accepted = 0u;
@@ -239,8 +238,8 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
         spi_accepted++;
     expect(state, uart_accepted != 0u && spi_accepted != 0u,
            "legacy serial receive queues accept data before filling");
-    expect(state, !kinetis_k22_uart1_receive(device, 0u, 0u) &&
-                      !kinetis_k22_spi0_receive(device, 0u),
+    expect(state,
+           !kinetis_k22_uart1_receive(device, 0u, 0u) && !kinetis_k22_spi0_receive(device, 0u),
            "legacy serial receive queues reject overflow");
 }
 

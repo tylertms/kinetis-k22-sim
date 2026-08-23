@@ -9,14 +9,14 @@
 
 #include "cortex_m4_firmware_image.h"
 
-static bool parse_u64(const char* text, uint64_t* value) {
+static bool parse_u64(const char* text, uint64_t* parsed_value) {
     char* end = NULL;
     errno = 0;
     const unsigned long long parsed = strtoull(text, &end, 0);
     if (errno != 0 || end == text || *end != '\0') {
         return false;
     }
-    *value = (uint64_t)parsed;
+    *parsed_value = (uint64_t)parsed;
     return true;
 }
 
@@ -37,51 +37,53 @@ int main(int argc, char** argv) {
     uint64_t vector_address = 0;
     bool vector_address_set = false;
     uint64_t binary_address = 0;
-    bool binary = false;
+    bool binary_image = false;
     uint64_t stop_address = 0;
     bool stop_address_set = false;
     KinetisK22Profile profile = KINETIS_K22_PROFILE_MK22FN51212;
     KinetisK22Package package = KINETIS_K22_PACKAGE_DEFAULT;
     CortexM4RunLimits limits = {1000000, 10000000};
-    for (int index = 2; index < argc; index += 2) {
-        if (index + 1 >= argc) {
+    for (int argument_index = 2; argument_index < argc; argument_index += 2) {
+        if (argument_index + 1 >= argc) {
             print_usage(argv[0]);
             return EXIT_FAILURE;
         }
-        if (strcmp(argv[index], "--profile") == 0) {
-            if (!kinetis_k22_profile_from_name(argv[index + 1], &profile)) {
-                fprintf(stderr, "unknown K22 profile: %s\n", argv[index + 1]);
+        if (strcmp(argv[argument_index], "--profile") == 0) {
+            if (!kinetis_k22_profile_from_name(argv[argument_index + 1], &profile)) {
+                fprintf(stderr, "unknown K22 profile: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
             continue;
         }
-        if (strcmp(argv[index], "--package") == 0) {
-            if (!kinetis_k22_package_from_code(argv[index + 1], &package)) {
-                fprintf(stderr, "unknown K22 package: %s\n", argv[index + 1]);
+
+        if (strcmp(argv[argument_index], "--package") == 0) {
+            if (!kinetis_k22_package_from_code(argv[argument_index + 1], &package)) {
+                fprintf(stderr, "unknown K22 package: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
             continue;
         }
-        uint64_t value = 0;
-        if (!parse_u64(argv[index + 1], &value)) {
-            fprintf(stderr, "invalid value: %s\n", argv[index + 1]);
+
+        uint64_t parsed_value = 0;
+        if (!parse_u64(argv[argument_index + 1], &parsed_value)) {
+            fprintf(stderr, "invalid value: %s\n", argv[argument_index + 1]);
             return EXIT_FAILURE;
         }
-        if (strcmp(argv[index], "--reset-address") == 0) {
-            vector_address = value;
+        if (strcmp(argv[argument_index], "--reset-address") == 0) {
+            vector_address = parsed_value;
             vector_address_set = true;
-        } else if (strcmp(argv[index], "--binary-address") == 0) {
-            binary_address = value;
-            binary = true;
-        } else if (strcmp(argv[index], "--max-instructions") == 0) {
-            limits.instruction_limit = value;
-        } else if (strcmp(argv[index], "--max-cycles") == 0) {
-            limits.cycle_limit = value;
-        } else if (strcmp(argv[index], "--stop-address") == 0) {
-            stop_address = value;
+        } else if (strcmp(argv[argument_index], "--binary-address") == 0) {
+            binary_address = parsed_value;
+            binary_image = true;
+        } else if (strcmp(argv[argument_index], "--max-instructions") == 0) {
+            limits.instruction_limit = parsed_value;
+        } else if (strcmp(argv[argument_index], "--max-cycles") == 0) {
+            limits.cycle_limit = parsed_value;
+        } else if (strcmp(argv[argument_index], "--stop-address") == 0) {
+            stop_address = parsed_value;
             stop_address_set = true;
         } else {
-            fprintf(stderr, "unknown option: %s\n", argv[index]);
+            fprintf(stderr, "unknown option: %s\n", argv[argument_index]);
             return EXIT_FAILURE;
         }
     }
@@ -102,8 +104,9 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     uint32_t entry = 0;
-    const bool loaded = binary ? cortex_m4_load_binary(device, argv[1], (uint32_t)binary_address)
-                               : cortex_m4_load_elf(device, argv[1], &entry);
+    const bool loaded = binary_image
+                            ? cortex_m4_load_binary(device, argv[1], (uint32_t)binary_address)
+                            : cortex_m4_load_elf(device, argv[1], &entry);
     if (!loaded) {
         fprintf(stderr, "failed to load the firmware image\n");
         kinetis_k22_destroy(device);
@@ -126,9 +129,10 @@ int main(int argc, char** argv) {
            result.stop, result.pc, result.opcode, result.instructions, result.cycles, entry,
            cortex_m4_get_fault_status(kinetis_k22_cpu(device)),
            cortex_m4_get_fault_address(kinetis_k22_cpu(device)));
-    for (uint8_t index = 0; index < 16; index++) {
-        printf("r%u=0x%08" PRIx32 "%c", index,
-               cortex_m4_get_register(kinetis_k22_cpu(device), index), index == 15 ? '\n' : ' ');
+    for (uint8_t register_index = 0; register_index < 16; register_index++) {
+        printf("r%u=0x%08" PRIx32 "%c", register_index,
+               cortex_m4_get_register(kinetis_k22_cpu(device), register_index),
+               register_index == 15 ? '\n' : ' ');
     }
     kinetis_k22_destroy(device);
     return result.stop == CORTEX_M4_STOP_UNSUPPORTED || result.stop == CORTEX_M4_STOP_BUS_FAULT ||
