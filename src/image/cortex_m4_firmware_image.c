@@ -51,22 +51,23 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
     if (device == NULL || image_data == NULL) {
         return false;
     }
-    bool loaded = image_size >= ELF_HEADER_SIZE && image_data[0] == 0x7f && image_data[1] == 'E' &&
-                  image_data[2] == 'L' && image_data[3] == 'F' && image_data[4] == 1 &&
-                  image_data[5] == 1 && read_u16(image_data + 18) == 40;
+    const uint8_t* bytes = image_data;
+    bool loaded = image_size >= ELF_HEADER_SIZE && bytes[0] == 0x7f && bytes[1] == 'E' &&
+                  bytes[2] == 'L' && bytes[3] == 'F' && bytes[4] == 1 && bytes[5] == 1 &&
+                  read_u16(bytes + 18) == 40;
     if (!loaded) {
         return false;
     }
-    const uint32_t program_header_offset = read_u32(image_data + 28);
-    const uint16_t program_header_size = read_u16(image_data + 42);
-    const uint16_t program_header_count = read_u16(image_data + 44);
+    const uint32_t program_header_offset = read_u32(bytes + 28);
+    const uint16_t program_header_size = read_u16(bytes + 42);
+    const uint16_t program_header_count = read_u16(bytes + 44);
     loaded =
         program_header_size >= ELF_PROGRAM_HEADER_SIZE &&
         (uint64_t)program_header_offset + (uint64_t)program_header_size * program_header_count <=
             image_size;
     for (uint16_t header_index = 0; loaded && header_index < program_header_count; header_index++) {
         const uint8_t* program_header =
-            image_data + program_header_offset + (size_t)header_index * program_header_size;
+            bytes + program_header_offset + (size_t)header_index * program_header_size;
         if (read_u32(program_header) != ELF_LOAD_SEGMENT) {
             continue;
         }
@@ -77,7 +78,7 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
         const uint32_t memory_size = read_u32(program_header + 20);
         const uint32_t load_address = physical_address != 0 ? physical_address : virtual_address;
         if ((uint64_t)file_offset + file_size > image_size || file_size > memory_size ||
-            !kinetis_k22_load(device, load_address, image_data + file_offset, file_size)) {
+            !kinetis_k22_load(device, load_address, bytes + file_offset, file_size)) {
             loaded = false;
             break;
         }
@@ -94,7 +95,7 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
         }
     }
     if (loaded && entry_address != NULL) {
-        *entry_address = read_u32(image_data + 24);
+        *entry_address = read_u32(bytes + 24);
     }
     return loaded;
 }
@@ -121,13 +122,14 @@ bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
         image_size < ELF_HEADER_SIZE) {
         return false;
     }
-    if (image_data[0] != 0x7fu || image_data[1] != 'E' || image_data[2] != 'L' ||
-        image_data[3] != 'F' || image_data[4] != 1u || image_data[5] != 1u) {
+    const uint8_t* bytes = image_data;
+    if (bytes[0] != 0x7fu || bytes[1] != 'E' || bytes[2] != 'L' || bytes[3] != 'F' ||
+        bytes[4] != 1u || bytes[5] != 1u) {
         return false;
     }
-    const uint32_t section_table_offset = read_u32(image_data + 32u);
-    const uint16_t section_entry_size = read_u16(image_data + 46u);
-    const uint16_t section_count = read_u16(image_data + 48u);
+    const uint32_t section_table_offset = read_u32(bytes + 32u);
+    const uint16_t section_entry_size = read_u16(bytes + 46u);
+    const uint16_t section_count = read_u16(bytes + 48u);
     if (section_entry_size < 40u ||
         (uint64_t)section_table_offset + (uint64_t)section_entry_size * section_count >
             image_size) {
@@ -135,7 +137,7 @@ bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
     }
     for (uint16_t section_index = 0u; section_index < section_count; ++section_index) {
         const uint8_t* section_header =
-            image_data + section_table_offset + (uint32_t)section_index * section_entry_size;
+            bytes + section_table_offset + (uint32_t)section_index * section_entry_size;
         const uint32_t section_type = read_u32(section_header + 4u);
         if (section_type != 2u && section_type != 11u) {
             continue;
@@ -150,7 +152,7 @@ bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
             continue;
         }
         const uint8_t* string_table_header =
-            image_data + section_table_offset + string_table_index * section_entry_size;
+            bytes + section_table_offset + string_table_index * section_entry_size;
         const uint32_t string_table_offset = read_u32(string_table_header + 16u);
         const uint32_t string_table_size = read_u32(string_table_header + 20u);
         if (!range_valid(image_size, string_table_offset, string_table_size)) {
@@ -158,12 +160,12 @@ bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
         }
         for (uint32_t symbol_offset = 0u; symbol_offset <= symbol_table_size - symbol_entry_size;
              symbol_offset += symbol_entry_size) {
-            const uint8_t* symbol_entry = image_data + symbol_table_offset + symbol_offset;
+            const uint8_t* symbol_entry = bytes + symbol_table_offset + symbol_offset;
             const uint32_t string_offset = read_u32(symbol_entry);
             if (string_offset >= string_table_size) {
                 continue;
             }
-            const char* symbol_name = (const char*)image_data + string_table_offset + string_offset;
+            const char* symbol_name = (const char*)bytes + string_table_offset + string_offset;
             const size_t string_bytes_remaining = string_table_size - string_offset;
             if (memchr(symbol_name, '\0', string_bytes_remaining) != NULL &&
                 strcmp(symbol_name, requested_name) == 0) {
