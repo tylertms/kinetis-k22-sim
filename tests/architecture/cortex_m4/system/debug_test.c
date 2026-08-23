@@ -17,19 +17,21 @@
 #define CORESIGHT_UNLOCK 0xc5acce55u
 
 static uint32_t debug_read(TestState* state, CortexM4* cpu, uint32_t address, uint8_t size) {
-    uint32_t value = 0xdeadbeefu;
+    uint32_t register_value = 0xdeadbeefu;
     expect(state,
-           cortex_m4_debug_read(cpu, address, size, &value) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
-           "cortex_m4_debug_read(cpu, address, size, &value) == "
+           cortex_m4_debug_read(cpu, address, size, &register_value) ==
+               CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
+           "cortex_m4_debug_read(cpu, address, size, &register_value) == "
            "CORTEX_M4_SYSTEM_ACCESS_ACCEPTED");
-    return value;
+    return register_value;
 }
 
 static void debug_write(TestState* state, CortexM4* cpu, uint32_t address, uint8_t size,
-                        uint32_t value) {
+                        uint32_t register_value) {
     expect(state,
-           cortex_m4_debug_write(cpu, address, size, value) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
-           "cortex_m4_debug_write(cpu, address, size, value) == "
+           cortex_m4_debug_write(cpu, address, size, register_value) ==
+               CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
+           "cortex_m4_debug_write(cpu, address, size, register_value) == "
            "CORTEX_M4_SYSTEM_ACCESS_ACCEPTED");
 }
 
