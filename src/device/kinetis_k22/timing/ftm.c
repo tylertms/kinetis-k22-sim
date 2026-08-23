@@ -218,34 +218,36 @@ static void ftm_advance_fault_inputs(K22Timing* timing, uint8_t instance, uint32
     K22FtmState* ftm = &timing->ftm[instance];
     if (!ftm_gate(timing, instance))
         return;
-    const uint64_t ticks = k22_timing_internal_clock_ticks(
+    const uint64_t filter_ticks = k22_timing_internal_clock_ticks(
         &ftm->fault_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
-    const uint8_t enabled =
+    const uint8_t enabled_fault_mask =
         k22_timing_internal_ftm_fault_mode(ftm) == 0u ? 0u : (uint8_t)ftm->registers[10] & 0x0fu;
-    const uint8_t filter_enable = (uint8_t)(ftm->registers[10] >> 4u) & 0x0fu;
-    const uint8_t filter_value = (uint8_t)(ftm->registers[10] >> 8u) & 0x0fu;
-    for (uint8_t input = 0u; input < 4u; input++) {
-        const uint8_t bit = (uint8_t)(1u << input);
-        if ((enabled & bit) == 0u) {
-            ftm->fault_filtered_input[input] = false;
-            ftm->fault_input_age[input] = 0u;
+    const uint8_t filter_enable_mask = (uint8_t)(ftm->registers[10] >> 4u) & 0x0fu;
+    const uint8_t filter_length = (uint8_t)(ftm->registers[10] >> 8u) & 0x0fu;
+
+    for (uint8_t fault_input_index = 0u; fault_input_index < 4u; fault_input_index++) {
+        const uint8_t input_mask = (uint8_t)(1u << fault_input_index);
+        if ((enabled_fault_mask & input_mask) == 0u) {
+            ftm->fault_filtered_input[fault_input_index] = false;
+            ftm->fault_input_age[fault_input_index] = 0u;
             continue;
         }
-        const bool polarity = (ftm->registers[13] & bit) != 0u;
-        const bool active = ftm->fault_input[input] != polarity;
-        if (active == ftm->fault_filtered_input[input]) {
-            ftm->fault_input_age[input] = 0u;
+        const bool active_polarity = (ftm->registers[13] & input_mask) != 0u;
+        const bool input_active = ftm->fault_input[fault_input_index] != active_polarity;
+        if (input_active == ftm->fault_filtered_input[fault_input_index]) {
+            ftm->fault_input_age[fault_input_index] = 0u;
             continue;
         }
-        const uint32_t threshold =
-            (filter_enable & bit) != 0u && filter_value != 0u ? 4u + filter_value : 3u;
-        ftm->fault_input_age[input] += (uint32_t)ticks;
-        if (ftm->fault_input_age[input] < threshold)
+        const uint32_t filter_threshold =
+            (filter_enable_mask & input_mask) != 0u && filter_length != 0u ? 4u + filter_length
+                                                                           : 3u;
+        ftm->fault_input_age[fault_input_index] += (uint32_t)filter_ticks;
+        if (ftm->fault_input_age[fault_input_index] < filter_threshold)
             continue;
-        ftm->fault_filtered_input[input] = active;
-        ftm->fault_input_age[input] = 0u;
-        if (active)
-            ftm_detect_fault(timing, instance, input);
+        ftm->fault_filtered_input[fault_input_index] = input_active;
+        ftm->fault_input_age[fault_input_index] = 0u;
+        if (input_active)
+            ftm_detect_fault(timing, instance, fault_input_index);
     }
     k22_timing_internal_ftm_update_fault_status(ftm);
     if (ftm->fault_output_active && k22_timing_internal_ftm_fault_mode(ftm) == 3u &&
