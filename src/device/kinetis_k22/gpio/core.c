@@ -19,8 +19,8 @@ static uint32_t width_mask(uint8_t size) {
 static uint32_t merge_value(uint32_t previous_value, uint32_t offset, uint8_t size,
                             uint32_t write_value) {
     const uint32_t shift = (offset & 3u) * 8u;
-    const uint32_t mask = width_mask(size) << shift;
-    return (previous_value & ~mask) | ((write_value << shift) & mask);
+    const uint32_t bit_mask = width_mask(size) << shift;
+    return (previous_value & ~bit_mask) | ((write_value << shift) & bit_mask);
 }
 
 void k22_io_internal_emit(K22Io* io, K22IoEventType type, uint32_t source, uint32_t event_value,
@@ -143,15 +143,15 @@ static void update_pin_event(K22Io* io, uint8_t port, uint8_t pin, bool previous
         k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 59u + port, bit, interrupt_config);
 }
 
-static void update_output_events(K22Io* io, uint8_t port, uint32_t previous) {
-    const uint32_t current = k22_io_internal_pin_level(io, port);
-    uint32_t changed =
-        (previous ^ current) & io->gpio_pddr[port] & io->configuration.package_pin_mask[port];
+static void update_output_events(K22Io* io, uint8_t port, uint32_t previous_pin_level) {
+    const uint32_t current_pin_level = k22_io_internal_pin_level(io, port);
+    uint32_t changed = (previous_pin_level ^ current_pin_level) & io->gpio_pddr[port] &
+                       io->configuration.package_pin_mask[port];
     while (changed != 0) {
         const uint8_t pin = k22_io_internal_first_set_bit(changed);
         const uint32_t bit = 1u << pin;
         k22_io_internal_emit(io, K22_IO_EVENT_GPIO_OUTPUT, (uint32_t)port * 32u + pin,
-                             (current & bit) != 0, (io->port_pcr[port][pin] >> 8) & 7u);
+                             (current_pin_level & bit) != 0, (io->port_pcr[port][pin] >> 8) & 7u);
         changed &= ~bit;
     }
 }
