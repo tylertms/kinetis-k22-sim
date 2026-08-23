@@ -4,13 +4,13 @@ bool k22_io_read(K22Io* io, uint32_t address, uint8_t size, uint32_t* output_val
     if (io == NULL || output_value == NULL || !k22_io_internal_valid_size(size))
         return false;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_LIMIT && size == 4) {
-        const uint32_t alias = address - K22_BIT_BAND_BASE;
-        const uint32_t byte_address = K22_PERIPHERAL_BASE + alias / 32u;
-        const uint8_t bit = (uint8_t)((alias / 4u) & 7u);
-        uint32_t byte = 0;
-        if (!k22_io_internal_read_direct(io, byte_address, 1, &byte))
+        const uint32_t alias_address = address - K22_BIT_BAND_BASE;
+        const uint32_t source_byte_address = K22_PERIPHERAL_BASE + alias_address / 32u;
+        const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
+        uint32_t source_byte_value = 0;
+        if (!k22_io_internal_read_direct(io, source_byte_address, 1, &source_byte_value))
             return false;
-        *output_value = (byte >> bit) & 1u;
+        *output_value = (source_byte_value >> bit_index) & 1u;
         return true;
     }
     return k22_io_internal_read_direct(io, address, size, output_value);
@@ -20,25 +20,26 @@ bool k22_io_write(K22Io* io, uint32_t address, uint8_t size, uint32_t write_valu
     if (io == NULL || !k22_io_internal_valid_size(size))
         return false;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_LIMIT && size == 4) {
-        const uint32_t alias = address - K22_BIT_BAND_BASE;
-        const uint32_t byte_address = K22_PERIPHERAL_BASE + alias / 32u;
-        const uint8_t bit = (uint8_t)((alias / 4u) & 7u);
-        uint32_t byte = 0;
-        if (!k22_io_internal_read_direct(io, byte_address, 1, &byte))
+        const uint32_t alias_address = address - K22_BIT_BAND_BASE;
+        const uint32_t source_byte_address = K22_PERIPHERAL_BASE + alias_address / 32u;
+        const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
+        uint32_t source_byte_value = 0;
+        if (!k22_io_internal_read_direct(io, source_byte_address, 1, &source_byte_value))
             return false;
-        byte = (write_value & 1u) != 0 ? byte | (1u << bit) : byte & ~(1u << bit);
-        return k22_io_internal_write_direct(io, byte_address, 1, byte);
+        source_byte_value = (write_value & 1u) != 0 ? source_byte_value | (1u << bit_index)
+                                                    : source_byte_value & ~(1u << bit_index);
+        return k22_io_internal_write_direct(io, source_byte_address, 1, source_byte_value);
     }
     return k22_io_internal_write_direct(io, address, size, write_value);
 }
 
-bool k22_io_drive_pin(K22Io* io, uint8_t port, uint8_t pin, bool high) {
+bool k22_io_drive_pin(K22Io* io, uint8_t port, uint8_t pin, bool pin_high) {
     if (io == NULL || !k22_io_internal_pin_exists(io, port, pin))
         return false;
     const uint32_t bit = 1u << pin;
     const bool previous_level = (k22_io_internal_pin_level(io, port) & bit) != 0;
     io->gpio_external_drive[port] |= bit;
-    if (high)
+    if (pin_high)
         io->gpio_external[port] |= bit;
     else
         io->gpio_external[port] &= ~bit;
@@ -100,18 +101,18 @@ bool k22_io_can_receive(K22Io* io, const K22CanFrame* frame) {
         const uint8_t mailbox_code = (uint8_t)(io->can[offset / 4u] >> 24) & 15u;
         if (mailbox_code != 4u)
             continue;
-        const uint32_t configured = io->can[(offset + 4u) / 4u];
-        const uint32_t mask = mailbox_index == 14   ? io->can[K22_CAN_RX14MASK / 4]
-                              : mailbox_index == 15 ? io->can[K22_CAN_RX15MASK / 4]
-                                                    : io->can[K22_CAN_RXMGMASK / 4];
-        if (((configured ^ frame->identifier) & mask) != 0)
+        const uint32_t configured_identifier = io->can[(offset + 4u) / 4u];
+        const uint32_t identifier_mask = mailbox_index == 14   ? io->can[K22_CAN_RX14MASK / 4]
+                                         : mailbox_index == 15 ? io->can[K22_CAN_RX15MASK / 4]
+                                                               : io->can[K22_CAN_RXMGMASK / 4];
+        if (((configured_identifier ^ frame->identifier) & identifier_mask) != 0)
             continue;
-        uint32_t cs = (2u << 24) | ((uint32_t)frame->length << 16);
+        uint32_t control_status = (2u << 24) | ((uint32_t)frame->length << 16);
         if (frame->extended)
-            cs |= 1u << 21;
+            control_status |= 1u << 21;
         if (frame->remote)
-            cs |= 1u << 20;
-        io->can[offset / 4u] = cs | (io->can[K22_CAN_TIMER / 4] & 0xffffu);
+            control_status |= 1u << 20;
+        io->can[offset / 4u] = control_status | (io->can[K22_CAN_TIMER / 4] & 0xffffu);
         io->can[(offset + 4u) / 4u] = frame->identifier;
         uint32_t upper_word = 0;
         uint32_t lower_word = 0;
@@ -163,8 +164,8 @@ bool k22_io_irq_asserted(const K22Io* io, uint8_t irq) {
         uint32_t pending = io->port_isfr[port];
         while (pending != 0) {
             const uint8_t pin = k22_io_internal_first_set_bit(pending);
-            const uint32_t irqc = (io->port_pcr[port][pin] >> 16) & 15u;
-            if (irqc >= 8u && irqc <= 12u)
+            const uint32_t interrupt_config = (io->port_pcr[port][pin] >> 16) & 15u;
+            if (interrupt_config >= 8u && interrupt_config <= 12u)
                 return true;
             pending &= ~(1u << pin);
         }
@@ -231,22 +232,22 @@ void k22_io_advance(K22Io* io, uint32_t cycles) {
     if (io == NULL || cycles == 0)
         return;
     for (uint8_t port = 0; port < K22_IO_PORT_COUNT; port++) {
-        uint32_t filtered = io->port_dfer[port] & io->configuration.package_pin_mask[port];
-        while (filtered != 0) {
-            const uint8_t pin = k22_io_internal_first_set_bit(filtered);
+        uint32_t filtered_pins = io->port_dfer[port] & io->configuration.package_pin_mask[port];
+        while (filtered_pins != 0) {
+            const uint8_t pin = k22_io_internal_first_set_bit(filtered_pins);
             const uint32_t bit = 1u << pin;
-            const bool target = (io->gpio_pending[port] & bit) != 0;
-            const bool current = (io->gpio_filtered[port] & bit) != 0;
-            if (target != current) {
+            const bool target_level = (io->gpio_pending[port] & bit) != 0;
+            const bool current_level = (io->gpio_filtered[port] & bit) != 0;
+            if (target_level != current_level) {
                 uint64_t age = (uint64_t)io->gpio_filter_age[port][pin] + cycles;
                 const uint32_t threshold = (uint32_t)io->port_dfwr[port] + 1u;
                 if (age >= threshold) {
-                    k22_io_internal_commit_pin_level(io, port, pin, current, target);
+                    k22_io_internal_commit_pin_level(io, port, pin, current_level, target_level);
                     age = 0;
                 }
                 io->gpio_filter_age[port][pin] = age > UINT8_MAX ? UINT8_MAX : (uint8_t)age;
             }
-            filtered &= ~bit;
+            filtered_pins &= ~bit;
         }
     }
     if (k22_io_clock_enabled(io, K22_PERIPHERAL_USB0) && (io->usb[K22_USB_CTL] & 1u) != 0) {
