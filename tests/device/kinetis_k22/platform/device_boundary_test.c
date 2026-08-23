@@ -20,46 +20,47 @@ static KinetisK22* create_device(TestState* state) {
     return device;
 }
 
-static void mix(DeviceCensus* census, uint32_t value) {
-    census->fingerprint = (census->fingerprint ^ value) * UINT64_C(1099511628211);
+static void mix(DeviceCensus* census, uint32_t input_value) {
+    census->fingerprint = (census->fingerprint ^ input_value) * UINT64_C(1099511628211);
 }
 
 static void access_census(KinetisK22* device, DeviceCensus* census) {
-    static const uint32_t addresses[] = {
+    static const uint32_t test_addresses[] = {
         0u,          0x3ffu,      0x400u,      0xfffu,      0x1fffffffu,
         0x20000000u, 0x20000001u, 0x20007fffu, 0x40000000u, 0x4001f000u,
         0x400fffffu, 0x42000000u, 0x43ffffffu, 0x60000000u, UINT32_MAX,
     };
-    for (size_t address_index = 0u; address_index < sizeof(addresses) / sizeof(addresses[0]);
-         address_index++) {
-        for (uint8_t size = 0u; size <= 5u; size++) {
-            for (uint8_t access = CORTEX_M4_ACCESS_INSTRUCTION; access <= CORTEX_M4_ACCESS_DEBUG;
-                 access++) {
-                uint32_t value = UINT32_C(0xa5a55a5a);
-                const bool read = kinetis_k22_memory_read(device, addresses[address_index], size,
-                                                          (CortexM4Access)access, &value);
-                const bool write =
-                    kinetis_k22_memory_write(device, addresses[address_index], size,
-                                             (CortexM4Access)access, UINT32_C(0x5aa5a55a));
-                census->accepted_reads += read;
-                census->accepted_writes += write;
-                mix(census, addresses[address_index]);
-                mix(census, size);
-                mix(census, access);
-                mix(census, read);
-                mix(census, write);
-                mix(census, value);
+    for (size_t address_index = 0u;
+         address_index < sizeof(test_addresses) / sizeof(test_addresses[0]); address_index++) {
+        for (uint8_t access_size = 0u; access_size <= 5u; access_size++) {
+            for (uint8_t access_kind = CORTEX_M4_ACCESS_INSTRUCTION;
+                 access_kind <= CORTEX_M4_ACCESS_DEBUG; access_kind++) {
+                uint32_t read_value = UINT32_C(0xa5a55a5a);
+                const bool read_succeeded =
+                    kinetis_k22_memory_read(device, test_addresses[address_index], access_size,
+                                            (CortexM4Access)access_kind, &read_value);
+                const bool write_succeeded =
+                    kinetis_k22_memory_write(device, test_addresses[address_index], access_size,
+                                             (CortexM4Access)access_kind, UINT32_C(0x5aa5a55a));
+                census->accepted_reads += read_succeeded;
+                census->accepted_writes += write_succeeded;
+                mix(census, test_addresses[address_index]);
+                mix(census, access_size);
+                mix(census, access_kind);
+                mix(census, read_succeeded);
+                mix(census, write_succeeded);
+                mix(census, read_value);
             }
-            uint32_t value = 0u;
-            const bool dma_read =
-                kinetis_k22_dma_read(device, addresses[address_index], size, &value);
-            const bool dma_write =
-                kinetis_k22_dma_write(device, addresses[address_index], size, UINT32_C(0x12345678));
-            census->accepted_reads += dma_read;
-            census->accepted_writes += dma_write;
-            mix(census, dma_read);
-            mix(census, dma_write);
-            mix(census, value);
+            uint32_t dma_read_value = 0u;
+            const bool dma_read_succeeded = kinetis_k22_dma_read(
+                device, test_addresses[address_index], access_size, &dma_read_value);
+            const bool dma_write_succeeded = kinetis_k22_dma_write(
+                device, test_addresses[address_index], access_size, UINT32_C(0x12345678));
+            census->accepted_reads += dma_read_succeeded;
+            census->accepted_writes += dma_write_succeeded;
+            mix(census, dma_read_succeeded);
+            mix(census, dma_write_succeeded);
+            mix(census, dma_read_value);
         }
     }
 }
@@ -86,36 +87,39 @@ static void copy_guard_cases(TestState* state, KinetisK22* destination, KinetisK
 }
 
 static void flexbus_cases(TestState* state, KinetisK22* device) {
-    static const uint8_t memory[] = {1u, 2u, 3u, 4u};
-    uint8_t value[4] = {0u};
-    expect(state, kinetis_k22_flexbus_attach(device, 0x60000000u, memory, sizeof(memory), true),
+    static const uint8_t window_data[] = {1u, 2u, 3u, 4u};
+    uint8_t read_data[4] = {0u};
+    expect(state,
+           kinetis_k22_flexbus_attach(device, 0x60000000u, window_data, sizeof(window_data), true),
            "attach a read-only FlexBus window");
-    expect(state, kinetis_k22_flexbus_read(device, 0u, value, sizeof(value)),
+    expect(state, kinetis_k22_flexbus_read(device, 0u, read_data, sizeof(read_data)),
            "read the complete FlexBus window");
-    expect(state, !kinetis_k22_flexbus_read(device, sizeof(memory) + 1u, value, 0u),
+    expect(state, !kinetis_k22_flexbus_read(device, sizeof(window_data) + 1u, read_data, 0u),
            "FlexBus read rejects an offset beyond the window");
-    expect(state, !kinetis_k22_flexbus_read(device, sizeof(memory), value, 1u),
+    expect(state, !kinetis_k22_flexbus_read(device, sizeof(window_data), read_data, 1u),
            "FlexBus read rejects a range beyond the window");
     kinetis_k22_flexbus_detach(device);
 }
 
 #ifdef K22_TEST_ALLOCATION_FAILURE
 static void copy_allocation_cases(TestState* state, KinetisK22* destination, KinetisK22* source) {
-    static const uint8_t memory[] = {1u, 2u, 3u, 4u};
+    static const uint8_t window_data[] = {1u, 2u, 3u, 4u};
     static const uint8_t card[512] = {0u};
-    expect(state, kinetis_k22_flexbus_attach(source, 0x60000000u, memory, sizeof(memory), false),
+    expect(state,
+           kinetis_k22_flexbus_attach(source, 0x60000000u, window_data, sizeof(window_data), false),
            "attach source FlexBus window");
     expect(state, k22_sdhc_insert(&source->sdhc, card, sizeof(card), false),
            "insert source SDHC card");
-    uint32_t failures = 0u;
-    bool copied = false;
-    for (size_t accepted = 0u; accepted < 32u && !copied; accepted++) {
-        test_fail_allocation_after(accepted);
-        copied = kinetis_k22_copy(destination, source);
+    uint32_t failure_count = 0u;
+    bool copy_succeeded = false;
+    for (size_t allocation_index = 0u; allocation_index < 32u && !copy_succeeded;
+         allocation_index++) {
+        test_fail_allocation_after(allocation_index);
+        copy_succeeded = kinetis_k22_copy(destination, source);
         test_allow_allocations();
-        failures += !copied;
+        failure_count += !copy_succeeded;
     }
-    expect(state, copied && failures != 0u,
+    expect(state, copy_succeeded && failure_count != 0u,
            "device copy reports allocation failures before succeeding");
     kinetis_k22_flexbus_detach(source);
 }
@@ -124,21 +128,21 @@ static void copy_allocation_cases(TestState* state, KinetisK22* destination, Kin
 int main(void) {
     TestState state = {0u, 0u, 0u};
     DeviceCensus census = {0u, 0u, UINT64_C(14695981039346656037)};
-    KinetisK22* first = create_device(&state);
-    KinetisK22* second = create_device(&state);
-    if (first != NULL && second != NULL) {
-        access_census(first, &census);
-        copy_guard_cases(&state, first, second);
+    KinetisK22* destination_device = create_device(&state);
+    KinetisK22* source_device = create_device(&state);
+    if (destination_device != NULL && source_device != NULL) {
+        access_census(destination_device, &census);
+        copy_guard_cases(&state, destination_device, source_device);
 #ifdef K22_TEST_ALLOCATION_FAILURE
-        copy_allocation_cases(&state, first, second);
+        copy_allocation_cases(&state, destination_device, source_device);
 #endif
-        flexbus_cases(&state, first);
+        flexbus_cases(&state, destination_device);
         expect(&state,
                census.accepted_reads == 90u && census.accepted_writes == 87u &&
                    census.fingerprint == UINT64_C(3273249558290571156),
                "device census matches");
     }
-    kinetis_k22_destroy(second);
-    kinetis_k22_destroy(first);
+    kinetis_k22_destroy(source_device);
+    kinetis_k22_destroy(destination_device);
     return test_finish(&state);
 }
