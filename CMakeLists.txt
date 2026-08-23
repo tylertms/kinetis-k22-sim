@@ -164,7 +164,8 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     if(MSVC)
       target_compile_options(${test_target} PRIVATE /W4 /WX)
     else()
-      target_compile_options(${test_target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+      target_compile_options(${test_target} PRIVATE -Wall -Wextra -Wpedantic
+                                                    -Werror)
     endif()
     add_test(NAME ${test_target} COMMAND ${test_target})
     set_tests_properties(${test_target} PROPERTIES LABELS "${test_labels}")
@@ -173,10 +174,10 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
   function(kinetis_k22_enable_allocation_failure test_target)
     target_sources(${test_target} PRIVATE tests/support/allocation_failure.c)
     if(NOT MSVC)
-      target_compile_definitions(${test_target} PRIVATE K22_TEST_ALLOCATION_FAILURE=1)
-      target_link_options(
-        ${test_target} PRIVATE -Wl,--wrap=malloc -Wl,--wrap=calloc
-        -Wl,--wrap=realloc)
+      target_compile_definitions(${test_target}
+                                 PRIVATE K22_TEST_ALLOCATION_FAILURE=1)
+      target_link_options(${test_target} PRIVATE -Wl,--wrap=malloc
+                          -Wl,--wrap=calloc -Wl,--wrap=realloc)
     endif()
   endfunction()
 
@@ -229,8 +230,8 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     core_debug_complete tests/architecture/cortex_m4/system/debug_test.c
     "core;unit;integration")
   kinetis_k22_add_test(
-    core_debug_boundary tests/architecture/cortex_m4/system/debug_boundary_test.c
-    "core;unit")
+    core_debug_boundary
+    tests/architecture/cortex_m4/system/debug_boundary_test.c "core;unit")
   kinetis_k22_add_test(
     core_debug_census tests/architecture/cortex_m4/system/debug_census_test.c
     "core;unit")
@@ -248,8 +249,7 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     tests/architecture/cortex_m4/floating_point/edge_test.c
     "core;unit;integration")
   kinetis_k22_add_test(
-    core_fpu_census
-    tests/architecture/cortex_m4/floating_point/census_test.c
+    core_fpu_census tests/architecture/cortex_m4/floating_point/census_test.c
     "core;unit")
   kinetis_k22_add_test(
     core_mpu_complete tests/architecture/cortex_m4/system/mpu_test.c
@@ -270,12 +270,10 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     tests/architecture/cortex_m4/execution/encoding_census_test.c
     "core;unit;integration")
   foreach(shard RANGE 1 23)
-    add_test(
-      NAME kinetis_k22_core_encoding_census_test_shard_${shard}
-      COMMAND kinetis_k22_core_encoding_census_test ${shard})
-    set_tests_properties(
-      kinetis_k22_core_encoding_census_test_shard_${shard}
-      PROPERTIES LABELS "core;unit;integration")
+    add_test(NAME kinetis_k22_core_encoding_census_test_shard_${shard}
+             COMMAND kinetis_k22_core_encoding_census_test ${shard})
+    set_tests_properties(kinetis_k22_core_encoding_census_test_shard_${shard}
+                         PROPERTIES LABELS "core;unit;integration")
   endforeach()
   kinetis_k22_add_test(
     core_it_complete tests/architecture/cortex_m4/execution/it_test.c
@@ -351,8 +349,10 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     tests/device/kinetis_k22/platform/peripheral_state_census_test.c
     "device;unit")
   kinetis_k22_add_test(
-    device_data_complete tests/device/kinetis_k22/memory/data/core.c
-    "device;integration" tests/device/kinetis_k22/memory/data/flash.c
+    device_data_complete
+    tests/device/kinetis_k22/memory/data/core.c
+    "device;integration"
+    tests/device/kinetis_k22/memory/data/flash.c
     tests/device/kinetis_k22/memory/data/swap.c
     tests/device/kinetis_k22/memory/data/boundary.c
     tests/device/kinetis_k22/memory/data/command_census.c
@@ -388,8 +388,10 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     tests/device/kinetis_k22/communication/sdhc_state_census_test.c
     "device;unit")
   kinetis_k22_add_test(
-    device_timing_complete tests/device/kinetis_k22/timing/core.c
-    "device;integration" tests/device/kinetis_k22/timing/ftm.c
+    device_timing_complete
+    tests/device/kinetis_k22/timing/core.c
+    "device;integration"
+    tests/device/kinetis_k22/timing/ftm.c
     tests/device/kinetis_k22/timing/surface.c
     tests/device/kinetis_k22/timing/boundaries.c
     tests/device/kinetis_k22/timing/ftm_census.c
@@ -399,16 +401,13 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     tests/device/kinetis_k22/timing/watchdog_api_test.c "device;integration")
   kinetis_k22_add_test(
     device_watchdog_state_census
-    tests/device/kinetis_k22/timing/watchdog_state_census_test.c
-    "device;unit")
+    tests/device/kinetis_k22/timing/watchdog_state_census_test.c "device;unit")
   kinetis_k22_add_test(
     device_timing_register_state_census
-    tests/device/kinetis_k22/timing/register_state_census_test.c
-    "device;unit")
+    tests/device/kinetis_k22/timing/register_state_census_test.c "device;unit")
   kinetis_k22_add_test(
     device_ftm_state_census
-    tests/device/kinetis_k22/timing/ftm_state_census_test.c
-    "device;unit")
+    tests/device/kinetis_k22/timing/ftm_state_census_test.c "device;unit")
   kinetis_k22_add_test(
     device_cmt_complete tests/device/kinetis_k22/timing/cmt_test.c
     "device;integration")
@@ -440,7 +439,8 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
   kinetis_k22_add_test(
     device_host_api_complete tests/device/kinetis_k22/platform/host_api_test.c
     "device;integration")
-  kinetis_k22_enable_allocation_failure(kinetis_k22_device_host_api_complete_test)
+  kinetis_k22_enable_allocation_failure(
+    kinetis_k22_device_host_api_complete_test)
   kinetis_k22_add_test(
     device_clock_gate_complete
     tests/device/kinetis_k22/platform/clock_gate_test.c "device;integration")
@@ -485,41 +485,34 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
                        tests/system/runner_fixture_test.c "runner;system")
   target_compile_definitions(
     kinetis_k22_firmware_runner_fixture_test
-    PRIVATE
-      KINETIS_K22_RUNNER_SMOKE_IMAGE="${kinetis_k22_runner_smoke_image}")
-  set_tests_properties(
-    kinetis_k22_firmware_runner_fixture_test
-    PROPERTIES FIXTURES_SETUP kinetis_k22_runner_smoke)
+    PRIVATE KINETIS_K22_RUNNER_SMOKE_IMAGE="${kinetis_k22_runner_smoke_image}")
+  set_tests_properties(kinetis_k22_firmware_runner_fixture_test
+                       PROPERTIES FIXTURES_SETUP kinetis_k22_runner_smoke)
 
   add_test(
     NAME kinetis_k22_firmware_runner_smoke_test
     COMMAND
       kinetis_k22_firmware_runner ${kinetis_k22_runner_smoke_image}
-      --reset-address 0 --binary-address 0 --stop-address 10
-      --max-instructions 10)
+      --reset-address 0 --binary-address 0 --stop-address 10 --max-instructions
+      10)
   set_tests_properties(
     kinetis_k22_firmware_runner_smoke_test
-    PROPERTIES LABELS "runner;system"
-               FIXTURES_REQUIRED kinetis_k22_runner_smoke
-               PASS_REGULAR_EXPRESSION "instructions=1")
+    PROPERTIES LABELS "runner;system" FIXTURES_REQUIRED
+               kinetis_k22_runner_smoke PASS_REGULAR_EXPRESSION
+               "instructions=1")
 
-  add_test(
-    NAME kinetis_k22_firmware_runner_cleanup_test
-    COMMAND ${CMAKE_COMMAND} -E rm -f ${kinetis_k22_runner_smoke_image})
+  add_test(NAME kinetis_k22_firmware_runner_cleanup_test
+           COMMAND ${CMAKE_COMMAND} -E rm -f ${kinetis_k22_runner_smoke_image})
   set_tests_properties(
     kinetis_k22_firmware_runner_cleanup_test
-    PROPERTIES LABELS "runner;system"
-               FIXTURES_CLEANUP kinetis_k22_runner_smoke)
+    PROPERTIES LABELS "runner;system" FIXTURES_CLEANUP kinetis_k22_runner_smoke)
 
   add_test(
     NAME kinetis_k22_firmware_runner_argument_test
     COMMAND
-      ${CMAKE_COMMAND}
-      "-DRUNNER=$<TARGET_FILE:kinetis_k22_firmware_runner>"
-      -P
+      ${CMAKE_COMMAND} "-DRUNNER=$<TARGET_FILE:kinetis_k22_firmware_runner>" -P
       ${CMAKE_CURRENT_SOURCE_DIR}/tests/system/runner_argument_test.cmake)
-  set_tests_properties(
-    kinetis_k22_firmware_runner_argument_test
-    PROPERTIES LABELS "runner;system")
+  set_tests_properties(kinetis_k22_firmware_runner_argument_test
+                       PROPERTIES LABELS "runner;system")
 
 endif()
