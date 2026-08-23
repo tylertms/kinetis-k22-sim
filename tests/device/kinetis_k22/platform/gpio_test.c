@@ -15,27 +15,29 @@ enum {
     PORTA_IRQ = 59,
 };
 
-static uint32_t read32(TestState* state, KinetisK22* device, uint32_t address) {
-    uint32_t value = 0;
-    expect(state, kinetis_k22_read(device, address, &value, sizeof(value)),
-           "kinetis_k22_read(device, address, &value, sizeof(value))");
-    return value;
+static uint32_t read32(TestState* state, KinetisK22* device, uint32_t register_address) {
+    uint32_t read_value = 0u;
+    expect(state, kinetis_k22_read(device, register_address, &read_value, sizeof(read_value)),
+           "kinetis_k22_read(device, register_address, &read_value, sizeof(read_value))");
+    return read_value;
 }
 
-static void write32(TestState* state, KinetisK22* device, uint32_t address, uint32_t value) {
-    expect(state, kinetis_k22_write(device, address, &value, sizeof(value)),
-           "kinetis_k22_write(device, address, &value, sizeof(value))");
+static void write32(TestState* state, KinetisK22* device, uint32_t register_address,
+                    uint32_t write_value) {
+    expect(state, kinetis_k22_write(device, register_address, &write_value, sizeof(write_value)),
+           "kinetis_k22_write(device, register_address, &write_value, sizeof(write_value))");
 }
 
 int main(void) {
     TestState state = {0};
     KinetisK22* device = kinetis_k22_create(kinetis_k22_default_configuration());
     expect(&state, device != NULL, "device != NULL");
-    for (uint8_t pin = 0u; pin < 32u; pin++) {
-        if (pin != 3u) {
-            kinetis_k22_gpio_drive(device, 0u, pin, false);
+    for (uint8_t pin_index = 0u; pin_index < 32u; pin_index++) {
+        if (pin_index != 3u) {
+            kinetis_k22_gpio_drive(device, 0u, pin_index, false);
         }
     }
+
     write32(&state, device, PORTA_PCR3, 1u << 8);
     write32(&state, device, GPIOA_PDDR, 1u << 3);
     write32(&state, device, GPIOA_PSOR, 1u << 3);
@@ -76,16 +78,18 @@ int main(void) {
     expect(&state, !cortex_m4_get_irq_pending(kinetis_k22_cpu(device), PORTA_IRQ),
            "!cortex_m4_get_irq_pending(kinetis_k22_cpu(device), PORTA_IRQ)");
 
-    KinetisK22* copy = kinetis_k22_create(kinetis_k22_default_configuration());
-    expect(&state, copy != NULL, "copy != NULL");
-    expect(&state, kinetis_k22_copy(copy, device), "kinetis_k22_copy(copy, device)");
-    expect(&state, read32(&state, copy, GPIOA_PDIR) == (1u << 3),
-           "read32(&state, copy, GPIOA_PDIR) == (1u << 3)");
-    kinetis_k22_gpio_release(copy, 0, 3);
-    expect(&state, read32(&state, copy, GPIOA_PDIR) == 0, "read32(&state, copy, GPIOA_PDIR) == 0");
+    KinetisK22* copied_device = kinetis_k22_create(kinetis_k22_default_configuration());
+    expect(&state, copied_device != NULL, "copied_device != NULL");
+    expect(&state, kinetis_k22_copy(copied_device, device),
+           "kinetis_k22_copy(copied_device, device)");
+    expect(&state, read32(&state, copied_device, GPIOA_PDIR) == (1u << 3),
+           "read32(&state, copied_device, GPIOA_PDIR) == (1u << 3)");
+    kinetis_k22_gpio_release(copied_device, 0, 3);
+    expect(&state, read32(&state, copied_device, GPIOA_PDIR) == 0,
+           "read32(&state, copied_device, GPIOA_PDIR) == 0");
     expect(&state, read32(&state, device, GPIOA_PDIR) == (1u << 3),
            "read32(&state, device, GPIOA_PDIR) == (1u << 3)");
-    kinetis_k22_destroy(copy);
+    kinetis_k22_destroy(copied_device);
     kinetis_k22_destroy(device);
     return test_finish(&state);
 }
