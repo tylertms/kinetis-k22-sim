@@ -122,9 +122,9 @@ static void dma_queue_channel(K22Data* data, uint8_t channel) {
 }
 
 bool k22_data_internal_dma_source_always_enabled(const K22Data* data, uint8_t request_source) {
-    const bool extended_source_map = data->profile->id == K22_PROFILE_MK22FN1M012 ||
-                                     data->profile->id == K22_PROFILE_MK22FX51212;
-    return request_source >= (extended_source_map ? 54u : 60u);
+    const bool has_extended_source_map = data->profile->id == K22_PROFILE_MK22FN1M012 ||
+                                         data->profile->id == K22_PROFILE_MK22FX51212;
+    return request_source >= (has_extended_source_map ? 54u : 60u);
 }
 
 static uint64_t dma_source_mask(const K22Data* data) {
@@ -149,12 +149,12 @@ void k22_data_internal_dma_queue_hardware_channel(K22Data* data, uint8_t channel
 void k22_data_internal_dma_queue_always_enabled(K22Data* data, uint8_t channel) {
     if (channel >= data->dma_channel_count)
         return;
-    const uint8_t mux = data->dmamux[channel];
-    const uint8_t source = mux & 0x3fu;
-    const uint16_t enabled = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
-    if ((mux & 0xc0u) == 0x80u && (enabled & (1u << channel)) != 0u &&
-        k22_data_internal_dma_source_always_enabled(data, source))
-        k22_data_internal_dma_queue_hardware_channel(data, channel, source);
+    const uint8_t channel_configuration = data->dmamux[channel];
+    const uint8_t request_source = channel_configuration & 0x3fu;
+    const uint16_t enabled_channels = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
+    if ((channel_configuration & 0xc0u) == 0x80u && (enabled_channels & (1u << channel)) != 0u &&
+        k22_data_internal_dma_source_always_enabled(data, request_source))
+        k22_data_internal_dma_queue_hardware_channel(data, channel, request_source);
 }
 
 static bool dma_copy_descriptor(K22Data* data, uint8_t* descriptor, uint32_t address) {
@@ -194,14 +194,15 @@ static void dma_complete_major(K22Data* data, uint8_t channel, uint8_t* descript
         k22_data_internal_store_bytes(descriptor, 0x1cu, 2u, control_flags);
     }
     if ((control_flags & 0x08u) != 0u) {
-        uint16_t channel_enable = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0cu, 2u);
-        channel_enable &= (uint16_t)~(1u << channel);
-        k22_data_internal_store_bytes(data->dma, 0x0cu, 2u, channel_enable);
+        uint16_t enabled_channels = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0cu, 2u);
+        enabled_channels &= (uint16_t)~(1u << channel);
+        k22_data_internal_store_bytes(data->dma, 0x0cu, 2u, enabled_channels);
     }
     if ((control_flags & 0x02u) != 0u) {
-        uint16_t pending_interrupts = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
-        pending_interrupts |= (uint16_t)(1u << channel);
-        k22_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupts);
+        uint16_t pending_interrupt_mask =
+            (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
+        pending_interrupt_mask |= (uint16_t)(1u << channel);
+        k22_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupt_mask);
     }
     if ((control_flags & 0x20u) != 0u)
         dma_queue_channel(data, (uint8_t)((control_flags >> 8u) & 15u));
@@ -299,8 +300,10 @@ bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel) {
     if (initial_iteration_count > 1u && iteration_count == initial_iteration_count / 2u &&
         (control_flags & 0x04u) != 0u && (data->dma_half & (1u << channel)) == 0) {
         data->dma_half |= (uint16_t)(1u << channel);
-        uint16_t pending_interrupts = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
-        k22_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupts | (1u << channel));
+        uint16_t pending_interrupt_mask =
+            (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
+        k22_data_internal_store_bytes(data->dma, 0x24u, 2u,
+                                      pending_interrupt_mask | (1u << channel));
     }
     if (iteration_count == 0u) {
         data->dma_half &= (uint16_t)~(1u << channel);
