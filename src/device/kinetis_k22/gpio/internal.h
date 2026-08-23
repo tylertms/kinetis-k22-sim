@@ -49,15 +49,15 @@ bool k22_io_internal_module_clocked(const K22Io* io, K22PeripheralId id);
 bool k22_io_internal_pin_exists(const K22Io* io, uint8_t port, uint8_t pin);
 bool k22_io_internal_read_direct(K22Io* io, uint32_t address, uint8_t size, uint32_t* output_value);
 bool k22_io_internal_read_gpio(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                               uint32_t* value);
+                               uint32_t* output_value);
 bool k22_io_internal_read_port(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                               uint32_t* value);
+                               uint32_t* output_value);
 bool k22_io_internal_valid_size(uint8_t size);
 bool k22_io_internal_write_direct(K22Io* io, uint32_t address, uint8_t size, uint32_t write_value);
 bool k22_io_internal_write_gpio(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                                uint32_t value);
+                                uint32_t write_value);
 bool k22_io_internal_write_port(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                                uint32_t value);
+                                uint32_t write_value);
 uint32_t k22_io_internal_load_bytes(const uint8_t* data, uint8_t size);
 uint32_t k22_io_internal_pin_level_unfiltered(const K22Io* io, uint8_t port);
 uint32_t k22_io_internal_pin_level(const K22Io* io, uint8_t port);

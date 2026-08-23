@@ -280,59 +280,61 @@ bool k22_io_clock_enabled(const K22Io* io, K22PeripheralId peripheral) {
 }
 
 bool k22_io_internal_read_port(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                               uint32_t* value) {
+                               uint32_t* output_value) {
     const uint8_t port = port_index(location.id);
     if (location.offset < 0x80u) {
         const uint8_t pin = (uint8_t)(location.offset / 4u);
         if (!k22_io_internal_pin_exists(io, port, pin) || location.offset % 4u + size > 4u)
             return false;
-        *value = (io->port_pcr[port][pin] >> ((location.offset & 3u) * 8u)) & width_mask(size);
+        *output_value =
+            (io->port_pcr[port][pin] >> ((location.offset & 3u) * 8u)) & width_mask(size);
         return true;
     }
     if (location.offset == 0x80u || location.offset == 0x84u) {
         if (size != 4)
             return false;
-        *value = 0;
+        *output_value = 0;
         return true;
     }
     if (location.offset == 0xa0u && size == 4) {
-        *value = io->port_isfr[port];
+        *output_value = io->port_isfr[port];
         return true;
     }
     if (location.offset == 0xc0u && size == 4) {
-        *value = io->port_dfer[port];
+        *output_value = io->port_dfer[port];
         return true;
     }
     if (location.offset == 0xc4u && size == 1) {
-        *value = io->port_dfcr[port];
+        *output_value = io->port_dfcr[port];
         return true;
     }
     if (location.offset == 0xc8u && size == 1) {
-        *value = io->port_dfwr[port];
+        *output_value = io->port_dfwr[port];
         return true;
     }
     return false;
 }
 
-static void write_pcr(K22Io* io, uint8_t port, uint8_t pin, uint32_t requested, bool clear_isf) {
-    const uint32_t previous = io->port_pcr[port][pin];
-    if ((previous & K22_PORT_PCR_LK) != 0) {
+static void write_pcr(K22Io* io, uint8_t port, uint8_t pin, uint32_t requested_value,
+                      bool clear_isf) {
+    const uint32_t previous_value = io->port_pcr[port][pin];
+    if ((previous_value & K22_PORT_PCR_LK) != 0) {
         if (clear_isf) {
             io->port_pcr[port][pin] &= ~K22_PORT_PCR_ISF;
             io->port_isfr[port] &= ~(1u << pin);
         }
         return;
     }
-    uint32_t value = requested & (K22_PORT_PCR_WRITABLE & ~K22_PORT_PCR_ISF);
+    uint32_t register_value = requested_value & (K22_PORT_PCR_WRITABLE & ~K22_PORT_PCR_ISF);
     if (!clear_isf)
-        value |= previous & K22_PORT_PCR_ISF;
+        register_value |= previous_value & K22_PORT_PCR_ISF;
     else
         io->port_isfr[port] &= ~(1u << pin);
-    io->port_pcr[port][pin] = value;
+    io->port_pcr[port][pin] = register_value;
 }
 
 bool k22_io_internal_write_port(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                                uint32_t value) {
+                                uint32_t write_value) {
     const uint8_t port = port_index(location.id);
     const uint32_t before = k22_io_internal_pin_level(io, port);
     if (location.offset < 0x80u) {
@@ -341,50 +343,52 @@ bool k22_io_internal_write_port(K22Io* io, K22PeripheralLocation location, uint8
             return false;
         const uint8_t register_byte = (uint8_t)(location.offset & 3u);
         const bool clear_isf = register_byte <= 3u && register_byte + size > 3u &&
-                               (value & (1u << ((3u - register_byte) * 8u))) != 0;
-        write_pcr(io, port, pin, merge_value(io->port_pcr[port][pin], location.offset, size, value),
+                               (write_value & (1u << ((3u - register_byte) * 8u))) != 0;
+        write_pcr(io, port, pin,
+                  merge_value(io->port_pcr[port][pin], location.offset, size, write_value),
                   clear_isf);
         update_output_events(io, port, before);
         return true;
     }
     if ((location.offset == 0x80u || location.offset == 0x84u) && size == 4) {
-        const uint16_t data = (uint16_t)value;
-        const uint16_t select = (uint16_t)(value >> 16);
+        const uint16_t register_value = (uint16_t)write_value;
+        const uint16_t selected_pins = (uint16_t)(write_value >> 16);
         const uint8_t first = location.offset == 0x80u ? 0 : 16;
-        for (uint8_t index = 0; index < 16; index++) {
-            const uint8_t pin = first + index;
-            if ((select & (1u << index)) != 0 && k22_io_internal_pin_exists(io, port, pin))
-                write_pcr(io, port, pin, data, false);
+        for (uint8_t pin_offset = 0; pin_offset < 16; pin_offset++) {
+            const uint8_t pin = first + pin_offset;
+            if ((selected_pins & (1u << pin_offset)) != 0 &&
+                k22_io_internal_pin_exists(io, port, pin))
+                write_pcr(io, port, pin, register_value, false);
         }
         update_output_events(io, port, before);
         return true;
     }
     if (location.offset == 0xa0u && size == 4) {
-        io->port_isfr[port] &= ~value;
+        io->port_isfr[port] &= ~write_value;
         for (uint8_t pin = 0; pin < K22_IO_PIN_COUNT; pin++) {
-            if ((value & (1u << pin)) != 0)
+            if ((write_value & (1u << pin)) != 0)
                 io->port_pcr[port][pin] &= ~K22_PORT_PCR_ISF;
         }
         return true;
     }
     if (location.offset == 0xc0u && size == 4) {
-        io->port_dfer[port] = value & io->configuration.package_pin_mask[port];
+        io->port_dfer[port] = write_value & io->configuration.package_pin_mask[port];
         io->gpio_filtered[port] = k22_io_internal_pin_level_unfiltered(io, port);
         return true;
     }
     if (location.offset == 0xc4u && size == 1) {
-        io->port_dfcr[port] = (uint8_t)value & 1u;
+        io->port_dfcr[port] = (uint8_t)write_value & 1u;
         return true;
     }
     if (location.offset == 0xc8u && size == 1) {
-        io->port_dfwr[port] = (uint8_t)value & 0x1fu;
+        io->port_dfwr[port] = (uint8_t)write_value & 0x1fu;
         return true;
     }
     return false;
 }
 
 bool k22_io_internal_read_gpio(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                               uint32_t* value) {
+                               uint32_t* output_value) {
     const uint32_t register_offset = location.offset & ~3u;
     const uint32_t byte_offset = location.offset & 3u;
     if (byte_offset + size > 4u)
@@ -397,12 +401,12 @@ bool k22_io_internal_read_gpio(K22Io* io, K22PeripheralLocation location, uint8_
         register_value = k22_io_internal_pin_level(io, port);
     else if (register_offset == 0x14u)
         register_value = io->gpio_pddr[port];
-    *value = (register_value >> (byte_offset * 8u)) & width_mask(size);
+    *output_value = (register_value >> (byte_offset * 8u)) & width_mask(size);
     return true;
 }
 
 bool k22_io_internal_write_gpio(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                                uint32_t value) {
+                                uint32_t write_value) {
     const uint32_t register_offset = location.offset & ~3u;
     const uint32_t byte_offset = location.offset & 3u;
     if (byte_offset + size > 4u)
@@ -410,19 +414,19 @@ bool k22_io_internal_write_gpio(K22Io* io, K22PeripheralLocation location, uint8
     const uint8_t port = port_index(location.id);
     const uint32_t package_mask = io->configuration.package_pin_mask[port];
     const uint32_t before = k22_io_internal_pin_level(io, port);
-    const uint32_t shifted = (value & width_mask(size)) << (byte_offset * 8u);
+    const uint32_t shifted_value = (write_value & width_mask(size)) << (byte_offset * 8u);
     if (register_offset == 0)
         io->gpio_pdor[port] =
-            merge_value(io->gpio_pdor[port], location.offset, size, value) & package_mask;
+            merge_value(io->gpio_pdor[port], location.offset, size, write_value) & package_mask;
     else if (register_offset == 4u)
-        io->gpio_pdor[port] |= shifted & package_mask;
+        io->gpio_pdor[port] |= shifted_value & package_mask;
     else if (register_offset == 8u)
-        io->gpio_pdor[port] &= ~(shifted & package_mask);
+        io->gpio_pdor[port] &= ~(shifted_value & package_mask);
     else if (register_offset == 0x0cu)
-        io->gpio_pdor[port] ^= shifted & package_mask;
+        io->gpio_pdor[port] ^= shifted_value & package_mask;
     else if (register_offset == 0x14u)
         io->gpio_pddr[port] =
-            merge_value(io->gpio_pddr[port], location.offset, size, value) & package_mask;
+            merge_value(io->gpio_pddr[port], location.offset, size, write_value) & package_mask;
     else
         return false;
     update_output_events(io, port, before);
