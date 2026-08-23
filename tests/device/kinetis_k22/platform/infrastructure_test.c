@@ -162,13 +162,14 @@ static void test_cmt(TestState* state, KinetisK22* device) {
 }
 
 static void test_event_capacity(TestState* state, KinetisK22* device) {
-    KinetisK22Event event;
-    while (kinetis_k22_next_event(device, &event)) {
+    KinetisK22Event pending_event;
+    while (kinetis_k22_next_event(device, &pending_event)) {
     }
+
     k22_io_set_clock(&device->io, K22_PERIPHERAL_PORTD, true);
     expect(state, k22_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u),
            "k22_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u)");
-    for (uint32_t index = 0u; index < K22_EVENT_CAPACITY + 1u; index++) {
+    for (uint32_t event_index = 0u; event_index < K22_EVENT_CAPACITY + 1u; event_index++) {
         expect(state, k22_io_drive_pin(&device->io, 3u, 1u, false),
                "k22_io_drive_pin(&device->io, 3u, 1u, false)");
         expect(state, k22_io_drive_pin(&device->io, 3u, 1u, true),
@@ -254,24 +255,30 @@ static void test_usbdcd(TestState* state, KinetisK22* device) {
 
 static void test_access_controls(TestState* state, KinetisK22* device) {
     write32(state, device, AIPS0_PACRI, 1u << 20u);
-    uint32_t value = 0u;
+    uint32_t access_read_value = 0u;
     expect(state,
            kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA,
-                                       &value),
+                                       &access_read_value),
            "kinetis_k22_peripheral_read(device, CMT_MSC, 1u, "
-           "CORTEX_M4_ACCESS_UNPRIVILEGED_DATA, &value)");
+           "CORTEX_M4_ACCESS_UNPRIVILEGED_DATA, &access_read_value)");
     write32(state, device, AIPS0_PACRI, 6u << 20u);
     expect(state,
            !kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA,
-                                        &value),
+                                        &access_read_value),
            "!kinetis_k22_peripheral_read(device, CMT_MSC, 1u, "
-           "CORTEX_M4_ACCESS_UNPRIVILEGED_DATA, &value)");
+           "CORTEX_M4_ACCESS_UNPRIVILEGED_DATA, &access_read_value)");
     cortex_m4_set_control(kinetis_k22_cpu(device), CORTEX_M4_CONTROL_NPRIV);
-    expect(state, !kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, &value),
-           "!kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, &value)");
+    expect(state,
+           !kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA,
+                                        &access_read_value),
+           "!kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, "
+           "&access_read_value)");
     cortex_m4_set_control(kinetis_k22_cpu(device), 0u);
-    expect(state, kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, &value),
-           "kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, &value)");
+    expect(
+        state,
+        kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, &access_read_value),
+        "kinetis_k22_peripheral_read(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, "
+        "&access_read_value)");
     expect(state, !kinetis_k22_peripheral_write(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, 0u),
            "!kinetis_k22_peripheral_write(device, CMT_MSC, 1u, CORTEX_M4_ACCESS_DATA, 0u)");
     write32(state, device, AIPS0_PACRI, 0u);
@@ -283,11 +290,14 @@ static void test_access_controls(TestState* state, KinetisK22* device) {
 
     write32(state, device, FMC_PFAPR, 0u);
     expect(state,
-           !kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_INSTRUCTION, &value),
+           !kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_INSTRUCTION,
+                                    &access_read_value),
            "!kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_INSTRUCTION, "
-           "&value)");
-    expect(state, kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_DEBUG, &value),
-           "kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_DEBUG, &value)");
+           "&access_read_value)");
+    expect(state,
+           kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_DEBUG, &access_read_value),
+           "kinetis_k22_memory_read(device, 0x100u, 2u, CORTEX_M4_ACCESS_DEBUG, "
+           "&access_read_value)");
 }
 
 static void test_fmc_geometry(TestState* state, KinetisK22* device) {
