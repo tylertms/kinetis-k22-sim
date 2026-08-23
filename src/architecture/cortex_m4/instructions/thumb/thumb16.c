@@ -449,49 +449,52 @@ static bool execute_miscellaneous(CortexM4* cpu, uint16_t opcode) {
         const uint8_t operation = (uint8_t)((opcode >> 6) & 3u);
         const uint8_t source = (uint8_t)((opcode >> 3) & 7u);
         const uint8_t destination = (uint8_t)(opcode & 7u);
-        const uint32_t value = cpu->registers[source];
+        const uint32_t source_value = cpu->registers[source];
         if (operation == 0)
-            cpu->registers[destination] = (uint32_t)cortex_m4_internal_sign_extend(value, 16);
+            cpu->registers[destination] =
+                (uint32_t)cortex_m4_internal_sign_extend(source_value, 16);
         if (operation == 1)
-            cpu->registers[destination] = (uint32_t)cortex_m4_internal_sign_extend(value, 8);
+            cpu->registers[destination] = (uint32_t)cortex_m4_internal_sign_extend(source_value, 8);
         if (operation == 2)
-            cpu->registers[destination] = value & 0xffffu;
+            cpu->registers[destination] = source_value & 0xffffu;
         if (operation == 3)
-            cpu->registers[destination] = value & 0xffu;
+            cpu->registers[destination] = source_value & 0xffu;
         return true;
     }
     if ((opcode & 0xff00u) == 0xba00u) {
         const uint8_t operation = (uint8_t)((opcode >> 6) & 3u);
         const uint8_t source = (uint8_t)((opcode >> 3) & 7u);
         const uint8_t destination = (uint8_t)(opcode & 7u);
-        const uint32_t value = cpu->registers[source];
+        const uint32_t source_value = cpu->registers[source];
         if (operation == 0) {
             cpu->registers[destination] =
-                ((value & 0x000000ffu) << 24) | ((value & 0x0000ff00u) << 8) |
-                ((value & 0x00ff0000u) >> 8) | ((value & 0xff000000u) >> 24);
+                ((source_value & 0x000000ffu) << 24) | ((source_value & 0x0000ff00u) << 8) |
+                ((source_value & 0x00ff0000u) >> 8) | ((source_value & 0xff000000u) >> 24);
         } else if (operation == 1) {
             cpu->registers[destination] =
-                ((value & 0x00ff00ffu) << 8) | ((value & 0xff00ff00u) >> 8);
+                ((source_value & 0x00ff00ffu) << 8) | ((source_value & 0xff00ff00u) >> 8);
         } else if (operation == 3) {
-            const uint32_t half = ((value & 0xffu) << 8) | ((value >> 8) & 0xffu);
-            cpu->registers[destination] = (uint32_t)cortex_m4_internal_sign_extend(half, 16);
+            const uint32_t swapped_halfword =
+                ((source_value & 0xffu) << 8) | ((source_value >> 8) & 0xffu);
+            cpu->registers[destination] =
+                (uint32_t)cortex_m4_internal_sign_extend(swapped_halfword, 16);
         } else {
             return false;
         }
         return true;
     }
     if ((opcode & 0xffe0u) == 0xb660u) {
-        const bool privileged =
+        const bool has_privilege =
             (cpu->xpsr & 0x1ffu) != 0 || (cpu->control & CORTEX_M4_CONTROL_NPRIV) == 0;
-        if (!privileged) {
+        if (!has_privilege) {
             return true;
         }
-        const uint32_t value = (opcode & 0x10u) != 0 ? 1u : 0u;
+        const uint32_t mask_value = (opcode & 0x10u) != 0 ? 1u : 0u;
         if ((opcode & 2u) != 0) {
-            cpu->primask = value;
+            cpu->primask = mask_value;
         }
         if ((opcode & 1u) != 0) {
-            cpu->faultmask = value;
+            cpu->faultmask = mask_value;
         }
         return true;
     }
