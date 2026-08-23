@@ -31,28 +31,31 @@ static KinetisK22* create_device(TestState* state) {
     return device;
 }
 
-static void io_write(TestState* state, KinetisK22* device, uint32_t address, uint8_t size,
-                     uint32_t value) {
-    expect(state, k22_io_write(&device->io, address, size, value),
-           "k22_io_write(&device->io, address, size, value)");
+static void io_write(TestState* state, KinetisK22* device, uint32_t register_address,
+                     uint8_t access_size, uint32_t write_value) {
+    expect(state, k22_io_write(&device->io, register_address, access_size, write_value),
+           "k22_io_write(&device->io, register_address, access_size, write_value)");
 }
 
-static void serial_write(TestState* state, KinetisK22* device, uint32_t address, uint8_t size,
-                         uint32_t value) {
-    expect(state, k22_serial_write(&device->serial, address, size, value),
-           "k22_serial_write(&device->serial, address, size, value)");
+static void serial_write(TestState* state, KinetisK22* device, uint32_t register_address,
+                         uint8_t access_size, uint32_t write_value) {
+    expect(state, k22_serial_write(&device->serial, register_address, access_size, write_value),
+           "k22_serial_write(&device->serial, register_address, access_size, write_value)");
 }
 
 static void test_data_api(TestState* state, KinetisK22* device) {
-    const uint32_t seeded = 0x12345678u;
-    uint32_t loaded = 0u;
-    expect(state, kinetis_k22_seed(device, 0x20000000u, &seeded, sizeof(seeded)),
-           "kinetis_k22_seed(device, 0x20000000u, &seeded, sizeof(seeded))");
+    const uint32_t seed_value = 0x12345678u;
+    uint32_t loaded_value = 0u;
+    expect(state, kinetis_k22_seed(device, 0x20000000u, &seed_value, sizeof(seed_value)),
+           "kinetis_k22_seed(device, 0x20000000u, &seed_value, sizeof(seed_value))");
     expect(state,
-           kinetis_k22_read(device, 0x20000000u, &loaded, sizeof(loaded)) && loaded == seeded,
-           "kinetis_k22_read(device, 0x20000000u, &loaded, sizeof(loaded)) && loaded == seeded");
-    expect(state, !kinetis_k22_seed(NULL, 0u, &seeded, sizeof(seeded)),
-           "!kinetis_k22_seed(NULL, 0u, &seeded, sizeof(seeded))");
+           kinetis_k22_read(device, 0x20000000u, &loaded_value, sizeof(loaded_value)) &&
+               loaded_value == seed_value,
+           "kinetis_k22_read(device, 0x20000000u, &loaded_value, sizeof(loaded_value)) && "
+           "loaded_value == seed_value");
+    expect(state, !kinetis_k22_seed(NULL, 0u, &seed_value, sizeof(seed_value)),
+           "!kinetis_k22_seed(NULL, 0u, &seed_value, sizeof(seed_value))");
+
     expect(state, kinetis_k22_set_adc_channel(device, 0u, 31u, 0x1234u),
            "kinetis_k22_set_adc_channel(device, 0u, 31u, 0x1234u)");
     expect(state, !kinetis_k22_set_adc_channel(device, 2u, 0u, 0u),
@@ -67,6 +70,7 @@ static void test_data_api(TestState* state, KinetisK22* device) {
            "!kinetis_k22_set_cmp_input(device, 3u, 0u, 0u)");
     expect(state, !kinetis_k22_set_cmp_input(NULL, 0u, 0u, 0u),
            "!kinetis_k22_set_cmp_input(NULL, 0u, 0u, 0u)");
+
     expect(state, kinetis_k22_set_lptmr_input(device, 2u, true),
            "kinetis_k22_set_lptmr_input(device, 2u, true)");
     expect(state, !kinetis_k22_set_lptmr_input(device, 3u, false),
