@@ -32,12 +32,12 @@ static void write_value(TestState* state, K22UsbDcd* usbdcd, uint32_t address, u
            "k22_usbdcd_write(usbdcd, address, 4u, value)");
 }
 
-static void configure(TestState* state, K22UsbDcd* usbdcd, bool bc12) {
+static void configure_detection(TestState* state, K22UsbDcd* usbdcd, bool enable_bc12) {
     write_value(state, usbdcd, CLOCK, 4u);
     write_value(state, usbdcd, TIMER0, 2u << 16u);
     write_value(state, usbdcd, TIMER1, (2u << 16u) | 3u);
     write_value(state, usbdcd, TIMER2, (2u << 16u) | 2u);
-    write_value(state, usbdcd, CONTROL, IE | (bc12 ? BC12 : 0u));
+    write_value(state, usbdcd, CONTROL, IE | (enable_bc12 ? BC12 : 0u));
 }
 
 static void test_reset_and_access(TestState* state) {
@@ -55,16 +55,16 @@ static void test_reset_and_access(TestState* state) {
            "read_value(state, &usbdcd, TIMER1) == 0x000a0028u");
     expect(state, read_value(state, &usbdcd, TIMER2) == 0x00280001u,
            "read_value(state, &usbdcd, TIMER2) == 0x00280001u");
-    uint32_t value = 0u;
-    expect(state, !k22_usbdcd_read(NULL, CONTROL, 4u, &value),
-           "!k22_usbdcd_read(NULL, CONTROL, 4u, &value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL, 2u, &value),
-           "!k22_usbdcd_read(&usbdcd, CONTROL, 2u, &value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &value),
-           "!k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 0x0cu, 4u, &value),
+    uint32_t register_value = 0u;
+    expect(state, !k22_usbdcd_read(NULL, CONTROL, 4u, &register_value),
+           "!k22_usbdcd_read(NULL, CONTROL, 4u, &register_value)");
+    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value),
+           "!k22_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value)");
+    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value),
+           "!k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value)");
+    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 0x0cu, 4u, &register_value),
            "unimplemented USB DCD register is rejected");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL - 4u, 4u, &value),
+    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL - 4u, 4u, &register_value),
            "USB DCD rejects reads below its register block");
     expect(state, !k22_usbdcd_read(&usbdcd, CONTROL, 4u, NULL),
            "!k22_usbdcd_read(&usbdcd, CONTROL, 4u, NULL)");
@@ -94,7 +94,7 @@ static void test_reset_and_access(TestState* state) {
 static void test_standard_host(TestState* state) {
     K22UsbDcd usbdcd;
     k22_usbdcd_reset(&usbdcd);
-    configure(state, &usbdcd, false);
+    configure_detection(state, &usbdcd, false);
     expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_STANDARD_HOST),
            "k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_STANDARD_HOST)");
     write_value(state, &usbdcd, CONTROL, IE | START);
@@ -123,7 +123,7 @@ static void test_standard_host(TestState* state) {
 static void test_bc12(TestState* state, KinetisK22UsbCharger charger, uint32_t expected_result) {
     K22UsbDcd usbdcd;
     k22_usbdcd_reset(&usbdcd);
-    configure(state, &usbdcd, true);
+    configure_detection(state, &usbdcd, true);
     expect(state, k22_usbdcd_set_charger(&usbdcd, charger),
            "k22_usbdcd_set_charger(&usbdcd, charger)");
     write_value(state, &usbdcd, CONTROL, IE | BC12 | START);
@@ -145,7 +145,7 @@ static void test_bc12(TestState* state, KinetisK22UsbCharger charger, uint32_t e
 static void test_bc11_pullup(TestState* state) {
     K22UsbDcd usbdcd;
     k22_usbdcd_reset(&usbdcd);
-    configure(state, &usbdcd, false);
+    configure_detection(state, &usbdcd, false);
     expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_CHARGING_PORT),
            "k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_CHARGING_PORT)");
     write_value(state, &usbdcd, CONTROL, IE | START);
@@ -169,7 +169,7 @@ static void test_bc11_pullup(TestState* state) {
 static void test_data_contact_debounce(TestState* state) {
     K22UsbDcd usbdcd;
     k22_usbdcd_reset(&usbdcd);
-    configure(state, &usbdcd, false);
+    configure_detection(state, &usbdcd, false);
     expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_STANDARD_HOST),
            "k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_STANDARD_HOST)");
     write_value(state, &usbdcd, CONTROL, IE | START);
@@ -212,7 +212,7 @@ static void test_clock_unit_and_interrupt_mask(TestState* state) {
 static void test_error_timeout_and_software_reset(TestState* state) {
     K22UsbDcd usbdcd;
     k22_usbdcd_reset(&usbdcd);
-    configure(state, &usbdcd, false);
+    configure_detection(state, &usbdcd, false);
     expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_ERROR),
            "k22_usbdcd_set_charger(&usbdcd, KINETIS_K22_USB_CHARGER_ERROR)");
     write_value(state, &usbdcd, CONTROL, IE | START);
@@ -264,7 +264,7 @@ static void test_copy(TestState* state) {
     K22UsbDcd source;
     K22UsbDcd destination;
     k22_usbdcd_reset(&source);
-    configure(state, &source, true);
+    configure_detection(state, &source, true);
     expect(state, k22_usbdcd_set_charger(&source, KINETIS_K22_USB_CHARGER_DEDICATED),
            "k22_usbdcd_set_charger(&source, KINETIS_K22_USB_CHARGER_DEDICATED)");
     write_value(state, &source, CONTROL, IE | BC12 | START);
