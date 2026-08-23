@@ -38,35 +38,35 @@ bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t byte_count,
     return false;
 }
 
-static uint32_t uart_frame_cycles(const K22SerialUart* uart, bool lpuart) {
-    if (lpuart) {
-        uint32_t baud = k22_serial_internal_load32(&uart->registers[LPUART_BAUD]);
-        uint32_t sbr = baud & 0x1fffu;
-        uint32_t osr = ((baud >> 24) & 0x1fu) + 1u;
-        return (sbr == 0 ? 1u : sbr * osr) * 10u;
+static uint32_t uart_frame_cycles(const K22SerialUart* uart, bool is_lpuart) {
+    if (is_lpuart) {
+        uint32_t baud_register = k22_serial_internal_load32(&uart->registers[LPUART_BAUD]);
+        uint32_t baud_divisor = baud_register & 0x1fffu;
+        uint32_t oversampling_rate = ((baud_register >> 24) & 0x1fu) + 1u;
+        return (baud_divisor == 0 ? 1u : baud_divisor * oversampling_rate) * 10u;
     }
-    uint32_t sbr = ((uint32_t)(uart->registers[0] & 0x1fu) << 8) | uart->registers[1];
-    uint32_t brfa = uart->registers[UART_C4] & 0x1fu;
-    uint32_t thirty_second_cycles = sbr * 512u + brfa * 16u;
+    uint32_t baud_divisor = ((uint32_t)(uart->registers[0] & 0x1fu) << 8) | uart->registers[1];
+    uint32_t baud_fraction = uart->registers[UART_C4] & 0x1fu;
+    uint32_t thirty_second_cycles = baud_divisor * 512u + baud_fraction * 16u;
     return thirty_second_cycles == 0 ? 1u : (thirty_second_cycles * 10u + 31u) / 32u;
 }
 
-static void advance_uart(K22SerialUart* uart, bool lpuart, uint32_t cycles) {
-    uint32_t control = lpuart ? k22_serial_internal_load32(&uart->registers[LPUART_CTRL])
-                              : uart->registers[UART_C2];
-    uint32_t receive_enable = lpuart ? 1u << 18 : 0x04u;
-    uint32_t transmit_enable = lpuart ? 1u << 19 : 0x08u;
+static void advance_uart(K22SerialUart* uart, bool is_lpuart, uint32_t cycles) {
+    uint32_t control = is_lpuart ? k22_serial_internal_load32(&uart->registers[LPUART_CTRL])
+                                 : uart->registers[UART_C2];
+    uint32_t receive_enable = is_lpuart ? 1u << 18 : 0x04u;
+    uint32_t transmit_enable = is_lpuart ? 1u << 19 : 0x08u;
     while (cycles != 0 && uart->clock_enabled) {
         uint32_t elapsed = cycles;
         if ((control & receive_enable) != 0 && uart->wire_receive.count != 0) {
             if (uart->receive_cycles == 0)
-                uart->receive_cycles = uart_frame_cycles(uart, lpuart);
+                uart->receive_cycles = uart_frame_cycles(uart, is_lpuart);
             if (elapsed > uart->receive_cycles)
                 elapsed = uart->receive_cycles;
         }
         if ((control & transmit_enable) != 0 && uart->transmit.count != 0) {
             if (uart->transmit_cycles == 0)
-                uart->transmit_cycles = uart_frame_cycles(uart, lpuart);
+                uart->transmit_cycles = uart_frame_cycles(uart, is_lpuart);
             if (elapsed > uart->transmit_cycles)
                 elapsed = uart->transmit_cycles;
         }
@@ -80,9 +80,9 @@ static void advance_uart(K22SerialUart* uart, bool lpuart, uint32_t cycles) {
                 uint16_t errors = 0;
                 k22_serial_internal_fifo_pop(&uart->wire_receive, &value, &errors);
                 if (!k22_serial_internal_fifo_push(
-                        &uart->receive, lpuart ? 1 : k22_serial_internal_uart_capacity(uart), value,
-                        errors)) {
-                    if (lpuart) {
+                        &uart->receive, is_lpuart ? 1 : k22_serial_internal_uart_capacity(uart),
+                        value, errors)) {
+                    if (is_lpuart) {
                         uint32_t status = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
                         k22_serial_internal_store32(&uart->registers[LPUART_STAT],
                                                     status | (1u << 19));
@@ -90,7 +90,7 @@ static void advance_uart(K22SerialUart* uart, bool lpuart, uint32_t cycles) {
                         uart->registers[UART_SFIFO] |= 0x04u;
                         uart->registers[UART_S1] |= 0x08u;
                     }
-                } else if (lpuart) {
+                } else if (is_lpuart) {
                     uint32_t status = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
                     k22_serial_internal_store32(&uart->registers[LPUART_STAT],
                                                 status | (uint32_t)(errors & 0x0fu) << 16);
@@ -109,7 +109,7 @@ static void advance_uart(K22SerialUart* uart, bool lpuart, uint32_t cycles) {
             }
         }
     }
-    k22_serial_internal_refresh_uart(uart, lpuart);
+    k22_serial_internal_refresh_uart(uart, is_lpuart);
 }
 
 static uint32_t spi_frame_cycles(const K22SerialSpi* spi) {
