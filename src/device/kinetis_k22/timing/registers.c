@@ -1,13 +1,13 @@
 #include "internal.h"
 
-static uint32_t ftm_register_mask(uint8_t index, uint8_t register_index) {
+static uint32_t ftm_register_mask(uint8_t instance, uint8_t register_index) {
     static const uint32_t masks[18] = {
         0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x7f7f7f7fu, 0x000000ffu,
         0x000000ffu, 0x000000ffu, 0x000000efu, 0x0000ffffu, 0x00000fffu, 0x000000ffu,
         0x000006dfu, 0x0000000fu, 0x001f1fb5u, 0x0000000fu, 0x0000ffffu, 0x000002ffu,
     };
     uint32_t mask = masks[register_index];
-    if (k22_timing_internal_ftm_channel_count(index) == 2u) {
+    if (k22_timing_internal_ftm_channel_count(instance) == 2u) {
         if (register_index == 2u || register_index == 3u || register_index == 7u)
             mask &= 3u;
         else if (register_index == 4u)
@@ -28,36 +28,36 @@ static uint32_t ftm_write_protected_mask(uint8_t register_index) {
     return masks[register_index];
 }
 
-static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t size,
-                      uint32_t value) {
+static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint8_t size,
+                      uint32_t write_value) {
     if (size != 4 || (offset & 3u) != 0) {
         return false;
     }
-    K22FtmState* ftm = &timing->ftm[index];
+    K22FtmState* ftm = &timing->ftm[instance];
     if (offset == 0) {
         const bool clock_stopped = (ftm->sc & 0x18u) == 0u;
         uint32_t flag = ftm->sc & 0x80u;
-        if ((value & 0x80u) == 0u && ftm->overflow_flag_read)
+        if ((write_value & 0x80u) == 0u && ftm->overflow_flag_read)
             flag = 0u;
-        ftm->sc = flag | (value & 0x7fu);
+        ftm->sc = flag | (write_value & 0x7fu);
         ftm->overflow_flag_read = false;
         if (clock_stopped && (ftm->sc & 0x18u) != 0u && ftm->counter == ftm->initial &&
             (ftm->registers[6] & (1u << 6u)) != 0u)
-            k22_timing_internal_ftm_trigger(timing, index);
-        k22_timing_internal_update_ftm_irq(timing, index);
+            k22_timing_internal_ftm_trigger(timing, instance);
+        k22_timing_internal_update_ftm_irq(timing, instance);
     } else if (offset == 4) {
         ftm->counter = ftm->initial;
         ftm->counting_down = false;
         ftm->overflow_count = 0u;
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+        const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
         for (uint8_t channel = 0u; channel < channels; channel++) {
             if (!k22_timing_internal_ftm_output_compare_mode(ftm, channel))
                 ftm->channel_output[channel] = (ftm->registers[2] & (1u << channel)) != 0u;
         }
         if ((ftm->registers[6] & (1u << 6u)) != 0u)
-            k22_timing_internal_ftm_trigger(timing, index);
+            k22_timing_internal_ftm_trigger(timing, instance);
     } else if (offset == 8) {
-        ftm->modulo_buffer = (uint16_t)value;
+        ftm->modulo_buffer = (uint16_t)write_value;
         if ((ftm->sc & 0x18u) == 0u) {
             ftm->modulo = ftm->modulo_buffer;
             ftm->modulo_pending = false;
@@ -66,17 +66,17 @@ static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t
         }
     } else if (offset >= 0x0cu && offset < 0x4cu) {
         const uint8_t channel = (uint8_t)((offset - 0x0cu) / 8u);
-        if (channel >= k22_timing_internal_ftm_channel_count(index))
+        if (channel >= k22_timing_internal_ftm_channel_count(instance))
             return false;
         if (((offset - 0x0cu) & 4u) == 0) {
             uint32_t flag = ftm->channel_sc[channel] & 0x80u;
-            if ((value & 0x80u) == 0u && ftm->channel_flag_read[channel])
+            if ((write_value & 0x80u) == 0u && ftm->channel_flag_read[channel])
                 flag = 0u;
-            ftm->channel_sc[channel] = flag | (value & 0x7fu);
+            ftm->channel_sc[channel] = flag | (write_value & 0x7fu);
             ftm->channel_flag_read[channel] = false;
-            k22_timing_internal_update_ftm_irq(timing, index);
+            k22_timing_internal_update_ftm_irq(timing, instance);
         } else if (!k22_timing_internal_ftm_input_capture_mode(ftm, channel)) {
-            ftm->channel_value_buffer[channel] = (uint16_t)value;
+            ftm->channel_value_buffer[channel] = (uint16_t)write_value;
             if ((ftm->sc & 0x18u) == 0u) {
                 ftm->channel_value[channel] = ftm->channel_value_buffer[channel];
                 ftm->channel_value_pending[channel] = false;
@@ -85,7 +85,7 @@ static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t
             }
         }
     } else if (offset == 0x4cu) {
-        ftm->initial_buffer = (uint16_t)value;
+        ftm->initial_buffer = (uint16_t)write_value;
         if ((ftm->sc & 0x18u) == 0u) {
             ftm->initial = ftm->initial_buffer;
             ftm->initial_pending = false;
@@ -93,60 +93,60 @@ static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t
             ftm->initial_pending = true;
         }
     } else if (offset == 0x50u) {
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+        const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
         for (uint8_t channel = 0; channel < channels; channel++) {
-            if ((value & (1u << channel)) == 0) {
+            if ((write_value & (1u << channel)) == 0) {
                 ftm->channel_sc[channel] &= ~0x80u;
                 ftm->channel_flag_read[channel] = false;
             }
         }
-        k22_timing_internal_update_ftm_irq(timing, index);
+        k22_timing_internal_update_ftm_irq(timing, instance);
     } else if (offset >= 0x54u && offset <= 0x98u) {
         const uint8_t register_index = (uint8_t)((offset - 0x54u) / 4u);
-        value &= ftm_register_mask(index, register_index);
+        write_value &= ftm_register_mask(instance, register_index);
         if (offset == 0x54u) {
             const uint32_t current = ftm->registers[register_index];
             const uint32_t protected_mask = ftm_write_protected_mask(register_index);
-            uint32_t next = (current & protected_mask) | (value & ~protected_mask & ~6u);
+            uint32_t next = (current & protected_mask) | (write_value & ~protected_mask & ~6u);
             if ((current & 4u) != 0u)
-                next = (next & ~protected_mask) | (value & protected_mask);
-            if ((current & 4u) != 0u || ((value & 4u) != 0u && ftm->write_protection_read))
+                next = (next & ~protected_mask) | (write_value & protected_mask);
+            if ((current & 4u) != 0u || ((write_value & 4u) != 0u && ftm->write_protection_read))
                 next |= 4u;
-            if ((current & 4u) == 0u && (value & 4u) != 0u && ftm->write_protection_read) {
+            if ((current & 4u) == 0u && (write_value & 4u) != 0u && ftm->write_protection_read) {
                 ftm->registers[8] &= ~0x40u;
                 ftm->write_protection_read = false;
             }
             ftm->registers[register_index] = next;
-            if ((value & 2u) != 0u) {
-                const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+            if ((write_value & 2u) != 0u) {
+                const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
                 for (uint8_t channel = 0u; channel < channels; channel++)
                     ftm->channel_output[channel] = (ftm->registers[2] & (1u << channel)) != 0u;
             }
         } else if (offset == 0x58u) {
-            ftm->registers[1] = value;
-            if ((value & 0x80u) != 0u) {
+            ftm->registers[1] = write_value;
+            if ((write_value & 0x80u) != 0u) {
                 k22_timing_internal_ftm_apply_software_sync(ftm);
             } else {
                 ftm->software_sync_pending = false;
             }
         } else if (offset == 0x60u) {
-            ftm->outmask_buffer = value;
+            ftm->outmask_buffer = write_value;
             ftm->outmask_pending = true;
         } else if (offset == 0x74u) {
             uint8_t flags = (uint8_t)ftm->registers[8] & 0x0fu;
             const uint8_t active = k22_timing_internal_ftm_active_fault_mask(ftm);
-            if (ftm->fault_aggregate_read && (value & 0x80u) == 0u && active == 0u) {
+            if (ftm->fault_aggregate_read && (write_value & 0x80u) == 0u && active == 0u) {
                 flags = 0u;
             } else {
                 for (uint8_t input = 0u; input < 4u; input++) {
                     const uint8_t bit = (uint8_t)(1u << input);
-                    if ((ftm->fault_flags_read_mask & bit) != 0u && (value & bit) == 0u &&
+                    if ((ftm->fault_flags_read_mask & bit) != 0u && (write_value & bit) == 0u &&
                         (active & bit) == 0u)
                         flags &= (uint8_t)~bit;
                 }
             }
             ftm->registers[8] = (ftm->registers[8] & 0x40u) | flags;
-            if ((value & 0x40u) != 0u) {
+            if ((write_value & 0x40u) != 0u) {
                 ftm->registers[8] |= 0x40u;
                 ftm->registers[0] &= ~4u;
             }
@@ -160,33 +160,33 @@ static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t
             }
             k22_timing_internal_ftm_update_fault_status(ftm);
             ftm->write_protection_read = false;
-            k22_timing_internal_update_ftm_irq(timing, index);
+            k22_timing_internal_update_ftm_irq(timing, instance);
         } else if (offset == 0x80u) {
             const uint32_t current = ftm->registers[register_index];
             if ((ftm->registers[0] & 4u) == 0u)
-                value = (value & ~1u) | (current & 1u);
-            ftm->registers[register_index] = (value & ~6u) | (current & 6u);
+                write_value = (write_value & ~1u) | (current & 1u);
+            ftm->registers[register_index] = (write_value & ~6u) | (current & 6u);
         } else if (offset == 0x6cu) {
-            const uint32_t mask = index == 0u || index == 3u ? 0xffu : 0xf0u;
-            uint32_t next = (ftm->registers[register_index] & 0x80u) | (value & mask & 0x7fu);
-            if ((value & 0x80u) == 0u && ftm->trigger_flag_read)
+            const uint32_t mask = instance == 0u || instance == 3u ? 0xffu : 0xf0u;
+            uint32_t next = (ftm->registers[register_index] & 0x80u) | (write_value & mask & 0x7fu);
+            if ((write_value & 0x80u) == 0u && ftm->trigger_flag_read)
                 next &= ~0x80u;
             ftm->registers[register_index] = next;
             ftm->trigger_flag_read = false;
         } else if (offset == 0x90u) {
-            ftm->invctrl_buffer = value;
+            ftm->invctrl_buffer = write_value;
             ftm->invctrl_pending = true;
         } else if (offset == 0x94u) {
-            ftm->swoctrl_buffer = value;
+            ftm->swoctrl_buffer = write_value;
             ftm->swoctrl_pending = true;
         } else if (offset == 0x98u) {
-            ftm->registers[17] = value;
+            ftm->registers[17] = write_value;
         } else {
             const uint32_t protected_mask = ftm_write_protected_mask(register_index);
             if ((ftm->registers[0] & 4u) == 0u)
-                value =
-                    (value & ~protected_mask) | (ftm->registers[register_index] & protected_mask);
-            ftm->registers[register_index] = value;
+                write_value = (write_value & ~protected_mask) |
+                              (ftm->registers[register_index] & protected_mask);
+            ftm->registers[register_index] = write_value;
         }
         if (offset == 0x54u || offset == 0x7cu || offset == 0x88u) {
             if (k22_timing_internal_ftm_fault_mode(ftm) == 0u) {
@@ -203,7 +203,7 @@ static bool ftm_write(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t
                 }
             }
             k22_timing_internal_ftm_update_fault_status(ftm);
-            k22_timing_internal_update_ftm_irq(timing, index);
+            k22_timing_internal_update_ftm_irq(timing, instance);
         }
     } else
         return false;
@@ -229,54 +229,54 @@ static void rtc_software_reset(K22Timing* timing) {
     k22_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, false);
 }
 
-static bool rtc_read(K22Timing* timing, uint32_t offset, uint32_t* value) {
+static bool rtc_read(K22Timing* timing, uint32_t offset, uint32_t* output_value) {
     if (offset != 0x800u && offset != 0x804u && !rtc_access_allowed(timing->rtc_rar, offset)) {
-        *value = 0u;
+        *output_value = 0u;
         return true;
     }
     switch (offset) {
     case 0:
-        *value = (timing->rtc_sr & 3u) == 0u ? timing->rtc_tsr : 0u;
+        *output_value = (timing->rtc_sr & 3u) == 0u ? timing->rtc_tsr : 0u;
         return true;
     case 4:
-        *value = (timing->rtc_sr & 3u) == 0u ? timing->rtc_tpr : 0u;
+        *output_value = (timing->rtc_sr & 3u) == 0u ? timing->rtc_tpr : 0u;
         return true;
     case 8:
-        *value = timing->rtc_tar;
+        *output_value = timing->rtc_tar;
         return true;
     case 12:
-        *value = timing->rtc_tcr;
+        *output_value = timing->rtc_tcr;
         return true;
     case 16:
-        *value = timing->rtc_cr;
+        *output_value = timing->rtc_cr;
         return true;
     case 20:
-        *value = timing->rtc_sr;
+        *output_value = timing->rtc_sr;
         return true;
     case 24:
-        *value = timing->rtc_lr;
+        *output_value = timing->rtc_lr;
         return true;
     case 28:
-        *value = timing->rtc_ier;
+        *output_value = timing->rtc_ier;
         return true;
     case 0x800:
-        *value = timing->rtc_war;
+        *output_value = timing->rtc_war;
         return true;
     case 0x804:
-        *value = timing->rtc_rar;
+        *output_value = timing->rtc_rar;
         return true;
     default:
         return false;
     }
 }
 
-static bool rtc_write(K22Timing* timing, uint32_t offset, uint32_t value) {
+static bool rtc_write(K22Timing* timing, uint32_t offset, uint32_t write_value) {
     if (offset == 0x800u) {
-        timing->rtc_war &= value & k22_timing_internal_rtc_access_reset(timing);
+        timing->rtc_war &= write_value & k22_timing_internal_rtc_access_reset(timing);
         return true;
     }
     if (offset == 0x804u) {
-        timing->rtc_rar &= value & k22_timing_internal_rtc_access_reset(timing);
+        timing->rtc_rar &= write_value & k22_timing_internal_rtc_access_reset(timing);
         return true;
     }
     if (!rtc_access_allowed(timing->rtc_war, offset))
@@ -284,47 +284,47 @@ static bool rtc_write(K22Timing* timing, uint32_t offset, uint32_t value) {
     switch (offset) {
     case 0:
         if ((timing->rtc_sr & 0x10u) == 0u) {
-            timing->rtc_tsr = value;
+            timing->rtc_tsr = write_value;
             timing->rtc_sr &= ~3u;
             k22_timing_internal_update_rtc_irq(timing);
         }
         return true;
     case 4:
         if ((timing->rtc_sr & 0x10u) == 0u) {
-            timing->rtc_tpr = (uint16_t)value & 0x7fffu;
+            timing->rtc_tpr = (uint16_t)write_value & 0x7fffu;
             timing->rtc_subsecond_ticks = timing->rtc_tpr;
         }
         return true;
     case 8:
-        timing->rtc_tar = value;
+        timing->rtc_tar = write_value;
         timing->rtc_sr &= ~4u;
         k22_timing_internal_update_rtc_irq(timing);
         return true;
     case 12:
         if ((timing->rtc_lr & 8u) != 0u)
-            timing->rtc_tcr = (timing->rtc_tcr & 0xffff0000u) | (value & 0xffffu);
+            timing->rtc_tcr = (timing->rtc_tcr & 0xffff0000u) | (write_value & 0xffffu);
         return true;
     case 16:
         if ((timing->rtc_lr & 0x10u) != 0u) {
-            if ((value & 1u) != 0u)
+            if ((write_value & 1u) != 0u)
                 rtc_software_reset(timing);
             else
-                timing->rtc_cr = value & 0x3f1eu;
+                timing->rtc_cr = write_value & 0x3f1eu;
         }
         return true;
     case 20:
         if ((timing->rtc_lr & 0x20u) != 0u ||
             ((timing->rtc_cr & 8u) != 0u && ((timing->rtc_sr & 0x13u) != 0x10u))) {
-            timing->rtc_sr = (timing->rtc_sr & 7u) | (value & 0x10u);
+            timing->rtc_sr = (timing->rtc_sr & 7u) | (write_value & 0x10u);
             k22_timing_internal_update_rtc_irq(timing);
         }
         return true;
     case 24:
         if ((timing->rtc_lr & 0x40u) != 0u)
-            timing->rtc_lr &= value | ~UINT32_C(0x78);
+            timing->rtc_lr &= write_value | ~UINT32_C(0x78);
         return true;
     case 28:
-        timing->rtc_ier = value & 0x17u;
+        timing->rtc_ier = write_value & 0x17u;
         k22_timing_internal_update_rtc_irq(timing);
         return true;
     default:
@@ -333,24 +333,24 @@ static bool rtc_write(K22Timing* timing, uint32_t offset, uint32_t value) {
 }
 
 static bool read_timed_register(K22Timing* timing, uint32_t address, uint8_t size,
-                                uint32_t* value) {
+                                uint32_t* output_value) {
     if (address >= PIT_BASE && address < PIT_BASE + 0x140u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_PIT))
-        return k22_timing_internal_pit_read(timing, address, size, value);
+        return k22_timing_internal_pit_read(timing, address, size, output_value);
     if (address >= LPTMR_BASE && address < LPTMR_BASE + 0x10u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0)) {
         switch (address - LPTMR_BASE) {
         case 0:
-            *value = timing->lptmr_csr;
+            *output_value = timing->lptmr_csr;
             return true;
         case 4:
-            *value = timing->lptmr_psr;
+            *output_value = timing->lptmr_psr;
             return true;
         case 8:
-            *value = timing->lptmr_cmr;
+            *output_value = timing->lptmr_cmr;
             return true;
         case 12:
-            *value = timing->lptmr_latched_counter;
+            *output_value = timing->lptmr_latched_counter;
             return true;
         default:
             return false;
@@ -358,35 +358,35 @@ static bool read_timed_register(K22Timing* timing, uint32_t address, uint8_t siz
     }
     if (address >= RTC_BASE && address <= RTC_BASE + 0x804u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_RTC))
-        return rtc_read(timing, address - RTC_BASE, value);
+        return rtc_read(timing, address - RTC_BASE, output_value);
     if (address >= PDB_BASE && address < PDB_BASE + 0x1a0u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_PDB0)) {
         const uint32_t offset = address - PDB_BASE;
         if (offset == 0)
-            *value = timing->pdb_sc;
+            *output_value = timing->pdb_sc;
         else if (offset == 4)
-            *value = timing->pdb_mod;
+            *output_value = timing->pdb_mod;
         else if (offset == 8)
-            *value = timing->pdb_counter;
+            *output_value = timing->pdb_counter;
         else if (offset == 12)
-            *value = timing->pdb_idly;
+            *output_value = timing->pdb_idly;
         else if (k22_timing_internal_pdb_auxiliary_offset(offset)) {
-            *value = timing->pdb_registers[offset >> 2u];
+            *output_value = timing->pdb_registers[offset >> 2u];
         } else
             return false;
         return true;
     }
-    uint8_t index;
+    uint8_t ftm_instance;
     uint32_t offset;
-    return k22_timing_internal_ftm_location(timing, address, &index, &offset) &&
-           k22_timing_internal_ftm_read(timing, index, offset, size, value);
+    return k22_timing_internal_ftm_location(timing, address, &ftm_instance, &offset) &&
+           k22_timing_internal_ftm_read(timing, ftm_instance, offset, size, output_value);
 }
 
 static bool write_timed_register(K22Timing* timing, uint32_t address, uint8_t size,
-                                 uint32_t value) {
+                                 uint32_t write_value) {
     if (address >= PIT_BASE && address < PIT_BASE + 0x140u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_PIT))
-        return k22_timing_internal_pit_write(timing, address, size, value);
+        return k22_timing_internal_pit_write(timing, address, size, write_value);
     if (address >= LPTMR_BASE && address < LPTMR_BASE + 0x10u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0)) {
         switch (address - LPTMR_BASE) {
@@ -394,10 +394,10 @@ static bool write_timed_register(K22Timing* timing, uint32_t address, uint8_t si
             const bool was_enabled = (timing->lptmr_csr & 1u) != 0;
             if ((timing->lptmr_csr & 1u) != 0) {
                 const uint32_t configuration = timing->lptmr_csr & 0x3eu;
-                timing->lptmr_csr =
-                    (timing->lptmr_csr & 0x80u & ~value) | configuration | (value & 0x41u);
+                timing->lptmr_csr = (timing->lptmr_csr & 0x80u & ~write_value) | configuration |
+                                    (write_value & 0x41u);
             } else {
-                timing->lptmr_csr = value & 0x7fu;
+                timing->lptmr_csr = write_value & 0x7fu;
             }
             if ((timing->lptmr_csr & 1u) == 0) {
                 timing->lptmr_csr &= ~0x80u;
@@ -415,11 +415,11 @@ static bool write_timed_register(K22Timing* timing, uint32_t address, uint8_t si
         }
         case 4:
             if ((timing->lptmr_csr & 1u) == 0)
-                timing->lptmr_psr = value & 0x7fu;
+                timing->lptmr_psr = write_value & 0x7fu;
             return true;
         case 8:
             if ((timing->lptmr_csr & 1u) == 0 || (timing->lptmr_csr & 0x80u) != 0)
-                timing->lptmr_cmr = value & 0xffffu;
+                timing->lptmr_cmr = write_value & 0xffffu;
             return true;
         case 12:
             timing->lptmr_latched_counter = timing->lptmr_counter;
@@ -430,35 +430,36 @@ static bool write_timed_register(K22Timing* timing, uint32_t address, uint8_t si
     }
     if (address >= RTC_BASE && address <= RTC_BASE + 0x804u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_RTC))
-        return rtc_write(timing, address - RTC_BASE, value);
+        return rtc_write(timing, address - RTC_BASE, write_value);
     if (address >= PDB_BASE && address < PDB_BASE + 0x1a0u && size == 4 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_PDB0)) {
         const uint32_t offset = address - PDB_BASE;
         if (offset == 0) {
-            if ((value & (1u << 6u)) == 0)
+            if ((write_value & (1u << 6u)) == 0)
                 k22_timing_internal_set_irq(timing, IRQ_PDB, false);
-            timing->pdb_sc = (timing->pdb_sc & value & (1u << 6u)) | (value & ~(1u << 6u));
-            if ((value & (1u << 16u)) != 0)
+            timing->pdb_sc =
+                (timing->pdb_sc & write_value & (1u << 6u)) | (write_value & ~(1u << 6u));
+            if ((write_value & (1u << 16u)) != 0)
                 timing->pdb_counter = 0;
         } else if (offset == 4)
-            timing->pdb_mod = (uint16_t)value;
+            timing->pdb_mod = (uint16_t)write_value;
         else if (offset == 8)
             return true;
         else if (offset == 12)
-            timing->pdb_idly = (uint16_t)value;
+            timing->pdb_idly = (uint16_t)write_value;
         else if (k22_timing_internal_pdb_auxiliary_offset(offset)) {
             if (offset == 0x14u || offset == 0x3cu)
-                timing->pdb_registers[offset >> 2u] &= ~value;
+                timing->pdb_registers[offset >> 2u] &= ~write_value;
             else
-                timing->pdb_registers[offset >> 2u] = value;
+                timing->pdb_registers[offset >> 2u] = write_value;
         } else
             return false;
         return true;
     }
-    uint8_t index;
+    uint8_t ftm_instance;
     uint32_t offset;
-    return k22_timing_internal_ftm_location(timing, address, &index, &offset) &&
-           ftm_write(timing, index, offset, size, value);
+    return k22_timing_internal_ftm_location(timing, address, &ftm_instance, &offset) &&
+           ftm_write(timing, ftm_instance, offset, size, write_value);
 }
 
 bool k22_timing_init(K22Timing* timing, const K22Profile* profile, uint32_t external_oscillator_hz,
@@ -545,10 +546,10 @@ void k22_timing_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1) {
     timing->rtc_rar = k22_timing_internal_rtc_access_reset(timing);
     timing->pdb_mod = 0xffffu;
     timing->pdb_idly = 0xffffu;
-    for (uint8_t index = 0; index < 4; index++) {
-        timing->ftm[index].modulo = 0;
-        timing->ftm[index].registers[0] = 4u;
-        timing->ftm[index].quadrature_capable = index == 1u || index == 2u;
+    for (uint8_t instance = 0; instance < 4; instance++) {
+        timing->ftm[instance].modulo = 0;
+        timing->ftm[instance].registers[0] = 4u;
+        timing->ftm[instance].quadrature_capable = instance == 1u || instance == 2u;
     }
     timing->wdog[0] = 0x01d3u;
     timing->wdog[1] = 1u;
@@ -626,76 +627,78 @@ void k22_timing_warm_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1) {
     }
 }
 
-bool k22_timing_read(K22Timing* timing, uint32_t address, uint8_t size, uint32_t* value) {
-    if (timing == NULL || timing->profile == NULL || value == NULL) {
+bool k22_timing_read(K22Timing* timing, uint32_t address, uint8_t size, uint32_t* output_value) {
+    if (timing == NULL || timing->profile == NULL || output_value == NULL) {
         return false;
     }
     if (address >= SIM_BASE && address < SIM_BASE + 0x2000u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_SIM)) {
-        return k22_timing_internal_read_sim(timing, address, size, value);
+        return k22_timing_internal_read_sim(timing, address, size, output_value);
     }
     if (address >= MCG_BASE && address < MCG_BASE + 14u &&
         k22_timing_internal_mcg_register(address - MCG_BASE) &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_MCG)) {
         return k22_timing_internal_read_byte_block(timing->mcg, MCG_BASE, 14u, address, size,
-                                                   value);
+                                                   output_value);
     }
     if (address == OSC_BASE && size == 1 && k22_timing_internal_has(timing, K22_PERIPHERAL_OSC)) {
-        *value = timing->osc_cr;
+        *output_value = timing->osc_cr;
         return true;
     }
     if (address == OSC_BASE + 2u && size == 1 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_OSC)) {
-        *value = timing->osc_div;
+        *output_value = timing->osc_div;
         return true;
     }
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_LLWU, address, size))
         return k22_timing_internal_read_byte_block(timing->llwu, LLWU_BASE, 11u, address, size,
-                                                   value);
+                                                   output_value);
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_PMC, address, size))
-        return k22_timing_internal_read_byte_block(timing->pmc, PMC_BASE, 3u, address, size, value);
+        return k22_timing_internal_read_byte_block(timing->pmc, PMC_BASE, 3u, address, size,
+                                                   output_value);
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_SMC, address, size))
-        return k22_timing_internal_read_byte_block(timing->smc, SMC_BASE, 4u, address, size, value);
+        return k22_timing_internal_read_byte_block(timing->smc, SMC_BASE, 4u, address, size,
+                                                   output_value);
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_RCM, address, size))
         return k22_timing_internal_read_byte_block(timing->rcm, RCM_BASE, 10u, address, size,
-                                                   value);
+                                                   output_value);
     if (address >= WDOG_BASE && address < WDOG_BASE + 0x18u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG))
-        return k22_timing_internal_read_wdog(timing, address, size, value);
+        return k22_timing_internal_read_wdog(timing, address, size, output_value);
     if (address >= EWM_BASE && address < EWM_BASE + 6u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_EWM))
-        return k22_timing_internal_read_ewm(timing, address, size, value);
-    return read_timed_register(timing, address, size, value);
+        return k22_timing_internal_read_ewm(timing, address, size, output_value);
+    return read_timed_register(timing, address, size, output_value);
 }
 
 static bool write_control_register(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t value) {
+                                   uint32_t write_value) {
     if (address >= MCG_BASE && address < MCG_BASE + 14u &&
         k22_timing_internal_mcg_register(address - MCG_BASE) && size == 1 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_MCG)) {
         if (address != MCG_BASE + 6u)
-            timing->mcg[address - MCG_BASE] = (uint8_t)value;
+            timing->mcg[address - MCG_BASE] = (uint8_t)write_value;
         k22_timing_internal_update_clocks(timing);
         return true;
     }
     if (address == OSC_BASE && size == 1 && k22_timing_internal_has(timing, K22_PERIPHERAL_OSC)) {
-        timing->osc_cr = (uint8_t)value;
+        timing->osc_cr = (uint8_t)write_value;
         return true;
     }
     if (address == OSC_BASE + 2u && size == 1 &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_OSC)) {
-        timing->osc_div = (uint8_t)value;
+        timing->osc_div = (uint8_t)write_value;
         return true;
     }
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_LLWU, address, size)) {
         const uint8_t offset = (uint8_t)(address - LLWU_BASE);
         if (offset == 5u || offset == 6u)
-            timing->llwu[offset] &= (uint8_t)~value;
+            timing->llwu[offset] &= (uint8_t)~write_value;
         else if (offset == 8u || offset == 9u)
-            timing->llwu[offset] =
-                (timing->llwu[offset] & 0x80u & (uint8_t)~value) | ((uint8_t)value & 0x6fu);
+            timing->llwu[offset] = (timing->llwu[offset] & 0x80u & (uint8_t)~write_value) |
+                                   ((uint8_t)write_value & 0x6fu);
         else if (offset != 7u)
-            timing->llwu[offset] = (uint8_t)value;
+            timing->llwu[offset] = (uint8_t)write_value;
         k22_timing_internal_update_llwu_irq(timing);
         return true;
     }
@@ -703,24 +706,24 @@ static bool write_control_register(K22Timing* timing, uint32_t address, uint8_t 
         const uint8_t offset = (uint8_t)(address - PMC_BASE);
         if (offset == 0u) {
             uint8_t flag = timing->pmc[0] & 0x80u;
-            if (((uint8_t)value & 0x40u) != 0u)
+            if (((uint8_t)write_value & 0x40u) != 0u)
                 flag = 0u;
             uint8_t reset_enable = timing->pmc[0] & 0x10u;
             if (!timing->pmc_lvdre_written) {
-                reset_enable = (uint8_t)value & 0x10u;
+                reset_enable = (uint8_t)write_value & 0x10u;
                 timing->pmc_lvdre_written = true;
             }
-            timing->pmc[0] = flag | reset_enable | ((uint8_t)value & 0x23u);
+            timing->pmc[0] = flag | reset_enable | ((uint8_t)write_value & 0x23u);
         } else if (offset == 1u) {
             uint8_t flag = timing->pmc[1] & 0x80u;
-            if (((uint8_t)value & 0x40u) != 0u)
+            if (((uint8_t)write_value & 0x40u) != 0u)
                 flag = 0u;
-            timing->pmc[1] = flag | ((uint8_t)value & 0x23u);
+            timing->pmc[1] = flag | ((uint8_t)write_value & 0x23u);
         } else {
             uint8_t status = timing->pmc[2] & 0x0cu;
-            if (((uint8_t)value & 8u) != 0u)
+            if (((uint8_t)write_value & 8u) != 0u)
                 status &= 0xf7u;
-            timing->pmc[2] = status | ((uint8_t)value & 0x11u);
+            timing->pmc[2] = status | ((uint8_t)write_value & 0x11u);
         }
         k22_timing_internal_update_pmc_irq(timing);
         return true;
@@ -728,10 +731,10 @@ static bool write_control_register(K22Timing* timing, uint32_t address, uint8_t 
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_SMC, address, size)) {
         const uint8_t offset = (uint8_t)(address - SMC_BASE);
         if (offset == 0u)
-            timing->smc[0] |= (uint8_t)value & 0xaau;
+            timing->smc[0] |= (uint8_t)write_value & 0xaau;
         else if (offset == 1u) {
-            timing->smc[1] = (uint8_t)value & 0xe7u;
-            const uint8_t mode = (uint8_t)value & 0x60u;
+            timing->smc[1] = (uint8_t)write_value & 0xe7u;
+            const uint8_t mode = (uint8_t)write_value & 0x60u;
             if (mode == 0x40u && (timing->smc[0] & 0x20u) != 0u)
                 timing->smc_run_status = 4u;
             else if (mode == 0x60u && (timing->smc[0] & 0x80u) != 0u)
@@ -741,15 +744,15 @@ static bool write_control_register(K22Timing* timing, uint32_t address, uint8_t 
             if (!timing->cpu_sleeping)
                 timing->smc[3] = timing->smc_run_status;
         } else if (offset == 2u)
-            timing->smc[2] = (uint8_t)value;
+            timing->smc[2] = (uint8_t)write_value;
         return true;
     }
     if (k22_timing_internal_contains(timing, K22_PERIPHERAL_RCM, address, size)) {
         const uint8_t offset = (uint8_t)(address - RCM_BASE);
         if (offset == 4u || offset == 5u)
-            timing->rcm[offset] = (uint8_t)value;
+            timing->rcm[offset] = (uint8_t)write_value;
         else if (offset == 8u || offset == 9u)
-            timing->rcm[offset] &= (uint8_t)~value;
+            timing->rcm[offset] &= (uint8_t)~write_value;
         else
             return false;
         return true;
@@ -757,22 +760,22 @@ static bool write_control_register(K22Timing* timing, uint32_t address, uint8_t 
     return false;
 }
 
-bool k22_timing_write(K22Timing* timing, uint32_t address, uint8_t size, uint32_t value) {
+bool k22_timing_write(K22Timing* timing, uint32_t address, uint8_t size, uint32_t write_value) {
     if (timing == NULL || timing->profile == NULL) {
         return false;
     }
     if (address >= SIM_BASE && address < SIM_BASE + 0x2000u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_SIM))
-        return k22_timing_internal_write_sim(timing, address, size, value);
-    if (write_control_register(timing, address, size, value))
+        return k22_timing_internal_write_sim(timing, address, size, write_value);
+    if (write_control_register(timing, address, size, write_value))
         return true;
     if (address >= WDOG_BASE && address < WDOG_BASE + 0x18u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG))
-        return k22_timing_internal_write_wdog(timing, address, size, value);
+        return k22_timing_internal_write_wdog(timing, address, size, write_value);
     if (address >= EWM_BASE && address < EWM_BASE + 6u &&
         k22_timing_internal_has(timing, K22_PERIPHERAL_EWM))
-        return k22_timing_internal_write_ewm(timing, address, size, value);
-    return write_timed_register(timing, address, size, value);
+        return k22_timing_internal_write_ewm(timing, address, size, write_value);
+    return write_timed_register(timing, address, size, write_value);
 }
 
 void k22_timing_advance(K22Timing* timing, uint32_t core_cycles) {
@@ -786,10 +789,10 @@ void k22_timing_advance(K22Timing* timing, uint32_t core_cycles) {
     k22_timing_internal_advance_lptmr(timing, core_cycles);
     k22_timing_internal_advance_rtc(timing, core_cycles);
     k22_timing_internal_advance_pdb(timing, core_cycles);
-    for (uint8_t index = 0; index < 4; index++) {
-        const K22PeripheralId id = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + index);
+    for (uint8_t instance = 0; instance < 4; instance++) {
+        const K22PeripheralId id = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + instance);
         if (k22_timing_internal_has(timing, id))
-            k22_timing_internal_advance_ftm(timing, index, core_cycles);
+            k22_timing_internal_advance_ftm(timing, instance, core_cycles);
     }
 }
 
