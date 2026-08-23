@@ -34,15 +34,15 @@ static void expect_serial_dma_sources(TestState* state) {
            "cortex_m4_write_memory(cpu, 0x400eb00bu, 1u, 0x20u)");
     expect(state, kinetis_k22_serial_receive(device, KINETIS_K22_SERIAL_UART4, 0x44u, 0u),
            "kinetis_k22_serial_receive(device, KINETIS_K22_SERIAL_UART4, 0x44u, 0u)");
-    uint16_t requests = 0u;
-    expect(state, k22_integration_test_read16(device, DMA_HRS, &requests),
-           "k22_integration_test_read16(device, DMA_HRS, &requests)");
-    expect(state, requests == 1u, "requests == 1u");
+    uint16_t dma_requests = 0u;
+    expect(state, k22_integration_test_read16(device, DMA_HRS, &dma_requests),
+           "k22_integration_test_read16(device, DMA_HRS, &dma_requests)");
+    expect(state, dma_requests == 1u, "dma_requests == 1u");
     expect(state, kinetis_k22_serial_receive(device, KINETIS_K22_SERIAL_UART5, 0x55u, 0u),
            "kinetis_k22_serial_receive(device, KINETIS_K22_SERIAL_UART5, 0x55u, 0u)");
-    expect(state, k22_integration_test_read16(device, DMA_HRS, &requests),
-           "k22_integration_test_read16(device, DMA_HRS, &requests)");
-    expect(state, requests == 1u, "requests == 1u");
+    expect(state, k22_integration_test_read16(device, DMA_HRS, &dma_requests),
+           "k22_integration_test_read16(device, DMA_HRS, &dma_requests)");
+    expect(state, dma_requests == 1u, "dma_requests == 1u");
     kinetis_k22_destroy(device);
 }
 
@@ -91,10 +91,10 @@ static void expect_periodic_dma_trigger(TestState* state) {
            "cortex_m4_write_memory(cpu, DMAMUX_CHCFG0, 1u, 0xc0u | 60u)");
     expect(state, cortex_m4_write_memory(cpu, DMA_ERQ, 2u, 1u),
            "cortex_m4_write_memory(cpu, DMA_ERQ, 2u, 1u)");
-    uint16_t requests = UINT16_MAX;
-    expect(state, k22_integration_test_read16(device, DMA_HRS, &requests),
-           "k22_integration_test_read16(device, DMA_HRS, &requests)");
-    expect(state, (requests & 1u) == 0u, "(requests & 1u) == 0u");
+    uint16_t dma_requests = UINT16_MAX;
+    expect(state, k22_integration_test_read16(device, DMA_HRS, &dma_requests),
+           "k22_integration_test_read16(device, DMA_HRS, &dma_requests)");
+    expect(state, (dma_requests & 1u) == 0u, "(dma_requests & 1u) == 0u");
     expect(state, cortex_m4_write_memory(cpu, PIT_MCR, 4u, 0u),
            "cortex_m4_write_memory(cpu, PIT_MCR, 4u, 0u)");
     expect(state, cortex_m4_write_memory(cpu, PIT_LDVAL0, 4u, 0u),
@@ -106,9 +106,9 @@ static void expect_periodic_dma_trigger(TestState* state) {
     expect(state, cortex_m4_read_memory(cpu, destination_address, 1u, &read_value),
            "cortex_m4_read_memory(cpu, destination_address, 1u, &read_value)");
     expect(state, read_value == 0x5au, "read_value == 0x5au");
-    expect(state, k22_integration_test_read16(device, DMA_ERQ, &requests),
-           "k22_integration_test_read16(device, DMA_ERQ, &requests)");
-    expect(state, (requests & 1u) == 0u, "(requests & 1u) == 0u");
+    expect(state, k22_integration_test_read16(device, DMA_ERQ, &dma_requests),
+           "k22_integration_test_read16(device, DMA_ERQ, &dma_requests)");
+    expect(state, (dma_requests & 1u) == 0u, "(dma_requests & 1u) == 0u");
     kinetis_k22_destroy(device);
 }
 
@@ -276,41 +276,41 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u),
            "cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u)");
     kinetis_k22_advance(device, 20u);
-    uint8_t status = 0u;
-    expect(state, k22_integration_test_read8(device, ADC0_SC1A, &status),
-           "k22_integration_test_read8(device, ADC0_SC1A, &status)");
-    expect(state, (status & 0x80u) == 0u, "(status & 0x80u) == 0u");
+    uint8_t conversion_status = 0u;
+    expect(state, k22_integration_test_read8(device, ADC0_SC1A, &conversion_status),
+           "k22_integration_test_read8(device, ADC0_SC1A, &conversion_status)");
+    expect(state, (conversion_status & 0x80u) == 0u, "(conversion_status & 0x80u) == 0u");
 
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x84u),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x84u)");
     kinetis_k22_advance(device, 20u);
-    expect(state, k22_integration_test_read8(device, ADC0_SC1A, &status),
-           "k22_integration_test_read8(device, ADC0_SC1A, &status)");
-    expect(state, (status & 0x80u) != 0u, "(status & 0x80u) != 0u");
-    uint16_t result = 0u;
-    expect(state, k22_integration_test_read16(device, ADC0_RA, &result),
-           "k22_integration_test_read16(device, ADC0_RA, &result)");
-    expect(state, result == 0x345u, "result == 0x345u");
+    expect(state, k22_integration_test_read8(device, ADC0_SC1A, &conversion_status),
+           "k22_integration_test_read8(device, ADC0_SC1A, &conversion_status)");
+    expect(state, (conversion_status & 0x80u) != 0u, "(conversion_status & 0x80u) != 0u");
+    uint16_t adc_result = 0u;
+    expect(state, k22_integration_test_read16(device, ADC0_RA, &adc_result),
+           "k22_integration_test_read16(device, ADC0_RA, &adc_result)");
+    expect(state, adc_result == 0x345u, "adc_result == 0x345u");
 
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x94u),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x94u)");
     kinetis_k22_advance(device, 20u);
-    expect(state, k22_integration_test_read8(device, ADC0_SC1B, &status),
-           "k22_integration_test_read8(device, ADC0_SC1B, &status)");
-    expect(state, (status & 0x80u) != 0u, "(status & 0x80u) != 0u");
-    expect(state, k22_integration_test_read16(device, ADC0_RB, &result),
-           "k22_integration_test_read16(device, ADC0_RB, &result)");
-    expect(state, result == 0x456u, "result == 0x456u");
+    expect(state, k22_integration_test_read8(device, ADC0_SC1B, &conversion_status),
+           "k22_integration_test_read8(device, ADC0_SC1B, &conversion_status)");
+    expect(state, (conversion_status & 0x80u) != 0u, "(conversion_status & 0x80u) != 0u");
+    expect(state, k22_integration_test_read16(device, ADC0_RB, &adc_result),
+           "k22_integration_test_read16(device, ADC0_RB, &adc_result)");
+    expect(state, adc_result == 0x456u, "adc_result == 0x456u");
     expect(state, cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 0u),
            "cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 0u)");
     expect(state, cortex_m4_write_memory(cpu, PIT_TFLG0, 4u, 1u),
            "cortex_m4_write_memory(cpu, PIT_TFLG0, 4u, 1u)");
 
-    uint32_t data_gates = 0u;
-    expect(state, k22_integration_test_read32(device, SIM_SCGC4, &data_gates),
-           "k22_integration_test_read32(device, SIM_SCGC4, &data_gates)");
-    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, data_gates | (1u << 19u)),
-           "cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, data_gates | (1u << 19u))");
+    uint32_t serial_clock_gate_value = 0u;
+    expect(state, k22_integration_test_read32(device, SIM_SCGC4, &serial_clock_gate_value),
+           "k22_integration_test_read32(device, SIM_SCGC4, &serial_clock_gate_value)");
+    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, serial_clock_gate_value | (1u << 19u)),
+           "cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, serial_clock_gate_value | (1u << 19u))");
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x81u),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x81u)");
     expect(state, k22_integration_test_cpu_write8(device, ADC0_SC1A, 5u),
@@ -326,9 +326,9 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, kinetis_k22_set_cmp_input(device, 0u, 1u, 30u),
            "kinetis_k22_set_cmp_input(device, 0u, 1u, 30u)");
     kinetis_k22_advance(device, 20u);
-    expect(state, k22_integration_test_read16(device, ADC0_RA, &result),
-           "k22_integration_test_read16(device, ADC0_RA, &result)");
-    expect(state, result == 0x345u, "result == 0x345u");
+    expect(state, k22_integration_test_read16(device, ADC0_RA, &adc_result),
+           "k22_integration_test_read16(device, ADC0_RA, &adc_result)");
+    expect(state, adc_result == 0x345u, "adc_result == 0x345u");
 
     expect(state, k22_integration_test_read32(device, SIM_SCGC5, &clock_gate_value),
            "k22_integration_test_read32(device, SIM_SCGC5, &clock_gate_value)");
@@ -349,9 +349,9 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, kinetis_k22_set_lptmr_input(device, 0u, true),
            "kinetis_k22_set_lptmr_input(device, 0u, true)");
     kinetis_k22_advance(device, 20u);
-    expect(state, k22_integration_test_read16(device, ADC0_RA, &result),
-           "k22_integration_test_read16(device, ADC0_RA, &result)");
-    expect(state, result == 0x456u, "result == 0x456u");
+    expect(state, k22_integration_test_read16(device, ADC0_RA, &adc_result),
+           "k22_integration_test_read16(device, ADC0_RA, &adc_result)");
+    expect(state, adc_result == 0x456u, "adc_result == 0x456u");
 
     expect(state, k22_integration_test_read32(device, SIM_SCGC6, &clock_gate_value),
            "k22_integration_test_read32(device, SIM_SCGC6, &clock_gate_value)");
@@ -372,9 +372,9 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, cortex_m4_write_memory(cpu, FTM0_SC, 4u, 0x08u),
            "cortex_m4_write_memory(cpu, FTM0_SC, 4u, 0x08u)");
     kinetis_k22_advance(device, 20u);
-    expect(state, k22_integration_test_read16(device, ADC0_RA, &result),
-           "k22_integration_test_read16(device, ADC0_RA, &result)");
-    expect(state, result == 0x345u, "result == 0x345u");
+    expect(state, k22_integration_test_read16(device, ADC0_RA, &adc_result),
+           "k22_integration_test_read16(device, ADC0_RA, &adc_result)");
+    expect(state, adc_result == 0x345u, "adc_result == 0x345u");
 
     expect(state, cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 0u),
            "cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 0u)");
@@ -385,22 +385,22 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u),
            "cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u)");
     kinetis_k22_advance(device, 2u);
-    uint32_t counter = 0u;
-    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
-           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
-    expect(state, counter == 3u, "counter == 3u");
+    uint32_t pit_counter = 0u;
+    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter),
+           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter)");
+    expect(state, pit_counter == 3u, "pit_counter == 3u");
     expect(state, cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0003u),
            "cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0003u)");
     kinetis_k22_advance(device, 10u);
-    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
-           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
-    expect(state, counter == 3u, "counter == 3u");
+    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter),
+           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter)");
+    expect(state, pit_counter == 3u, "pit_counter == 3u");
     expect(state, cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0001u),
            "cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0001u)");
     kinetis_k22_advance(device, 1u);
-    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
-           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
-    expect(state, counter == 2u, "counter == 2u");
+    expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter),
+           "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &pit_counter)");
+    expect(state, pit_counter == 2u, "pit_counter == 2u");
     kinetis_k22_destroy(device);
 }
 
@@ -440,11 +440,11 @@ static void expect_lptmr_pulse_input(TestState* state, KinetisK22* device) {
 
     expect(state, cortex_m4_write_memory(cpu, LPTMR_CSR, 4u, 0u),
            "cortex_m4_write_memory(cpu, LPTMR_CSR, 4u, 0u)");
-    uint32_t data_gates = 0u;
-    expect(state, k22_integration_test_read32(device, SIM_SCGC4, &data_gates),
-           "k22_integration_test_read32(device, SIM_SCGC4, &data_gates)");
-    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, data_gates | (1u << 19u)),
-           "cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, data_gates | (1u << 19u))");
+    uint32_t serial_clock_gate_value = 0u;
+    expect(state, k22_integration_test_read32(device, SIM_SCGC4, &serial_clock_gate_value),
+           "k22_integration_test_read32(device, SIM_SCGC4, &serial_clock_gate_value)");
+    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, serial_clock_gate_value | (1u << 19u)),
+           "cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, serial_clock_gate_value | (1u << 19u))");
     expect(state, kinetis_k22_set_cmp_input(device, 0u, 1u, 10u),
            "kinetis_k22_set_cmp_input(device, 0u, 1u, 10u)");
     expect(state, kinetis_k22_set_cmp_input(device, 0u, 2u, 20u),
