@@ -1,21 +1,24 @@
 #include "device/kinetis_k22/internal.h"
 
-static bool manifest_read(KinetisK22* device, uint32_t address, uint8_t size, uint32_t* value) {
+static bool manifest_read(KinetisK22* device, uint32_t address, uint8_t size,
+                          uint32_t* output_value) {
     const K22RegisterDescriptor* descriptor =
         kinetis_k22_internal_manifest_descriptor_for_access(device, address, size);
     if (descriptor == NULL || (descriptor->access & K22_REGISTER_ACCESS_READ) == 0 ||
         address < K22_PERIPHERAL_BASE) {
         return false;
     }
-    *value = kinetis_k22_internal_raw_load(device, address, size) &
-             kinetis_k22_internal_manifest_access_mask(descriptor, address, descriptor->read_mask) &
-             kinetis_k22_internal_manifest_access_mask(descriptor, address,
-                                                       descriptor->implemented_mask) &
-             kinetis_k22_internal_width_mask(size);
+    *output_value =
+        kinetis_k22_internal_raw_load(device, address, size) &
+        kinetis_k22_internal_manifest_access_mask(descriptor, address, descriptor->read_mask) &
+        kinetis_k22_internal_manifest_access_mask(descriptor, address,
+                                                  descriptor->implemented_mask) &
+        kinetis_k22_internal_width_mask(size);
     return true;
 }
 
-static bool manifest_write(KinetisK22* device, uint32_t address, uint8_t size, uint32_t value) {
+static bool manifest_write(KinetisK22* device, uint32_t address, uint8_t size,
+                           uint32_t write_value) {
     const K22RegisterDescriptor* descriptor =
         kinetis_k22_internal_manifest_descriptor_for_access(device, address, size);
     if (descriptor == NULL || address < K22_PERIPHERAL_BASE) {
@@ -32,47 +35,54 @@ static bool manifest_write(KinetisK22* device, uint32_t address, uint8_t size, u
     const uint32_t w1c_mask =
         kinetis_k22_internal_manifest_access_mask(descriptor, address, descriptor->w1c_mask);
     const uint32_t writable = write_mask & ~w1c_mask & mask;
-    const uint32_t clear = w1c_mask & value & mask;
-    uint32_t current = kinetis_k22_internal_raw_load(device, address, size);
-    current = (current & ~writable) | (value & writable);
-    current &= ~clear;
-    kinetis_k22_internal_raw_store(device, address, size, current & mask);
+    const uint32_t clear = w1c_mask & write_value & mask;
+    uint32_t current_value = kinetis_k22_internal_raw_load(device, address, size);
+    current_value = (current_value & ~writable) | (write_value & writable);
+    current_value &= ~clear;
+    kinetis_k22_internal_raw_store(device, address, size, current_value & mask);
     return true;
 }
 
-static void apply_fmc_control(KinetisK22* device, uint32_t address, uint8_t size, uint32_t value) {
+static void apply_fmc_control(KinetisK22* device, uint32_t address, uint8_t size,
+                              uint32_t write_value) {
     if (address != K22_FMC + 4u || size != 4u) {
         return;
     }
-    const uint8_t ways = (uint8_t)((value >> 20u) & 0x0fu);
-    const uint8_t sets = 4u;
+    const uint8_t selected_ways = (uint8_t)((write_value >> 20u) & 0x0fu);
+    const uint8_t set_count = 4u;
+
     for (uint8_t way = 0u; way < 4u; way++) {
-        if ((ways & (1u << way)) == 0u) {
+        if ((selected_ways & (1u << way)) == 0u) {
             continue;
         }
-        for (uint8_t set = 0u; set < sets; set++) {
-            const uint32_t tag_address = K22_FMC + 0x100u + ((uint32_t)way * sets + set) * 4u;
+
+        for (uint8_t set = 0u; set < set_count; set++) {
+            const uint32_t tag_address = K22_FMC + 0x100u + ((uint32_t)way * set_count + set) * 4u;
             if (k22_register_manifest_lookup(device->profile->id, tag_address, 32u) != NULL) {
                 kinetis_k22_internal_raw_store(device, tag_address, 4u, 0u);
                 device->fmc_bank[way][set] = 0u;
                 device->fmc_age[way][set] = 0u;
+
                 for (uint8_t word = 0u; word < 4u; word++) {
                     const uint32_t data_address =
-                        K22_FMC + 0x200u + (((uint32_t)way * sets + set) * 4u + word) * 4u;
+                        K22_FMC + 0x200u + (((uint32_t)way * set_count + set) * 4u + word) * 4u;
                     kinetis_k22_internal_raw_store(device, data_address, 4u, 0u);
                 }
             }
         }
     }
-    const uint32_t control = kinetis_k22_internal_raw_load(device, address, 4u) & ~0x00f80000u;
-    kinetis_k22_internal_raw_store(device, address, 4u, control);
+
+    const uint32_t control_value =
+        kinetis_k22_internal_raw_load(device, address, 4u) & ~0x00f80000u;
+    kinetis_k22_internal_raw_store(device, address, 4u, control_value);
 }
 
 bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t size,
-                                 CortexM4Access access, uint32_t* value) {
+                                 CortexM4Access access, uint32_t* output_value) {
     K22PeripheralLocation location;
     const K22RegisterDescriptor* descriptor;
-    if (device == NULL || value == NULL ||
+
+    if (device == NULL || output_value == NULL ||
         !k22_profile_resolve_peripheral(device->profile, address, size, &location) ||
         !k22_package_has_peripheral(device->package, location.id)) {
         return false;
@@ -92,9 +102,10 @@ bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t s
     }
     const bool debug_clock = access == CORTEX_M4_ACCESS_DEBUG &&
                              kinetis_k22_internal_enable_debug_clock(device, location.id);
-    bool handled = kinetis_k22_internal_semantic_read(device, location.id, address, size, value);
+    bool handled =
+        kinetis_k22_internal_semantic_read(device, location.id, address, size, output_value);
     if (!handled) {
-        handled = manifest_read(device, address, size, value);
+        handled = manifest_read(device, address, size, output_value);
     }
     if (debug_clock) {
         kinetis_k22_sync_clock_gates(device);
@@ -104,9 +115,10 @@ bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t s
 }
 
 bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t size,
-                                  CortexM4Access access, uint32_t value) {
+                                  CortexM4Access access, uint32_t write_value) {
     K22PeripheralLocation location;
     const K22RegisterDescriptor* descriptor;
+
     if (device == NULL ||
         !k22_profile_resolve_peripheral(device->profile, address, size, &location) ||
         !k22_package_has_peripheral(device->package, location.id)) {
@@ -132,12 +144,13 @@ bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t 
     }
     const bool debug_clock = access == CORTEX_M4_ACCESS_DEBUG &&
                              kinetis_k22_internal_enable_debug_clock(device, location.id);
-    bool handled = kinetis_k22_internal_semantic_write(device, location.id, address, size, value);
+    bool handled =
+        kinetis_k22_internal_semantic_write(device, location.id, address, size, write_value);
     if (!handled) {
-        handled = manifest_write(device, address, size, value);
+        handled = manifest_write(device, address, size, write_value);
     }
     if (handled && location.id == K22_PERIPHERAL_FMC) {
-        apply_fmc_control(device, address, size, value);
+        apply_fmc_control(device, address, size, write_value);
     }
     if (handled && (address == K22_SIM_SCGC1 || address == K22_SIM_SCGC2)) {
         kinetis_k22_sync_clock_gates(device);
@@ -151,8 +164,10 @@ bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t 
 
 static void reset_manifest(KinetisK22* device) {
     memset(device->peripheral, 0, K22_PERIPHERAL_SIZE);
-    for (size_t index = 0; index < device->manifest->register_count; index++) {
-        const K22RegisterDescriptor* descriptor = &device->manifest->registers[index];
+
+    for (size_t register_index = 0; register_index < device->manifest->register_count;
+         register_index++) {
+        const K22RegisterDescriptor* descriptor = &device->manifest->registers[register_index];
         const uint8_t size = (uint8_t)(descriptor->width / 8u);
         if (descriptor->address >= K22_PERIPHERAL_BASE &&
             descriptor->address - K22_PERIPHERAL_BASE <= (uint32_t)K22_PERIPHERAL_SIZE - size) {
@@ -235,8 +250,8 @@ bool kinetis_k22_next_event(KinetisK22* device, KinetisK22Event* event) {
 }
 
 bool kinetis_k22_set_adc_channel(KinetisK22* device, uint8_t instance, uint8_t channel,
-                                 uint16_t value) {
+                                 uint16_t sample_value) {
     if (device == NULL)
         return false;
-    return k22_data_set_adc_input(device->data, instance, channel, value);
+    return k22_data_set_adc_input(device->data, instance, channel, sample_value);
 }

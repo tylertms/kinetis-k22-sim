@@ -87,9 +87,9 @@ bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t size, u
 bool kinetis_k22_flash_controller_write(KinetisK22* device, uint32_t address, uint8_t size,
                                         uint32_t value);
 bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t size,
-                                 CortexM4Access access, uint32_t* value);
+                                 CortexM4Access access, uint32_t* output_value);
 bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t size,
-                                  CortexM4Access access, uint32_t value);
+                                  CortexM4Access access, uint32_t write_value);
 void kinetis_k22_peripheral_advance(KinetisK22* device, uint32_t cycles);
 void kinetis_k22_peripheral_reset(KinetisK22* device);
 void kinetis_k22_warm_reset(KinetisK22* device, uint8_t cause_0, uint8_t cause_1);
