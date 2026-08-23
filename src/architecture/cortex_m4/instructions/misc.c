@@ -2,9 +2,9 @@
 
 static bool valid_core_register(uint8_t index) { return index != 13u && index != 15u; }
 
-static uint32_t sign_extend(uint32_t value, uint8_t width) {
+static uint32_t sign_extend(uint32_t input_value, uint8_t width) {
     const uint32_t sign = 1u << (width - 1u);
-    return (value ^ sign) - sign;
+    return (input_value ^ sign) - sign;
 }
 
 static void branch_to(CortexM4* cpu, uint32_t address) {
@@ -20,8 +20,8 @@ static bool execute_reverse(CortexM4* cpu, uint16_t first, uint16_t second) {
     if ((first & 0xfff0u) != 0xfa90u || (second & 0xf0c0u) != 0xf080u) {
         return false;
     }
-    const uint8_t operation = (uint8_t)((second >> 4) & 15u);
-    if (operation != 8u && operation != 9u && operation != 11u) {
+    const uint8_t reverse_operation = (uint8_t)((second >> 4) & 15u);
+    if (reverse_operation != 8u && reverse_operation != 9u && reverse_operation != 11u) {
         return false;
     }
     const uint8_t source = (uint8_t)(first & 15u);
@@ -29,18 +29,20 @@ static bool execute_reverse(CortexM4* cpu, uint16_t first, uint16_t second) {
     if (!valid_core_register(source) || !valid_core_register(destination)) {
         return false;
     }
-    const uint32_t value = cpu->registers[source];
-    uint32_t result = 0;
-    if (operation == 8u) {
-        result = ((value & 0x000000ffu) << 24) | ((value & 0x0000ff00u) << 8) |
-                 ((value & 0x00ff0000u) >> 8) | ((value & 0xff000000u) >> 24);
-    } else if (operation == 9u) {
-        result = ((value & 0x00ff00ffu) << 8) | ((value & 0xff00ff00u) >> 8);
+    const uint32_t source_value = cpu->registers[source];
+    uint32_t transformed_value = 0;
+    if (reverse_operation == 8u) {
+        transformed_value =
+            ((source_value & 0x000000ffu) << 24) | ((source_value & 0x0000ff00u) << 8) |
+            ((source_value & 0x00ff0000u) >> 8) | ((source_value & 0xff000000u) >> 24);
+    } else if (reverse_operation == 9u) {
+        transformed_value =
+            ((source_value & 0x00ff00ffu) << 8) | ((source_value & 0xff00ff00u) >> 8);
     } else {
-        const uint32_t halfword = ((value & 0xffu) << 8) | ((value >> 8) & 0xffu);
-        result = sign_extend(halfword, 16);
+        const uint32_t halfword = ((source_value & 0xffu) << 8) | ((source_value >> 8) & 0xffu);
+        transformed_value = sign_extend(halfword, 16);
     }
-    cpu->registers[destination] = result;
+    cpu->registers[destination] = transformed_value;
     return true;
 }
 
@@ -97,21 +99,21 @@ static bool execute_negative_literal(CortexM4* cpu, uint16_t first, uint16_t sec
     if (target == 15u && operation != 0xf850u) {
         return false;
     }
-    const uint8_t size = operation == 0xf850u                           ? 4u
-                         : operation == 0xf830u || operation == 0xf930u ? 2u
-                                                                        : 1u;
+    const uint8_t byte_count = operation == 0xf850u                           ? 4u
+                               : operation == 0xf830u || operation == 0xf930u ? 2u
+                                                                              : 1u;
     const uint32_t address = (cpu->registers[15] & ~3u) - (second & 0x0fffu);
-    uint32_t value = 0;
-    if (!cortex_m4_data_read(cpu, address, size, CORTEX_M4_ACCESS_DATA, &value)) {
+    uint32_t loaded_value = 0;
+    if (!cortex_m4_data_read(cpu, address, byte_count, CORTEX_M4_ACCESS_DATA, &loaded_value)) {
         return true;
     }
     if (operation == 0xf910u || operation == 0xf930u) {
-        value = sign_extend(value, (uint8_t)(size * 8u));
+        loaded_value = sign_extend(loaded_value, (uint8_t)(byte_count * 8u));
     }
     if (target == 15u) {
-        branch_to(cpu, value);
+        branch_to(cpu, loaded_value);
     } else {
-        cpu->registers[target] = value;
+        cpu->registers[target] = loaded_value;
     }
     return true;
 }
