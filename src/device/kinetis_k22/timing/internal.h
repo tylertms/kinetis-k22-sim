@@ -51,7 +51,7 @@ enum {
 };
 
 bool k22_timing_internal_contains(const K22Timing* timing, K22PeripheralId peripheral,
-                                  uint32_t address, uint8_t size);
+                                  uint32_t access_address, uint8_t access_size);
 bool k22_timing_internal_ftm_input_capture_mode(const K22FtmState* ftm, uint8_t channel);
 bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* instance,
                                       uint32_t* offset);
@@ -97,13 +97,14 @@ void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_ftm_apply_software_sync(K22FtmState* ftm);
 void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t instance);
 void k22_timing_internal_ftm_update_fault_status(K22FtmState* ftm);
-void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t source);
-void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t irq, bool asserted);
+void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t request_source);
+void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t interrupt_number,
+                                 bool interrupt_asserted);
 void k22_timing_internal_signal_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
-void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t source);
-void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t channel);
-void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger type, uint8_t instance,
-                                 uint8_t channel);
+void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t adc_source);
+void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t dma_channel);
+void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger trigger_type,
+                                 uint8_t peripheral_instance, uint8_t peripheral_channel);
 void k22_timing_internal_update_clocks(K22Timing* timing);
 void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instance);
 void k22_timing_internal_update_llwu_irq(const K22Timing* timing);

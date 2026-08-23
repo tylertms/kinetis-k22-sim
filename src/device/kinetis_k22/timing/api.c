@@ -1,8 +1,9 @@
 #include "internal.h"
 
-void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t irq, bool asserted) {
+void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t interrupt_number,
+                                 bool interrupt_asserted) {
     if (timing->signals.irq != NULL) {
-        timing->signals.irq(timing->signals.context, irq, asserted);
+        timing->signals.irq(timing->signals.context, interrupt_number, interrupt_asserted);
     }
 }
 
@@ -22,25 +23,26 @@ void k22_timing_internal_update_llwu_irq(const K22Timing* timing) {
                                     has_pending_filter_wakeup);
 }
 
-void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t source) {
+void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t request_source) {
     if (timing->signals.dma != NULL) {
-        timing->signals.dma(timing->signals.context, source);
+        timing->signals.dma(timing->signals.context, request_source);
     }
 }
 
-void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t channel) {
+void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t dma_channel) {
     if (timing->signals.dma_trigger != NULL)
-        timing->signals.dma_trigger(timing->signals.context, channel);
+        timing->signals.dma_trigger(timing->signals.context, dma_channel);
 }
 
-void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger trigger_type, uint8_t instance,
-                                 uint8_t channel) {
+void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger trigger_type,
+                                 uint8_t peripheral_instance, uint8_t peripheral_channel) {
     if (timing->signals.trigger != NULL)
-        timing->signals.trigger(timing->signals.context, trigger_type, instance, channel);
+        timing->signals.trigger(timing->signals.context, trigger_type, peripheral_instance,
+                                peripheral_channel);
 }
 
-void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t source) {
-    k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_ADC_ALTERNATE, source, 0u);
+void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t adc_source) {
+    k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_ADC_ALTERNATE, adc_source, 0u);
 }
 
 bool k22_timing_internal_has(const K22Timing* timing, K22PeripheralId peripheral) {
@@ -50,9 +52,10 @@ bool k22_timing_internal_has(const K22Timing* timing, K22PeripheralId peripheral
 }
 
 bool k22_timing_internal_contains(const K22Timing* timing, K22PeripheralId peripheral,
-                                  uint32_t address, uint8_t size) {
-    K22PeripheralLocation location;
-    if (!k22_profile_resolve_peripheral(timing->profile, address, size, &location))
+                                  uint32_t access_address, uint8_t access_size) {
+    K22PeripheralLocation resolved_location;
+    if (!k22_profile_resolve_peripheral(timing->profile, access_address, access_size,
+                                        &resolved_location))
         return false;
-    return location.id == peripheral;
+    return resolved_location.id == peripheral;
 }
