@@ -195,78 +195,85 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         return cortex_m4_result(cpu);
     }
     const uint32_t previous_xpsr = cpu->xpsr;
-    const uint32_t address = cpu->registers[15];
+    const uint32_t instruction_address = cpu->registers[15];
     for (uint8_t index = 0; index < 8; index++) {
-        if ((cpu->breakpoint_enabled & (1u << index)) != 0 && cpu->breakpoints[index] == address) {
+        if ((cpu->breakpoint_enabled & (1u << index)) != 0 &&
+            cpu->breakpoints[index] == instruction_address) {
             cpu->stop = CORTEX_M4_STOP_BREAKPOINT;
             return cortex_m4_result(cpu);
         }
     }
     cortex_m4_timing_begin_instruction(cpu);
-    cortex_m4_debug_instruction_access(cpu, address);
-    uint32_t first_address = address;
-    cortex_m4_debug_remap_instruction(cpu, address, &first_address);
-    uint32_t first_value = 0;
-    if (!cortex_m4_bus_read(cpu, first_address, 2, CORTEX_M4_ACCESS_INSTRUCTION, &first_value)) {
+    cortex_m4_debug_instruction_access(cpu, instruction_address);
+    uint32_t first_address = instruction_address;
+    cortex_m4_debug_remap_instruction(cpu, instruction_address, &first_address);
+    uint32_t first_halfword_value = 0;
+    if (!cortex_m4_bus_read(cpu, first_address, 2, CORTEX_M4_ACCESS_INSTRUCTION,
+                            &first_halfword_value)) {
         cpu->cfsr |= 1u << 8;
         cortex_m4_raise_fault(cpu, 5);
         cortex_m4_timing_abort(cpu);
         return cortex_m4_result(cpu);
     }
-    const uint16_t first = (uint16_t)first_value;
-    cpu->registers[15] = address + 2;
-    const bool in_it_block = cpu->it_state != 0;
-    const bool execute = cortex_m4_it_condition_passed(cpu);
-    bool supported = !execute;
-    uint16_t second = 0;
-    const bool wide = (first & 0xf800u) >= 0xe800u;
-    if (wide) {
-        uint32_t second_address = address + 2u;
+    const uint16_t first_halfword = (uint16_t)first_halfword_value;
+    cpu->registers[15] = instruction_address + 2;
+    const bool is_in_it_block = cpu->it_state != 0;
+    const bool should_execute = cortex_m4_it_condition_passed(cpu);
+    bool instruction_supported = !should_execute;
+    uint16_t second_halfword = 0;
+    const bool is_wide_instruction = (first_halfword & 0xf800u) >= 0xe800u;
+    if (is_wide_instruction) {
+        uint32_t second_address = instruction_address + 2u;
         cortex_m4_debug_remap_instruction(cpu, second_address, &second_address);
-        uint32_t second_value = 0;
+        uint32_t second_halfword_value = 0;
         if (!cortex_m4_bus_read(cpu, second_address, 2, CORTEX_M4_ACCESS_INSTRUCTION,
-                                &second_value)) {
+                                &second_halfword_value)) {
             cpu->cfsr |= 1u << 8;
             cortex_m4_raise_fault(cpu, 5);
             cortex_m4_timing_abort(cpu);
             return cortex_m4_result(cpu);
         }
-        second = (uint16_t)second_value;
-        cpu->registers[15] = address + 4;
-        cpu->current_opcode = ((uint32_t)first << 16) | second;
+        second_halfword = (uint16_t)second_halfword_value;
+        cpu->registers[15] = instruction_address + 4;
+        cpu->current_opcode = ((uint32_t)first_halfword << 16) | second_halfword;
         if (cpu->trace != NULL) {
-            cpu->trace(cpu->trace_context, address, cpu->current_opcode, execute);
+            cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
+                       should_execute);
         }
-        cortex_m4_timing_prepare_instruction(cpu, first, second, true);
+        cortex_m4_timing_prepare_instruction(cpu, first_halfword, second_halfword, true);
         const CortexM4InstructionDisposition disposition =
-            cortex_m4_check_instruction_constraints(cpu, first, second, true);
-        if (execute && disposition == CORTEX_M4_INSTRUCTION_EXECUTE) {
-            supported = cortex_m4_execute_thumb32(cpu, first, second);
-            cortex_m4_it_preserve_flags(cpu, first, second, true, in_it_block, previous_xpsr);
+            cortex_m4_check_instruction_constraints(cpu, first_halfword, second_halfword, true);
+        if (should_execute && disposition == CORTEX_M4_INSTRUCTION_EXECUTE) {
+            instruction_supported = cortex_m4_execute_thumb32(cpu, first_halfword, second_halfword);
+            cortex_m4_it_preserve_flags(cpu, first_halfword, second_halfword, true, is_in_it_block,
+                                        previous_xpsr);
         }
     } else {
-        cpu->current_opcode = first;
+        cpu->current_opcode = first_halfword;
         if (cpu->trace != NULL) {
-            cpu->trace(cpu->trace_context, address, cpu->current_opcode, execute);
+            cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
+                       should_execute);
         }
-        cortex_m4_timing_prepare_instruction(cpu, first, 0, false);
+        cortex_m4_timing_prepare_instruction(cpu, first_halfword, 0, false);
         const CortexM4InstructionDisposition disposition =
-            cortex_m4_check_instruction_constraints(cpu, first, 0, false);
+            cortex_m4_check_instruction_constraints(cpu, first_halfword, 0, false);
         if (disposition == CORTEX_M4_INSTRUCTION_BREAKPOINT) {
             cortex_m4_debug_breakpoint(cpu);
-            supported = true;
-        } else if (execute && disposition == CORTEX_M4_INSTRUCTION_EXECUTE) {
-            supported = cortex_m4_execute_thumb16(cpu, first);
-            cortex_m4_it_preserve_flags(cpu, first, 0, false, in_it_block, previous_xpsr);
+            instruction_supported = true;
+        } else if (should_execute && disposition == CORTEX_M4_INSTRUCTION_EXECUTE) {
+            instruction_supported = cortex_m4_execute_thumb16(cpu, first_halfword);
+            cortex_m4_it_preserve_flags(cpu, first_halfword, 0, false, is_in_it_block,
+                                        previous_xpsr);
         }
     }
-    if (in_it_block) {
+    if (is_in_it_block) {
         cortex_m4_it_advance(cpu);
     }
     cpu->instructions++;
     cortex_m4_debug_instruction_retired(cpu);
-    cortex_m4_timing_complete_instruction(cpu, first, second, wide, execute,
-                                          address + (wide ? 4u : 2u));
+    cortex_m4_timing_complete_instruction(cpu, first_halfword, second_halfword, is_wide_instruction,
+                                          should_execute,
+                                          instruction_address + (is_wide_instruction ? 4u : 2u));
     if (!cortex_m4_debug_execution_allowed(cpu)) {
         cpu->stop = CORTEX_M4_STOP_BREAKPOINT;
     }
@@ -277,7 +284,8 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         }
         return cortex_m4_result(cpu);
     }
-    if (!supported && !cpu->instruction_faulted && cpu->stop == CORTEX_M4_STOP_RUNNING) {
+    if (!instruction_supported && !cpu->instruction_faulted &&
+        cpu->stop == CORTEX_M4_STOP_RUNNING) {
         cpu->cfsr |= 1u << 16;
         cortex_m4_raise_fault(cpu, 6);
     }
