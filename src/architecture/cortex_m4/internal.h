@@ -248,18 +248,18 @@ CortexM4ExceptionChain cortex_m4_exception_advanced_tail_chain(CortexM4* cpu,
                                                                uint16_t current_exception);
 void cortex_m4_exception_advanced_commit_entry(CortexM4* cpu, uint16_t exception);
 void cortex_m4_exception_advanced_commit_return(CortexM4* cpu, uint16_t current_exception,
-                                                bool return_thread);
+                                                bool returns_to_thread);
 bool cortex_m4_exception_advanced_active(const CortexM4* cpu, uint16_t exception);
-bool cortex_m4_exception_advanced_valid_return(const CortexM4* cpu, uint32_t value);
-bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32_t value,
+bool cortex_m4_exception_advanced_valid_return(const CortexM4* cpu, uint32_t exception_return);
+bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32_t stacked_xpsr,
                                                      uint32_t exception_return);
 void cortex_m4_exception_advanced_fault(CortexM4* cpu, CortexM4ExceptionFaultStage stage,
-                                        bool memory_management);
+                                        bool is_memory_management);
 void cortex_m4_exception_advanced_entry_fault(CortexM4* cpu, uint16_t entering_exception,
                                               CortexM4ExceptionFaultStage stage,
-                                              bool memory_management);
+                                              bool is_memory_management);
 void cortex_m4_exception_advanced_vector_fault(CortexM4* cpu);
-bool cortex_m4_exception_advanced_hardfault_vector(CortexM4* cpu, uint32_t* vector);
+bool cortex_m4_exception_advanced_hardfault_vector(CortexM4* cpu, uint32_t* vector_address);
 void cortex_m4_exception_advanced_imprecise_fault(CortexM4* cpu);
 uint8_t cortex_m4_exception_advanced_multiple_resume(const CortexM4* cpu);
 uint32_t cortex_m4_exception_advanced_multiple_address(const CortexM4* cpu,
@@ -267,8 +267,8 @@ uint32_t cortex_m4_exception_advanced_multiple_address(const CortexM4* cpu,
 bool cortex_m4_exception_advanced_multiple_suspend(CortexM4* cpu, uint8_t next_register,
                                                    uint8_t instruction_size, uint32_t next_address);
 void cortex_m4_exception_advanced_multiple_complete(CortexM4* cpu);
-uint32_t cortex_m4_exception_advanced_xpsr(const CortexM4* cpu, uint32_t value);
-void cortex_m4_exception_advanced_load_xpsr(CortexM4* cpu, uint32_t value);
+uint32_t cortex_m4_exception_advanced_xpsr(const CortexM4* cpu, uint32_t xpsr_value);
+void cortex_m4_exception_advanced_load_xpsr(CortexM4* cpu, uint32_t xpsr_value);
 bool cortex_m4_execute_thumb16(CortexM4* cpu, uint16_t opcode);
 bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second);
 bool cortex_m4_execute_remaining(CortexM4* cpu, uint16_t first, uint16_t second);
