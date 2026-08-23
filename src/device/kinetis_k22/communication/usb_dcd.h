@@ -32,8 +32,10 @@ typedef struct {
 
 void k22_usbdcd_reset(K22UsbDcd* usbdcd);
 bool k22_usbdcd_copy(K22UsbDcd* destination, const K22UsbDcd* source);
-bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t size, uint32_t value);
+bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                     uint32_t* output_value);
+bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                      uint32_t write_value);
 void k22_usbdcd_advance(K22UsbDcd* usbdcd, uint64_t cycles);
 bool k22_usbdcd_set_charger(K22UsbDcd* usbdcd, KinetisK22UsbCharger charger);
 bool k22_usbdcd_set_pullup(K22UsbDcd* usbdcd, bool enabled);

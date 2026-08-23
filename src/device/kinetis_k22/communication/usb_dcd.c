@@ -23,8 +23,8 @@ enum {
     STATUS_ACTIVE = 1u << 22u,
 };
 
-static uint32_t* selected_register(K22UsbDcd* usbdcd, uint32_t offset) {
-    switch (offset) {
+static uint32_t* selected_register(K22UsbDcd* usbdcd, uint32_t register_offset) {
+    switch (register_offset) {
     case USBDCD_CONTROL:
         return &usbdcd->control;
     case USBDCD_CLOCK:
@@ -70,14 +70,15 @@ bool k22_usbdcd_copy(K22UsbDcd* destination, const K22UsbDcd* source) {
     return true;
 }
 
-bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t size, uint32_t* value) {
-    if (usbdcd == NULL || value == NULL || size != 4u || address < USBDCD_BASE ||
+bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                     uint32_t* output_value) {
+    if (usbdcd == NULL || output_value == NULL || byte_count != 4u || address < USBDCD_BASE ||
         (address & 3u) != 0u)
         return false;
-    uint32_t* selected = selected_register(usbdcd, address - USBDCD_BASE);
-    if (selected == NULL)
+    uint32_t* register_pointer = selected_register(usbdcd, address - USBDCD_BASE);
+    if (register_pointer == NULL)
         return false;
-    *value = *selected;
+    *output_value = *register_pointer;
     return true;
 }
 
@@ -90,39 +91,40 @@ static void start(K22UsbDcd* usbdcd) {
     usbdcd->phase = K22_USBDCD_DATA_CONTACT;
 }
 
-bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t size, uint32_t value) {
-    if (usbdcd == NULL || size != 4u || address < USBDCD_BASE || (address & 3u) != 0u)
+bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                      uint32_t write_value) {
+    if (usbdcd == NULL || byte_count != 4u || address < USBDCD_BASE || (address & 3u) != 0u)
         return false;
-    const uint32_t offset = address - USBDCD_BASE;
-    if (offset == USBDCD_CONTROL) {
-        if ((value & CONTROL_IACK) != 0u)
+    const uint32_t register_offset = address - USBDCD_BASE;
+    if (register_offset == USBDCD_CONTROL) {
+        if ((write_value & CONTROL_IACK) != 0u)
             usbdcd->control &= ~CONTROL_IF;
-        if ((value & CONTROL_SR) != 0u) {
+        if ((write_value & CONTROL_SR) != 0u) {
             software_reset(usbdcd);
             return true;
         }
-        const uint32_t configuration = value & (CONTROL_IE | CONTROL_BC12);
+        const uint32_t configuration = write_value & (CONTROL_IE | CONTROL_BC12);
         usbdcd->control = (usbdcd->control & (CONTROL_IF | CONTROL_START)) | configuration;
-        if ((value & CONTROL_START) != 0u && (usbdcd->status & STATUS_ACTIVE) == 0u)
+        if ((write_value & CONTROL_START) != 0u && (usbdcd->status & STATUS_ACTIVE) == 0u)
             start(usbdcd);
         return true;
     }
     if ((usbdcd->status & STATUS_ACTIVE) != 0u)
         return false;
-    if (offset == USBDCD_CLOCK) {
-        usbdcd->clock = value & 0x00000ffdu;
+    if (register_offset == USBDCD_CLOCK) {
+        usbdcd->clock = write_value & 0x00000ffdu;
         return true;
     }
-    if (offset == USBDCD_TIMER0) {
-        usbdcd->timer0 = value & 0x03ff0000u;
+    if (register_offset == USBDCD_TIMER0) {
+        usbdcd->timer0 = write_value & 0x03ff0000u;
         return true;
     }
-    if (offset == USBDCD_TIMER1) {
-        usbdcd->timer1 = value & 0x03ff03ffu;
+    if (register_offset == USBDCD_TIMER1) {
+        usbdcd->timer1 = write_value & 0x03ff03ffu;
         return true;
     }
-    if (offset == USBDCD_TIMER2) {
-        usbdcd->timer2 = value & 0x03ff03ffu;
+    if (register_offset == USBDCD_TIMER2) {
+        usbdcd->timer2 = write_value & 0x03ff03ffu;
         return true;
     }
     return false;
