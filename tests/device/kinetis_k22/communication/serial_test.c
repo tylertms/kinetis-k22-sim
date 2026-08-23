@@ -14,16 +14,16 @@ enum {
 };
 
 static uint32_t read_register(TestState* state, K22Serial* serial, uint32_t address, uint8_t size) {
-    uint32_t value = 0;
-    expect(state, k22_serial_read(serial, address, size, &value),
-           "k22_serial_read(serial, address, size, &value)");
-    return value;
+    uint32_t register_value = 0u;
+    expect(state, k22_serial_read(serial, address, size, &register_value),
+           "k22_serial_read(serial, address, size, &register_value)");
+    return register_value;
 }
 
 static void write_register(TestState* state, K22Serial* serial, uint32_t address, uint8_t size,
-                           uint32_t value) {
-    expect(state, k22_serial_write(serial, address, size, value),
-           "k22_serial_write(serial, address, size, value)");
+                           uint32_t register_value) {
+    expect(state, k22_serial_write(serial, address, size, register_value),
+           "k22_serial_write(serial, address, size, register_value)");
 }
 
 static K22Serial create_serial(TestState* state, K22ProfileId profile_id) {
@@ -34,22 +34,24 @@ static K22Serial create_serial(TestState* state, K22ProfileId profile_id) {
 }
 
 static void expect_event(TestState* state, K22Serial* serial, K22SerialEndpoint endpoint,
-                         K22SerialEventType type, uint16_t value) {
-    K22SerialEvent event;
-    expect(state, k22_serial_pop_event(serial, &event), "k22_serial_pop_event(serial, &event)");
-    expect(state, event.endpoint == endpoint, "event.endpoint == endpoint");
-    expect(state, event.type == type, "event.type == type");
-    expect(state, event.value == value, "event.value == value");
+                         K22SerialEventType event_type, uint16_t event_value) {
+    K22SerialEvent serial_event;
+    expect(state, k22_serial_pop_event(serial, &serial_event),
+           "k22_serial_pop_event(serial, &serial_event)");
+    expect(state, serial_event.endpoint == endpoint, "serial_event.endpoint == endpoint");
+    expect(state, serial_event.type == event_type, "serial_event.type == event_type");
+    expect(state, serial_event.value == event_value, "serial_event.value == event_value");
 }
 
 static void test_profiles_and_gates(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
-    uint32_t value = 0;
+    uint32_t register_value = 0u;
+
     expect(state, serial.lpuart0.present, "serial.lpuart0.present");
     expect(state, serial.spi[1].present, "serial.spi[1].present");
     expect(state, !serial.i2c[2].present, "!serial.i2c[2].present");
-    expect(state, !k22_serial_read(&serial, UART0_BASE + 4, 1, &value),
-           "!k22_serial_read(&serial, UART0_BASE + 4, 1, &value)");
+    expect(state, !k22_serial_read(&serial, UART0_BASE + 4, 1, &register_value),
+           "!k22_serial_read(&serial, UART0_BASE + 4, 1, &register_value)");
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART0, true)");
     expect(state, read_register(state, &serial, UART0_BASE + 4, 1) == 0xc0u,
@@ -63,9 +65,10 @@ static void test_profiles_and_gates(TestState* state) {
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART1, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART1, true)");
     expect(state,
-           !k22_serial_read(&serial, serial.uart[1].base + serial.uart[1].block_size, 1, &value),
+           !k22_serial_read(&serial, serial.uart[1].base + serial.uart[1].block_size, 1,
+                            &register_value),
            "!k22_serial_read(&serial, serial.uart[1].base + serial.uart[1].block_size, 1, "
-           "&value)");
+           "&register_value)");
 
     serial = create_serial(state, K22_PROFILE_MK22FN1M012);
     expect(state, !serial.lpuart0.present, "!serial.lpuart0.present");
@@ -385,16 +388,17 @@ static void test_register_edge_paths(TestState* state) {
     write_register(state, &serial, UART0_BASE + 4, 1, 0x1fu);
     write_register(state, &serial, UART0_BASE + 5, 1, 0xffu);
     write_register(state, &serial, UART0_BASE + 0x10, 1, 0x88u);
-    for (uint16_t value = 0; value < 9; value++)
-        write_register(state, &serial, UART0_BASE + 7, 1, value);
+    for (uint16_t uart_write_value = 0u; uart_write_value < 9u; uart_write_value++) {
+        write_register(state, &serial, UART0_BASE + 7, 1, uart_write_value);
+    }
     expect(state, (read_register(state, &serial, UART0_BASE + 0x12, 1) & 0x02u) != 0,
            "(read_register(state, &serial, UART0_BASE + 0x12, 1) & 0x02u) != 0");
     write_register(state, &serial, UART0_BASE + 0x11, 1, 0x80u);
     expect(state, read_register(state, &serial, UART0_BASE + 0x14, 1) == 0,
            "read_register(state, &serial, UART0_BASE + 0x14, 1) == 0");
-    uint32_t ignored;
-    expect(state, !k22_serial_read(&serial, UART0_BASE, 4, &ignored),
-           "!k22_serial_read(&serial, UART0_BASE, 4, &ignored)");
+    uint32_t ignored_value;
+    expect(state, !k22_serial_read(&serial, UART0_BASE, 4, &ignored_value),
+           "!k22_serial_read(&serial, UART0_BASE, 4, &ignored_value)");
     expect(state, !k22_serial_write(&serial, UART0_BASE, 2, 0),
            "!k22_serial_write(&serial, UART0_BASE, 2, 0)");
 
@@ -409,18 +413,19 @@ static void test_register_edge_paths(TestState* state) {
     expect(state, (read_register(state, &serial, LPUART0_BASE + 4, 4) & (1u << 19)) != 0,
            "(read_register(state, &serial, LPUART0_BASE + 4, 4) & (1u << 19)) != 0");
     k22_serial_advance(&serial, 160);
-    uint16_t output;
-    expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_LPUART0, &output),
-           "k22_serial_pop_transmit(&serial, K22_SERIAL_LPUART0, &output)");
-    expect(state, output == 0x11u, "output == 0x11u");
-    expect(state, !k22_serial_read(&serial, LPUART0_BASE + 1, 1, &ignored),
-           "!k22_serial_read(&serial, LPUART0_BASE + 1, 1, &ignored)");
+    uint16_t transmitted_value;
+    expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_LPUART0, &transmitted_value),
+           "k22_serial_pop_transmit(&serial, K22_SERIAL_LPUART0, &transmitted_value)");
+    expect(state, transmitted_value == 0x11u, "transmitted_value == 0x11u");
+    expect(state, !k22_serial_read(&serial, LPUART0_BASE + 1, 1, &ignored_value),
+           "!k22_serial_read(&serial, LPUART0_BASE + 1, 1, &ignored_value)");
 
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_SPI0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_SPI0, true)");
     write_register(state, &serial, SPI0_BASE, 4, 0);
-    for (uint32_t value = 0; value < 5; value++)
-        write_register(state, &serial, SPI0_BASE + 0x34, 4, value);
+    for (uint32_t spi_write_value = 0u; spi_write_value < 5u; spi_write_value++) {
+        write_register(state, &serial, SPI0_BASE + 0x34, 4, spi_write_value);
+    }
     expect(state, (read_register(state, &serial, SPI0_BASE + 0x2c, 4) & (1u << 27)) != 0,
            "(read_register(state, &serial, SPI0_BASE + 0x2c, 4) & (1u << 27)) != 0");
     write_register(state, &serial, SPI0_BASE, 4, (1u << 10) | (1u << 11));
@@ -428,30 +433,31 @@ static void test_register_edge_paths(TestState* state) {
     expect(state, serial.spi[0].transmit.count == 0, "serial.spi[0].transmit.count == 0");
     write_register(state, &serial, SPI0_BASE + 0x0c, 4, 0xb8000000u);
     write_register(state, &serial, SPI0_BASE, 4, 0);
-    for (uint16_t value = 0; value < 5; value++) {
-        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_SPI0, value, 0),
-               "k22_serial_push_receive(&serial, K22_SERIAL_SPI0, value, 0)");
+    for (uint16_t receive_value = 0u; receive_value < 5u; receive_value++) {
+        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_SPI0, receive_value, 0),
+               "k22_serial_push_receive(&serial, K22_SERIAL_SPI0, receive_value, 0)");
         write_register(state, &serial, SPI0_BASE + 0x34, 4,
-                       value == 4 ? (1u << 27) | value : value);
+                       receive_value == 4u ? (1u << 27) | receive_value : receive_value);
         k22_serial_advance(&serial, 16);
     }
     uint32_t spi_status = read_register(state, &serial, SPI0_BASE + 0x2c, 4);
     expect(state, (spi_status & (1u << 19)) != 0, "(spi_status & (1u << 19)) != 0");
     expect(state, (spi_status & (1u << 28)) != 0, "(spi_status & (1u << 28)) != 0");
-    for (size_t index = 0; index < 4; index++)
-        expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_SPI0, &output),
-               "k22_serial_pop_transmit(&serial, K22_SERIAL_SPI0, &output)");
-    K22SerialSpiTransfer transfer;
-    expect(state, k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, &transfer),
-           "k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, &transfer)");
-    expect(state, transfer.data == 4, "transfer.data == 4");
-    expect(state, transfer.chip_selects == 0, "transfer.chip_selects == 0");
-    expect(state, transfer.clock_and_transfer_attributes == 0,
-           "transfer.clock_and_transfer_attributes == 0");
-    expect(state, !transfer.continuous_chip_select, "!transfer.continuous_chip_select");
-    expect(state, transfer.end_of_queue, "transfer.end_of_queue");
-    expect(state, !k22_serial_read(&serial, SPI0_BASE, 1, &ignored),
-           "!k22_serial_read(&serial, SPI0_BASE, 1, &ignored)");
+    for (size_t transmit_index = 0u; transmit_index < 4u; transmit_index++) {
+        expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_SPI0, &transmitted_value),
+               "k22_serial_pop_transmit(&serial, K22_SERIAL_SPI0, &transmitted_value)");
+    }
+    K22SerialSpiTransfer spi_transfer;
+    expect(state, k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, &spi_transfer),
+           "k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, &spi_transfer)");
+    expect(state, spi_transfer.data == 4, "spi_transfer.data == 4");
+    expect(state, spi_transfer.chip_selects == 0, "spi_transfer.chip_selects == 0");
+    expect(state, spi_transfer.clock_and_transfer_attributes == 0,
+           "spi_transfer.clock_and_transfer_attributes == 0");
+    expect(state, !spi_transfer.continuous_chip_select, "!spi_transfer.continuous_chip_select");
+    expect(state, spi_transfer.end_of_queue, "spi_transfer.end_of_queue");
+    expect(state, !k22_serial_read(&serial, SPI0_BASE, 1, &ignored_value),
+           "!k22_serial_read(&serial, SPI0_BASE, 1, &ignored_value)");
     expect(state, !k22_serial_write(&serial, SPI0_BASE + 2, 4, 0),
            "!k22_serial_write(&serial, SPI0_BASE + 2, 4, 0)");
 
@@ -460,8 +466,8 @@ static void test_register_edge_paths(TestState* state) {
     write_register(state, &serial, I2C0_BASE + 6, 1, 0xffu);
     expect(state, (read_register(state, &serial, I2C0_BASE + 6, 1) & 0x1fu) == 0x1fu,
            "(read_register(state, &serial, I2C0_BASE + 6, 1) & 0x1fu) == 0x1fu");
-    expect(state, !k22_serial_read(&serial, I2C0_BASE, 2, &ignored),
-           "!k22_serial_read(&serial, I2C0_BASE, 2, &ignored)");
+    expect(state, !k22_serial_read(&serial, I2C0_BASE, 2, &ignored_value),
+           "!k22_serial_read(&serial, I2C0_BASE, 2, &ignored_value)");
     expect(state, !k22_serial_write(&serial, I2C0_BASE, 4, 0),
            "!k22_serial_write(&serial, I2C0_BASE, 4, 0)");
     expect(state, !k22_serial_i2c_set_acknowledge(&serial, K22_SERIAL_UART0, true),
@@ -474,18 +480,20 @@ static void test_register_edge_paths(TestState* state) {
 
 static void test_event_capacity(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
+
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true)");
-    for (size_t index = 0; index < 33; index++) {
+    for (size_t event_index = 0u; event_index < 33u; event_index++) {
         write_register(state, &serial, I2C0_BASE + 2, 1, 0xf0u);
         write_register(state, &serial, I2C0_BASE + 2, 1, 0xd0u);
     }
     expect(state, serial.event_count == K22_SERIAL_EVENT_CAPACITY,
            "serial.event_count == K22_SERIAL_EVENT_CAPACITY");
-    K22SerialEvent event;
-    expect(state, k22_serial_pop_event(&serial, &event), "k22_serial_pop_event(&serial, &event)");
-    expect(state, event.type == K22_SERIAL_EVENT_I2C_START,
-           "event.type == K22_SERIAL_EVENT_I2C_START");
+    K22SerialEvent serial_event;
+    expect(state, k22_serial_pop_event(&serial, &serial_event),
+           "k22_serial_pop_event(&serial, &serial_event)");
+    expect(state, serial_event.type == K22_SERIAL_EVENT_I2C_START,
+           "serial_event.type == K22_SERIAL_EVENT_I2C_START");
 }
 
 static void test_signal_and_overflow_matrix(TestState* state) {
@@ -540,54 +548,58 @@ static void test_signal_and_overflow_matrix(TestState* state) {
     write_register(state, &serial, I2C0_BASE + 2, 1, 0x80u);
     expect(state, k22_serial_i2c_slave_address(&serial, K22_SERIAL_I2C0, 0x29u, false),
            "k22_serial_i2c_slave_address(&serial, K22_SERIAL_I2C0, 0x29u, false)");
-    for (uint16_t value = 0; value < K22_SERIAL_FIFO_CAPACITY; value++)
-        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_I2C0, value, 0),
-               "k22_serial_push_receive(&serial, K22_SERIAL_I2C0, value, 0)");
+    for (uint16_t receive_value = 0u; receive_value < K22_SERIAL_FIFO_CAPACITY; receive_value++) {
+        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_I2C0, receive_value, 0),
+               "k22_serial_push_receive(&serial, K22_SERIAL_I2C0, receive_value, 0)");
+    }
     expect(state, !k22_serial_push_receive(&serial, K22_SERIAL_I2C0, 0xffu, 0),
            "!k22_serial_push_receive(&serial, K22_SERIAL_I2C0, 0xffu, 0)");
 
-    uint32_t ignored;
+    uint32_t ignored_value;
     expect(state, !k22_serial_write(&serial, 0x50000000u, 1, 0),
            "!k22_serial_write(&serial, 0x50000000u, 1, 0)");
-    expect(state, !k22_serial_read(&serial, 0x50000000u, 1, &ignored),
-           "!k22_serial_read(&serial, 0x50000000u, 1, &ignored)");
+    expect(state, !k22_serial_read(&serial, 0x50000000u, 1, &ignored_value),
+           "!k22_serial_read(&serial, 0x50000000u, 1, &ignored_value)");
 }
 
 static void test_invalid_operations(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
-    uint32_t value;
-    uint16_t output;
+    uint32_t register_value;
+    uint16_t transmitted_value;
+
     expect(state, !k22_serial_init(NULL, serial.profile), "!k22_serial_init(NULL, serial.profile)");
     expect(state, !k22_serial_init(&serial, NULL), "!k22_serial_init(&serial, NULL)");
     expect(state, !k22_serial_copy(NULL, &serial), "!k22_serial_copy(NULL, &serial)");
     expect(state, !k22_serial_copy(&serial, NULL), "!k22_serial_copy(&serial, NULL)");
-    expect(state, !k22_serial_read(NULL, UART0_BASE, 1, &value),
-           "!k22_serial_read(NULL, UART0_BASE, 1, &value)");
+    expect(state, !k22_serial_read(NULL, UART0_BASE, 1, &register_value),
+           "!k22_serial_read(NULL, UART0_BASE, 1, &register_value)");
     expect(state, !k22_serial_read(&serial, UART0_BASE, 1, NULL),
            "!k22_serial_read(&serial, UART0_BASE, 1, NULL)");
     expect(state, !k22_serial_write(NULL, UART0_BASE, 1, 0),
            "!k22_serial_write(NULL, UART0_BASE, 1, 0)");
-    expect(state, !k22_serial_read(&serial, 0x50000000u, 1, &value),
-           "!k22_serial_read(&serial, 0x50000000u, 1, &value)");
-    expect(state, !k22_serial_push_receive(NULL, K22_SERIAL_UART0, 0, 0),
+    expect(state, !k22_serial_read(&serial, 0x50000000u, 1, &register_value),
+           "!k22_serial_read(&serial, 0x50000000u, 1, &register_value)");
+    expect(state, !k22_serial_push_receive(NULL, K22_SERIAL_UART0, 0u, 0u),
            "!k22_serial_push_receive(NULL, K22_SERIAL_UART0, 0, 0)");
-    expect(state, !k22_serial_push_receive(&serial, K22_SERIAL_ENDPOINT_INVALID, 0, 0),
+    expect(state, !k22_serial_push_receive(&serial, K22_SERIAL_ENDPOINT_INVALID, 0u, 0u),
            "!k22_serial_push_receive(&serial, K22_SERIAL_ENDPOINT_INVALID, 0, 0)");
-    expect(state, !k22_serial_pop_transmit(NULL, K22_SERIAL_UART0, &output),
-           "!k22_serial_pop_transmit(NULL, K22_SERIAL_UART0, &output)");
+    expect(state, !k22_serial_pop_transmit(NULL, K22_SERIAL_UART0, &transmitted_value),
+           "!k22_serial_pop_transmit(NULL, K22_SERIAL_UART0, &transmitted_value)");
     expect(state, !k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, NULL),
            "!k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, NULL)");
-    K22SerialSpiTransfer transfer;
-    expect(state, !k22_serial_pop_spi_transfer(NULL, K22_SERIAL_SPI0, &transfer),
-           "!k22_serial_pop_spi_transfer(NULL, K22_SERIAL_SPI0, &transfer)");
+    K22SerialSpiTransfer spi_transfer;
+    expect(state, !k22_serial_pop_spi_transfer(NULL, K22_SERIAL_SPI0, &spi_transfer),
+           "!k22_serial_pop_spi_transfer(NULL, K22_SERIAL_SPI0, &spi_transfer)");
     expect(state, !k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, NULL),
            "!k22_serial_pop_spi_transfer(&serial, K22_SERIAL_SPI0, NULL)");
-    expect(state, !k22_serial_pop_spi_transfer(&serial, K22_SERIAL_UART0, &transfer),
-           "!k22_serial_pop_spi_transfer(&serial, K22_SERIAL_UART0, &transfer)");
+    expect(state, !k22_serial_pop_spi_transfer(&serial, K22_SERIAL_UART0, &spi_transfer),
+           "!k22_serial_pop_spi_transfer(&serial, K22_SERIAL_UART0, &spi_transfer)");
     expect(state, !k22_serial_pop_event(&serial, NULL), "!k22_serial_pop_event(&serial, NULL)");
-    K22SerialEvent event;
-    expect(state, !k22_serial_pop_event(&serial, &event), "!k22_serial_pop_event(&serial, &event)");
-    expect(state, !k22_serial_pop_event(NULL, &event), "!k22_serial_pop_event(NULL, &event)");
+    K22SerialEvent serial_event;
+    expect(state, !k22_serial_pop_event(&serial, &serial_event),
+           "!k22_serial_pop_event(&serial, &serial_event)");
+    expect(state, !k22_serial_pop_event(NULL, &serial_event),
+           "!k22_serial_pop_event(NULL, &serial_event)");
     expect(state, !k22_serial_i2c_set_acknowledge(NULL, K22_SERIAL_I2C0, true),
            "!k22_serial_i2c_set_acknowledge(NULL, K22_SERIAL_I2C0, true)");
     expect(state, !k22_serial_i2c_lose_arbitration(NULL, K22_SERIAL_I2C0),
@@ -603,26 +615,26 @@ static void test_invalid_operations(TestState* state) {
     expect(state, !k22_serial_dma_request(NULL, K22_SERIAL_DMA_UART0_RECEIVE),
            "!k22_serial_dma_request(NULL, K22_SERIAL_DMA_UART0_RECEIVE)");
 
-    K22Serial unavailable = {0};
+    K22Serial unavailable_serial = {0};
     k22_serial_advance_endpoint(NULL, K22_SERIAL_UART0);
-    k22_serial_advance_endpoint(&unavailable, K22_SERIAL_I2C0);
+    k22_serial_advance_endpoint(&unavailable_serial, K22_SERIAL_I2C0);
     expect(state,
-           !k22_serial_push_receive(&unavailable, K22_SERIAL_UART0, 0u, 0u) &&
-               !k22_serial_push_receive(&unavailable, K22_SERIAL_SPI0, 0u, 0u) &&
-               !k22_serial_push_receive(&unavailable, K22_SERIAL_I2C0, 0u, 0u),
-           "unavailable serial receivers reject data");
+           !k22_serial_push_receive(&unavailable_serial, K22_SERIAL_UART0, 0u, 0u) &&
+               !k22_serial_push_receive(&unavailable_serial, K22_SERIAL_SPI0, 0u, 0u) &&
+               !k22_serial_push_receive(&unavailable_serial, K22_SERIAL_I2C0, 0u, 0u),
+           "unavailable_serial receivers reject data");
     expect(state,
-           !k22_serial_pop_transmit(&unavailable, K22_SERIAL_UART0, &output) &&
-               !k22_serial_pop_transmit(&unavailable, K22_SERIAL_SPI0, &output) &&
-               !k22_serial_pop_transmit(&unavailable, K22_SERIAL_I2C0, &output),
-           "unavailable serial transmitters have no data");
-    expect(state, !k22_serial_pop_spi_transfer(&unavailable, K22_SERIAL_SPI0, &transfer),
-           "unavailable SPI has no transfers");
+           !k22_serial_pop_transmit(&unavailable_serial, K22_SERIAL_UART0, &transmitted_value) &&
+               !k22_serial_pop_transmit(&unavailable_serial, K22_SERIAL_SPI0, &transmitted_value) &&
+               !k22_serial_pop_transmit(&unavailable_serial, K22_SERIAL_I2C0, &transmitted_value),
+           "unavailable_serial transmitters have no data");
+    expect(state, !k22_serial_pop_spi_transfer(&unavailable_serial, K22_SERIAL_SPI0, &spi_transfer),
+           "unavailable_serial SPI has no transfers");
     expect(state,
-           !k22_serial_i2c_set_acknowledge(&unavailable, K22_SERIAL_I2C0, true) &&
-               !k22_serial_i2c_lose_arbitration(&unavailable, K22_SERIAL_I2C0) &&
-               !k22_serial_i2c_slave_address(&unavailable, K22_SERIAL_I2C0, 0u, false),
-           "unavailable I2C rejects bus events");
+           !k22_serial_i2c_set_acknowledge(&unavailable_serial, K22_SERIAL_I2C0, true) &&
+               !k22_serial_i2c_lose_arbitration(&unavailable_serial, K22_SERIAL_I2C0) &&
+               !k22_serial_i2c_slave_address(&unavailable_serial, K22_SERIAL_I2C0, 0u, false),
+           "unavailable_serial I2C rejects bus events");
 }
 
 int main(void) {
