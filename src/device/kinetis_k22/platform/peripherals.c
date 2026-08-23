@@ -110,16 +110,16 @@ static bool cmt_read(KinetisK22* device, uint32_t address, uint8_t byte_count,
 
 static void cmt_refresh_irq(KinetisK22* device) {
     const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
-    const uint8_t dma = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
+    const uint8_t dma_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
     if (device->cpu != NULL)
         cortex_m4_set_irq_level(device->cpu, 45u,
-                                (cmt_control & 0x82u) == 0x82u && (dma & 1u) == 0u);
+                                (cmt_control & 0x82u) == 0x82u && (dma_control & 1u) == 0u);
 }
 
 static void cmt_refresh_dma(KinetisK22* device) {
     const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
-    const uint8_t dma = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
-    if ((cmt_control & 0x82u) == 0x82u && (dma & 1u) != 0u && !device->cmt_dma_pending)
+    const uint8_t dma_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
+    if ((cmt_control & 0x82u) == 0x82u && (dma_control & 1u) != 0u && !device->cmt_dma_pending)
         device->cmt_dma_pending = k22_data_dma_request(device->data, 47u);
 }
 
