@@ -310,131 +310,143 @@ bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel) {
     return true;
 }
 
-bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const uint32_t offset = address - DMA_BASE;
-    if (!k22_data_internal_valid_access(offset, size, DMA_REGISTER_SIZE))
+bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                uint32_t* output_value) {
+    const uint32_t register_offset = address - DMA_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, DMA_REGISTER_SIZE))
         return false;
-    if (offset >= 0x100u && offset < 0x110u) {
-        if (size != 1u || dma_priority_channel(offset) >= data->dma_channel_count)
+    if (register_offset >= 0x100u && register_offset < 0x110u) {
+        if (byte_count != 1u || dma_priority_channel(register_offset) >= data->dma_channel_count)
             return false;
     }
-    if (offset >= 0x1000u && (offset - 0x1000u) / DMA_TCD_SIZE >= data->dma_channel_count)
+    if (register_offset >= 0x1000u &&
+        (register_offset - 0x1000u) / DMA_TCD_SIZE >= data->dma_channel_count)
         return false;
-    if (offset == 0x30 && (size == 2 || size == 4)) {
-        *value = data->dma_active;
+    if (register_offset == 0x30u && (byte_count == 2u || byte_count == 4u)) {
+        *output_value = data->dma_active;
         return true;
     }
-    if (offset == 0x34 && (size == 2 || size == 4)) {
-        *value = data->dma_hardware_requests;
+    if (register_offset == 0x34u && (byte_count == 2u || byte_count == 4u)) {
+        *output_value = data->dma_hardware_requests;
         return true;
     }
-    *value = k22_data_internal_load_bytes(data->dma, offset, size);
+    *output_value = k22_data_internal_load_bytes(data->dma, register_offset, byte_count);
     return true;
 }
 
-static void dma_command(K22Data* data, uint32_t offset, uint8_t command) {
-    const uint8_t channel = command & 15u;
-    uint16_t value = 0;
-    if (offset == 0x18 || offset == 0x19 || offset == 0x1a || offset == 0x1b || offset == 0x1c ||
-        offset == 0x1d || offset == 0x1e || offset == 0x1f) {
-        uint32_t register_offset = 0;
-        bool set = false;
-        if (offset == 0x18 || offset == 0x19)
-            register_offset = 0x14;
-        else if (offset == 0x1a || offset == 0x1b)
-            register_offset = 0x0c;
-        else if (offset == 0x1f)
-            register_offset = 0x24;
-        else if (offset == 0x1e)
-            register_offset = 0x2c;
-        if (offset == 0x19 || offset == 0x1b)
-            set = true;
-        if (offset == 0x1d) {
+static void dma_command(K22Data* data, uint32_t command_offset, uint8_t command_code) {
+    const uint8_t channel = command_code & 15u;
+    uint16_t command_value = 0u;
+    if (command_offset >= 0x18u && command_offset <= 0x1fu) {
+        uint32_t target_register_offset = 0u;
+        bool set_bits = false;
+        if (command_offset == 0x18u || command_offset == 0x19u)
+            target_register_offset = 0x14u;
+        else if (command_offset == 0x1au || command_offset == 0x1bu)
+            target_register_offset = 0x0cu;
+        else if (command_offset == 0x1fu)
+            target_register_offset = 0x24u;
+        else if (command_offset == 0x1eu)
+            target_register_offset = 0x2cu;
+        if (command_offset == 0x19u || command_offset == 0x1bu)
+            set_bits = true;
+        if (command_offset == 0x1du) {
             dma_queue_channel(data, channel);
             return;
         }
-        if (offset == 0x1c) {
-            uint8_t* descriptor = data->dma + 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
-            uint16_t control = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1c, 2);
-            k22_data_internal_store_bytes(descriptor, 0x1c, 2, control & ~0x80u);
+        if (command_offset == 0x1cu) {
+            uint8_t* transfer_descriptor = data->dma + 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
+            uint16_t control_flags =
+                (uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x1cu, 2u);
+            k22_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, control_flags & ~0x80u);
             return;
         }
-        value = (uint16_t)k22_data_internal_load_bytes(data->dma, register_offset, 2);
-        if ((command & 0x40u) != 0)
-            value = set ? 0xffffu : 0;
-        else if (set)
-            value |= (uint16_t)(1u << channel);
+        command_value =
+            (uint16_t)k22_data_internal_load_bytes(data->dma, target_register_offset, 2u);
+        if ((command_code & 0x40u) != 0u)
+            command_value = set_bits ? 0xffffu : 0u;
+        else if (set_bits)
+            command_value |= (uint16_t)(1u << channel);
         else
-            value &= (uint16_t)~(1u << channel);
-        k22_data_internal_store_bytes(data->dma, register_offset, 2, value);
-        if (offset == 0x1e && value == 0)
-            k22_data_internal_store_bytes(data->dma, 0x04, 4, 0);
+            command_value &= (uint16_t)~(1u << channel);
+        k22_data_internal_store_bytes(data->dma, target_register_offset, 2u, command_value);
+        if (command_offset == 0x1eu && command_value == 0u)
+            k22_data_internal_store_bytes(data->dma, 0x04u, 4u, 0u);
     }
 }
 
-bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const uint32_t offset = address - DMA_BASE;
-    if (!k22_data_internal_valid_access(offset, size, DMA_REGISTER_SIZE))
+bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                 uint32_t write_value) {
+    const uint32_t register_offset = address - DMA_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, DMA_REGISTER_SIZE))
         return false;
-    if (offset >= 0x100u && offset < 0x110u) {
-        if (size != 1u || dma_priority_channel(offset) >= data->dma_channel_count)
+    if (register_offset >= 0x100u && register_offset < 0x110u) {
+        if (byte_count != 1u || dma_priority_channel(register_offset) >= data->dma_channel_count)
             return false;
-        data->dma[offset] = (uint8_t)value & 0xcfu;
+        data->dma[register_offset] = (uint8_t)write_value & 0xcfu;
         return true;
     }
-    if (offset >= 0x1000u && (offset - 0x1000u) / DMA_TCD_SIZE >= data->dma_channel_count)
+    if (register_offset >= 0x1000u &&
+        (register_offset - 0x1000u) / DMA_TCD_SIZE >= data->dma_channel_count)
         return false;
-    if (offset >= 0x18 && offset <= 0x1f && size == 1) {
-        dma_command(data, offset, (uint8_t)value);
+    if (register_offset >= 0x18u && register_offset <= 0x1fu && byte_count == 1u) {
+        dma_command(data, register_offset, (uint8_t)write_value);
         for (uint8_t channel = 0u; channel < data->dma_channel_count; channel++)
             k22_data_internal_dma_queue_always_enabled(data, channel);
         k22_data_internal_dma_update_interrupts(data);
         return true;
     }
-    if (offset == 0x04 || offset == 0x24 || offset == 0x28 || offset == 0x2c || offset == 0x30 ||
-        offset == 0x34)
+    if (register_offset == 0x04u || register_offset == 0x24u || register_offset == 0x28u ||
+        register_offset == 0x2cu || register_offset == 0x30u || register_offset == 0x34u)
         return false;
-    if (offset >= 0x1000u) {
-        const uint32_t tcd_offset = (offset - 0x1000u) % DMA_TCD_SIZE;
-        const uint8_t channel = (uint8_t)((offset - 0x1000u) / DMA_TCD_SIZE);
-        if (tcd_offset == 0x1c && (size == 1 || size == 2)) {
-            const uint16_t previous = (uint16_t)k22_data_internal_load_bytes(data->dma, offset, 2);
-            const uint16_t status = previous & 0x00c0u;
-            const uint16_t writable =
-                size == 1 ? (previous & 0xff00u) | (value & 0x3eu) : value & 0xcf3eu;
-            k22_data_internal_store_bytes(data->dma, offset, 2, writable | status);
-            if ((value & 1u) != 0)
+    if (register_offset >= 0x1000u) {
+        const uint32_t tcd_offset = (register_offset - 0x1000u) % DMA_TCD_SIZE;
+        const uint8_t channel = (uint8_t)((register_offset - 0x1000u) / DMA_TCD_SIZE);
+        if (tcd_offset == 0x1cu && (byte_count == 1u || byte_count == 2u)) {
+            const uint16_t previous_control =
+                (uint16_t)k22_data_internal_load_bytes(data->dma, register_offset, 2u);
+            const uint16_t status_flags = previous_control & 0x00c0u;
+            const uint16_t writable_control =
+                byte_count == 1u ? (previous_control & 0xff00u) | (write_value & 0x3eu)
+                                 : write_value & 0xcf3eu;
+            k22_data_internal_store_bytes(data->dma, register_offset, 2u,
+                                          writable_control | status_flags);
+            if ((write_value & 1u) != 0u)
                 dma_queue_channel(data, channel);
             return true;
         }
-        if (tcd_offset == 0x1d && size == 1) {
-            uint16_t control = (uint16_t)k22_data_internal_load_bytes(data->dma, offset - 1, 2);
-            control = (uint16_t)((control & 0x00ffu) | ((value & 0x7fu) << 8));
-            k22_data_internal_store_bytes(data->dma, offset - 1, 2, control);
+        if (tcd_offset == 0x1du && byte_count == 1u) {
+            uint16_t control_flags =
+                (uint16_t)k22_data_internal_load_bytes(data->dma, register_offset - 1u, 2u);
+            control_flags = (uint16_t)((control_flags & 0x00ffu) | ((write_value & 0x7fu) << 8u));
+            k22_data_internal_store_bytes(data->dma, register_offset - 1u, 2u, control_flags);
             return true;
         }
     }
-    k22_data_internal_store_bytes(data->dma, offset, size, value);
-    if (offset <= 0x0du && offset + size > 0x0cu)
+    k22_data_internal_store_bytes(data->dma, register_offset, byte_count, write_value);
+    if (register_offset <= 0x0du && register_offset + byte_count > 0x0cu)
         for (uint8_t channel = 0u; channel < data->dma_channel_count; channel++)
             k22_data_internal_dma_queue_always_enabled(data, channel);
     return true;
 }
 
-bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const uint32_t offset = address - DMAMUX_BASE;
-    if (!k22_data_internal_valid_access(offset, size, data->dmamux_count))
+bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                   uint32_t* output_value) {
+    const uint32_t register_offset = address - DMAMUX_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, data->dmamux_count))
         return false;
-    *value = k22_data_internal_load_bytes(data->dmamux, offset, size);
+    *output_value = k22_data_internal_load_bytes(data->dmamux, register_offset, byte_count);
     return true;
 }
 
-bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const uint32_t offset = address - DMAMUX_BASE;
-    if (!k22_data_internal_valid_access(offset, size, data->dmamux_count))
+bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                    uint32_t write_value) {
+    const uint32_t register_offset = address - DMAMUX_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, data->dmamux_count))
         return false;
-    k22_data_internal_store_bytes(data->dmamux, offset, size, value);
-    for (uint8_t channel = (uint8_t)offset; channel < offset + size; channel++) {
+    k22_data_internal_store_bytes(data->dmamux, register_offset, byte_count, write_value);
+    for (uint8_t channel = (uint8_t)register_offset; channel < register_offset + byte_count;
+         channel++) {
         data->dma_trigger_waiting &= (uint16_t)~(1u << channel);
         k22_data_internal_dma_queue_always_enabled(data, channel);
     }

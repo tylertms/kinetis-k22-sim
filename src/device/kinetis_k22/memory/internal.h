@@ -114,13 +114,17 @@ bool k22_data_internal_dac_read(K22Data* data, uint8_t instance, uint32_t addres
 bool k22_data_internal_dac_write(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
                                  uint32_t value);
 bool k22_data_internal_dma_priorities_valid(const K22Data* data);
-bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
+bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                uint32_t* output_value);
 bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel);
 bool k22_data_internal_dma_source_always_enabled(const K22Data* data, uint8_t request_source);
 bool k22_data_internal_dma_source_valid(const K22Data* data, uint8_t request_source);
-bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
-bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
+bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                 uint32_t write_value);
+bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                   uint32_t* output_value);
+bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                    uint32_t write_value);
 bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_count,
                                   uint32_t* output_value);
 bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte_count,
