@@ -1,6 +1,6 @@
 #include "internal.h"
 
-static uint32_t wdog_timeout(const K22Timing* timing) {
+static uint32_t watchdog_timeout_value(const K22Timing* timing) {
     return ((uint32_t)timing->wdog[2] << 16u) | timing->wdog[3];
 }
 
@@ -13,13 +13,13 @@ void k22_timing_internal_signal_reset(K22Timing* timing, uint8_t srs0, uint8_t s
         k22_timing_warm_reset(timing, srs0, srs1);
 }
 
-static void update_watchdog_irq(const K22Timing* timing) {
+static void update_watchdog_interrupt(const K22Timing* timing) {
     const bool watchdog = (timing->wdog[1] & 0x8000u) != 0u;
     const bool external = timing->ewm_output && (timing->ewm_ctrl & 8u) != 0u;
     k22_timing_internal_set_irq(timing, IRQ_WDOG_EWM, watchdog || external);
 }
 
-static bool wdog_exception(K22Timing* timing) {
+static bool handle_watchdog_expiration(K22Timing* timing) {
     timing->wdog_counter = 0u;
     if ((timing->wdog[0] & 4u) == 0u) {
         k22_timing_internal_signal_reset(timing, 0x20u, 0u);
@@ -32,11 +32,11 @@ static bool wdog_exception(K22Timing* timing) {
     timing->wdog[1] |= 0x8000u;
     timing->wdog_reset_pending = true;
     timing->wdog_reset_deadline = timing->wdog_bus_cycles + 256u;
-    update_watchdog_irq(timing);
+    update_watchdog_interrupt(timing);
     return false;
 }
 
-static void wdog_apply_update(K22Timing* timing) {
+static void apply_watchdog_update(K22Timing* timing) {
     const uint16_t immediate = 0x00e4u;
     const uint16_t disabled_test = timing->wdog[0] & 0x4000u;
     for (uint8_t byte = 0u; byte < 24u; byte++) {
@@ -58,7 +58,7 @@ static void wdog_apply_update(K22Timing* timing) {
     timing->wdog_remainder = 0u;
 }
 
-static bool wdog_process_bus_time(K22Timing* timing) {
+static bool process_watchdog_bus_time(K22Timing* timing) {
     if (timing->wdog_reset_pending && timing->wdog_bus_cycles >= timing->wdog_reset_deadline) {
         k22_timing_internal_signal_reset(timing, 0x20u, 0u);
         return true;
@@ -66,34 +66,34 @@ static bool wdog_process_bus_time(K22Timing* timing) {
     if (timing->wdog_unlock_stage == 1u &&
         timing->wdog_bus_cycles > timing->wdog_sequence_deadline) {
         timing->wdog_unlock_stage = 0u;
-        return wdog_exception(timing);
+        return handle_watchdog_expiration(timing);
     }
     if (timing->wdog_refresh_stage == 1u &&
         timing->wdog_bus_cycles > timing->wdog_sequence_deadline) {
         timing->wdog_refresh_stage = 0u;
-        return wdog_exception(timing);
+        return handle_watchdog_expiration(timing);
     }
     if (timing->wdog_initial_unlock_required && !timing->wdog_initial_debug_pause &&
         timing->wdog_unlock_stage == 0u && timing->wdog_bus_cycles > timing->wdog_update_deadline) {
         timing->wdog_initial_unlock_required = false;
-        return wdog_exception(timing);
+        return handle_watchdog_expiration(timing);
     }
     if (timing->wdog_update_open && timing->wdog_bus_cycles >= timing->wdog_update_deadline) {
         if (!timing->wdog_update_written) {
             timing->wdog_update_open = false;
-            return wdog_exception(timing);
+            return handle_watchdog_expiration(timing);
         }
-        wdog_apply_update(timing);
+        apply_watchdog_update(timing);
     }
     return false;
 }
 
-static bool wdog_advance_bus(K22Timing* timing, uint64_t ticks) {
+static bool advance_watchdog_bus_time(K22Timing* timing, uint64_t ticks) {
     timing->wdog_bus_cycles += ticks;
-    return wdog_process_bus_time(timing);
+    return process_watchdog_bus_time(timing);
 }
 
-static bool wdog_running(const K22Timing* timing) {
+static bool is_watchdog_running(const K22Timing* timing) {
     if ((timing->wdog[0] & 1u) == 0u)
         return false;
     if (timing->debug_halted && (timing->wdog[0] & 0x20u) == 0u)
@@ -105,8 +105,8 @@ static bool wdog_running(const K22Timing* timing) {
     return (timing->wdog[0] & 0x80u) != 0u;
 }
 
-static uint32_t wdog_effective_timeout(const K22Timing* timing) {
-    const uint32_t timeout = wdog_timeout(timing);
+static uint32_t effective_watchdog_timeout(const K22Timing* timing) {
+    const uint32_t timeout = watchdog_timeout_value(timing);
     if ((timing->wdog[0] & 0x4c00u) != 0x0c00u)
         return timeout;
     const uint8_t byte = (uint8_t)((timing->wdog[0] >> 12u) & 3u);
@@ -115,12 +115,12 @@ static uint32_t wdog_effective_timeout(const K22Timing* timing) {
 
 void k22_timing_watchdog_advance(K22Timing* timing, uint32_t ticks) {
     if (timing == NULL || timing->profile == NULL || ticks == 0u ||
-        !k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG) || !wdog_running(timing))
+        !k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG) || !is_watchdog_running(timing))
         return;
-    const uint32_t timeout = wdog_effective_timeout(timing);
+    const uint32_t timeout = effective_watchdog_timeout(timing);
     if (timeout == 0u || timing->wdog_counter >= timeout ||
         ticks >= timeout - timing->wdog_counter) {
-        (void)wdog_exception(timing);
+        (void)handle_watchdog_expiration(timing);
     } else {
         timing->wdog_counter += ticks;
     }
@@ -132,21 +132,22 @@ void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles) {
     const bool update_open = timing->wdog_update_open;
     const uint64_t bus_ticks = k22_timing_internal_clock_ticks(
         &timing->wdog_bus_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
-    if (wdog_advance_bus(timing, bus_ticks) || (update_open && !timing->wdog_update_open) ||
-        !wdog_running(timing))
+    if (advance_watchdog_bus_time(timing, bus_ticks) ||
+        (update_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
         return;
-    const bool test = (timing->wdog[0] & 0x4400u) == 0x0400u;
-    const uint32_t source_hz =
-        test || (timing->wdog[0] & (1u << 13u)) != 0u ? timing->bus_clock_hz : timing->lpo_hz;
+    const bool is_test_mode = (timing->wdog[0] & 0x4400u) == 0x0400u;
+    const uint32_t source_hz = is_test_mode || (timing->wdog[0] & (1u << 13u)) != 0u
+                                   ? timing->bus_clock_hz
+                                   : timing->lpo_hz;
     const uint32_t divider = ((timing->wdog[11] & 0x700u) >> 8u) + 1u;
     const uint64_t ticks = k22_timing_internal_clock_ticks(
         &timing->wdog_remainder, cycles, source_hz / divider, timing->core_clock_hz);
     k22_timing_watchdog_advance(timing, ticks > UINT32_MAX ? UINT32_MAX : (uint32_t)ticks);
 }
 
-static void assert_ewm_output(K22Timing* timing) {
+static void trigger_ewm_output(K22Timing* timing) {
     timing->ewm_output = true;
-    update_watchdog_irq(timing);
+    update_watchdog_interrupt(timing);
 }
 
 void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles) {
@@ -161,7 +162,7 @@ void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles) {
                               ? UINT32_MAX
                               : timing->ewm_counter + increment;
     if (timing->ewm_cmph != 0xffu && timing->ewm_counter >= timing->ewm_cmph)
-        assert_ewm_output(timing);
+        trigger_ewm_output(timing);
 }
 
 bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, uint8_t size,
@@ -184,14 +185,14 @@ bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, ui
     return true;
 }
 
-static bool sequence_byte_allowed(uint8_t lane, uint8_t byte_value, uint16_t first,
-                                  uint16_t second) {
+static bool is_valid_sequence_byte(uint8_t lane, uint8_t byte_value, uint16_t first,
+                                   uint16_t second) {
     const uint8_t shift = lane * 8u;
     return byte_value == ((first >> shift) & 0xffu) || byte_value == ((second >> shift) & 0xffu);
 }
 
-static uint16_t merge_wdog_write(uint16_t previous, uint32_t address, uint8_t size,
-                                 uint32_t write_value) {
+static uint16_t merge_watchdog_write(uint16_t previous, uint32_t address, uint8_t size,
+                                     uint32_t write_value) {
     if (size == 2u)
         return (uint16_t)write_value;
     const uint8_t shift = (uint8_t)((address & 1u) * 8u);
@@ -218,7 +219,7 @@ static void accept_wdog_unlock(K22Timing* timing, uint16_t sequence_value) {
         return;
     }
     timing->wdog_unlock_stage = 0u;
-    (void)wdog_exception(timing);
+    (void)handle_watchdog_expiration(timing);
 }
 
 static void accept_wdog_refresh(K22Timing* timing, uint16_t sequence_value) {
@@ -231,14 +232,14 @@ static void accept_wdog_refresh(K22Timing* timing, uint16_t sequence_value) {
         timing->wdog_bus_cycles <= timing->wdog_sequence_deadline) {
         const uint32_t window = ((uint32_t)timing->wdog[4] << 16u) | timing->wdog[5];
         if ((timing->wdog[0] & (1u << 3u)) != 0u && timing->wdog_counter < window)
-            (void)wdog_exception(timing);
+            (void)handle_watchdog_expiration(timing);
         else
             timing->wdog_counter = 0u;
         timing->wdog_refresh_stage = 0u;
         return;
     }
     timing->wdog_refresh_stage = 0u;
-    (void)wdog_exception(timing);
+    (void)handle_watchdog_expiration(timing);
 }
 
 bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t size,
@@ -247,7 +248,7 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
         (size == 2u && (address & 1u) != 0u)) {
         return false;
     }
-    if (wdog_advance_bus(timing, 1u))
+    if (advance_watchdog_bus_time(timing, 1u))
         return true;
     const uint8_t register_index = (uint8_t)((address - WDOG_BASE) / 2u);
     const uint8_t lane = (uint8_t)((address - WDOG_BASE) & 1u);
@@ -257,9 +258,9 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
         if (!timing->wdog_initial_unlock_required && (timing->wdog[0] & 0x10u) == 0u)
             return true;
         timing->wdog[register_index] =
-            merge_wdog_write(timing->wdog[register_index], address, size, write_value);
-        if (size == 1u && !sequence_byte_allowed(lane, (uint8_t)write_value, 0xc520u, 0xd928u)) {
-            (void)wdog_exception(timing);
+            merge_watchdog_write(timing->wdog[register_index], address, size, write_value);
+        if (size == 1u && !is_valid_sequence_byte(lane, (uint8_t)write_value, 0xc520u, 0xd928u)) {
+            (void)handle_watchdog_expiration(timing);
         } else if (size == 2u || timing->wdog[register_index] == 0xc520u ||
                    timing->wdog[register_index] == 0xd928u) {
             accept_wdog_unlock(timing, timing->wdog[register_index]);
@@ -270,9 +271,9 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
         if (timing->wdog_unlock_stage != 0u || timing->wdog_update_open)
             return true;
         timing->wdog[register_index] =
-            merge_wdog_write(timing->wdog[register_index], address, size, write_value);
-        if (size == 1u && !sequence_byte_allowed(lane, (uint8_t)write_value, 0xa602u, 0xb480u)) {
-            (void)wdog_exception(timing);
+            merge_watchdog_write(timing->wdog[register_index], address, size, write_value);
+        if (size == 1u && !is_valid_sequence_byte(lane, (uint8_t)write_value, 0xa602u, 0xb480u)) {
+            (void)handle_watchdog_expiration(timing);
         } else if (size == 2u || timing->wdog[register_index] == 0xa602u ||
                    timing->wdog[register_index] == 0xb480u) {
             accept_wdog_refresh(timing, timing->wdog[register_index]);
@@ -284,7 +285,7 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
             size == 1u ? (uint16_t)((uint8_t)write_value << (lane * 8u)) : (uint16_t)write_value;
         if ((written & 0x8000u) != 0u) {
             timing->wdog[1] &= 0x7fffu;
-            update_watchdog_irq(timing);
+            update_watchdog_interrupt(timing);
         }
         if (timing->wdog_update_open && timing->wdog_bus_cycles >= timing->wdog_update_ready)
             timing->wdog_update_written = true;
@@ -306,7 +307,7 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
         return true;
     }
     timing->wdog_pending[register_index] =
-        merge_wdog_write(timing->wdog_pending[register_index], address, size, write_value);
+        merge_watchdog_write(timing->wdog_pending[register_index], address, size, write_value);
     timing->wdog_update_mask |= update_bits;
     timing->wdog_update_written = true;
     if (register_index == 0u) {
@@ -362,7 +363,7 @@ bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t 
         } else {
             timing->ewm_ctrl = (timing->ewm_ctrl & 7u) | ((uint8_t)write_value & 8u);
         }
-        update_watchdog_irq(timing);
+        update_watchdog_interrupt(timing);
         return true;
     case 1:
         if (write_value == 0xb4u) {
@@ -378,7 +379,7 @@ bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t 
                 !input_asserted)
                 timing->ewm_counter = 0u;
             else
-                assert_ewm_output(timing);
+                trigger_ewm_output(timing);
             timing->ewm_service_stage = 0u;
             timing->ewm_service_paused = false;
         } else {
