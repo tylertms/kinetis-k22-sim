@@ -66,16 +66,16 @@ static void expect_block(TestState* state, const K22Profile* profile,
     expect(state, location.block_size == expected->size, "location.block_size == expected->size");
     expect(state, location.offset == 0, "location.offset == 0");
 
-    uint32_t last = expected->address + expected->size - 1;
-    expect(state, k22_profile_resolve_peripheral(profile, last, 1, &location),
-           "k22_profile_resolve_peripheral(profile, last, 1, &location)");
+    uint32_t last_address = expected->address + expected->size - 1;
+    expect(state, k22_profile_resolve_peripheral(profile, last_address, 1, &location),
+           "k22_profile_resolve_peripheral(profile, last_address, 1, &location)");
     expect(state, location.offset == expected->size - 1, "location.offset == expected->size - 1");
-    expect(state, !k22_profile_resolve_peripheral(profile, last, 2, NULL),
-           "!k22_profile_resolve_peripheral(profile, last, 2, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(profile, last_address, 2, NULL),
+           "!k22_profile_resolve_peripheral(profile, last_address, 2, NULL)");
     if (expected->size >= 4) {
-        uint32_t final_word = expected->address + expected->size - 4;
-        expect(state, k22_profile_resolve_peripheral(profile, final_word, 4, NULL),
-               "k22_profile_resolve_peripheral(profile, final_word, 4, NULL)");
+        uint32_t final_word_address = expected->address + expected->size - 4;
+        expect(state, k22_profile_resolve_peripheral(profile, final_word_address, 4, NULL),
+               "k22_profile_resolve_peripheral(profile, final_word_address, 4, NULL)");
     }
 }
 
@@ -116,39 +116,42 @@ static void expect_profile(TestState* state, const K22ExpectedProfile* expected)
         expected_ids[expected->blocks[index].id] = true;
         expect_block(state, profile, &expected->blocks[index]);
     }
-    for (int id = 0; id < K22_PERIPHERAL_COUNT; id++) {
-        expect(state, k22_profile_has_peripheral(profile, (K22PeripheralId)id) == expected_ids[id],
-               "k22_profile_has_peripheral(profile, (K22PeripheralId)id) == expected_ids[id]");
+    for (int peripheral_id = 0; peripheral_id < K22_PERIPHERAL_COUNT; peripheral_id++) {
+        expect(state,
+               k22_profile_has_peripheral(profile, (K22PeripheralId)peripheral_id) ==
+                   expected_ids[peripheral_id],
+               "k22_profile_has_peripheral(profile, (K22PeripheralId)peripheral_id) == "
+               "expected_ids[peripheral_id]");
     }
 }
 
 static void expect_fail_closed(TestState* state) {
-    const K22Profile* small = k22_profile_get(K22_PROFILE_MK22F12810);
-    const K22Profile* large = k22_profile_get(K22_PROFILE_MK22FN1M012);
+    const K22Profile* small_profile = k22_profile_get(K22_PROFILE_MK22F12810);
+    const K22Profile* large_profile = k22_profile_get(K22_PROFILE_MK22FN1M012);
     expect(state, !k22_profile_resolve_peripheral(NULL, 0x40000000u, 4, NULL),
            "!k22_profile_resolve_peripheral(NULL, 0x40000000u, 4, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0x40000000u, 4, NULL),
-           "!k22_profile_resolve_peripheral(small, 0x40000000u, 4, NULL)");
-    expect(state, k22_profile_resolve_peripheral(large, 0x40000000u, 4, NULL),
-           "k22_profile_resolve_peripheral(large, 0x40000000u, 4, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0x40003000u, 4, NULL),
-           "!k22_profile_resolve_peripheral(small, 0x40003000u, 4, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0xe000e000u, 4, NULL),
-           "!k22_profile_resolve_peripheral(small, 0xe000e000u, 4, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, UINT32_MAX, 4, NULL),
-           "!k22_profile_resolve_peripheral(small, UINT32_MAX, 4, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0x40008000u, 0, NULL),
-           "!k22_profile_resolve_peripheral(small, 0x40008000u, 0, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0x40008000u, 3, NULL),
-           "!k22_profile_resolve_peripheral(small, 0x40008000u, 3, NULL)");
-    expect(state, !k22_profile_resolve_peripheral(small, 0x40008000u, 8, NULL),
-           "!k22_profile_resolve_peripheral(small, 0x40008000u, 8, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0x40000000u, 4, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0x40000000u, 4, NULL)");
+    expect(state, k22_profile_resolve_peripheral(large_profile, 0x40000000u, 4, NULL),
+           "k22_profile_resolve_peripheral(large_profile, 0x40000000u, 4, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0x40003000u, 4, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0x40003000u, 4, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0xe000e000u, 4, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0xe000e000u, 4, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, UINT32_MAX, 4, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, UINT32_MAX, 4, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0x40008000u, 0, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0x40008000u, 0, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0x40008000u, 3, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0x40008000u, 3, NULL)");
+    expect(state, !k22_profile_resolve_peripheral(small_profile, 0x40008000u, 8, NULL),
+           "!k22_profile_resolve_peripheral(small_profile, 0x40008000u, 8, NULL)");
     expect(state, !k22_profile_peripheral_block(NULL, K22_PERIPHERAL_DMA, NULL),
            "!k22_profile_peripheral_block(NULL, K22_PERIPHERAL_DMA, NULL)");
-    expect(state, !k22_profile_peripheral_block(small, (K22PeripheralId)-1, NULL),
-           "!k22_profile_peripheral_block(small, (K22PeripheralId)-1, NULL)");
-    expect(state, !k22_profile_peripheral_block(small, K22_PERIPHERAL_COUNT, NULL),
-           "!k22_profile_peripheral_block(small, K22_PERIPHERAL_COUNT, NULL)");
+    expect(state, !k22_profile_peripheral_block(small_profile, (K22PeripheralId)-1, NULL),
+           "!k22_profile_peripheral_block(small_profile, (K22PeripheralId)-1, NULL)");
+    expect(state, !k22_profile_peripheral_block(small_profile, K22_PERIPHERAL_COUNT, NULL),
+           "!k22_profile_peripheral_block(small_profile, K22_PERIPHERAL_COUNT, NULL)");
 }
 
 static void expect_invalid_configuration(TestState* state) {
