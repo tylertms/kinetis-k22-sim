@@ -664,16 +664,18 @@ static bool execute_conversions(CortexM4* cpu, uint16_t first, uint16_t second) 
     const uint8_t destination = single_destination_register(first, second);
     const uint8_t source = single_m_register(second);
     if ((first & 0xffbeu) == 0xeeb2u && (second & 0x0f50u) == 0x0a40u) {
-        const bool to_half = (first & 1u) != 0;
-        const bool top = (second & 0x0080u) != 0;
-        if (to_half) {
-            const uint16_t half = float_to_half(cpu, cpu->fp_registers[source]);
-            const uint32_t mask = top ? 0x0000ffffu : 0xffff0000u;
+        const bool converts_to_half = (first & 1u) != 0;
+        const bool high_halfword = (second & 0x0080u) != 0;
+        if (converts_to_half) {
+            const uint16_t half_value = float_to_half(cpu, cpu->fp_registers[source]);
+            const uint32_t preserved_halfword_mask = high_halfword ? 0x0000ffffu : 0xffff0000u;
             cpu->fp_registers[destination] =
-                (cpu->fp_registers[destination] & mask) | (top ? (uint32_t)half << 16 : half);
+                (cpu->fp_registers[destination] & preserved_halfword_mask) |
+                (high_halfword ? (uint32_t)half_value << 16 : half_value);
         } else {
-            const uint16_t half = (uint16_t)(cpu->fp_registers[source] >> (top ? 16u : 0u));
-            cpu->fp_registers[destination] = half_to_float(cpu, half);
+            const uint16_t half_value =
+                (uint16_t)(cpu->fp_registers[source] >> (high_halfword ? 16u : 0u));
+            cpu->fp_registers[destination] = half_to_float(cpu, half_value);
         }
         return true;
     }
