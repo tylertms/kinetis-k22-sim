@@ -50,23 +50,23 @@ static void expect_periodic_dma_trigger(TestState* state) {
     KinetisK22* device =
         k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_DC_121_XFBGA);
     CortexM4* cpu = kinetis_k22_cpu(device);
-    const uint32_t source = 0x20000080u;
-    const uint32_t destination = 0x20000081u;
-    expect(state, cortex_m4_write_memory(cpu, source, 1u, 0x5au),
-           "cortex_m4_write_memory(cpu, source, 1u, 0x5au)");
-    expect(state, cortex_m4_write_memory(cpu, destination, 1u, 0u),
-           "cortex_m4_write_memory(cpu, destination, 1u, 0u)");
-    uint32_t gates = 0u;
-    expect(state, k22_integration_test_read32(device, SIM_SCGC7, &gates),
-           "k22_integration_test_read32(device, SIM_SCGC7, &gates)");
-    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC7, 4u, gates | 2u),
-           "cortex_m4_write_memory(cpu, SIM_SCGC7, 4u, gates | 2u)");
-    expect(state, k22_integration_test_read32(device, SIM_SCGC6, &gates),
-           "k22_integration_test_read32(device, SIM_SCGC6, &gates)");
-    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, gates | 2u | (1u << 23u)),
-           "cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, gates | 2u | (1u << 23u))");
-    expect(state, cortex_m4_write_memory(cpu, DMA_TCD0, 4u, source),
-           "cortex_m4_write_memory(cpu, DMA_TCD0, 4u, source)");
+    const uint32_t source_address = 0x20000080u;
+    const uint32_t destination_address = 0x20000081u;
+    expect(state, cortex_m4_write_memory(cpu, source_address, 1u, 0x5au),
+           "cortex_m4_write_memory(cpu, source_address, 1u, 0x5au)");
+    expect(state, cortex_m4_write_memory(cpu, destination_address, 1u, 0u),
+           "cortex_m4_write_memory(cpu, destination_address, 1u, 0u)");
+    uint32_t clock_gate_value = 0u;
+    expect(state, k22_integration_test_read32(device, SIM_SCGC7, &clock_gate_value),
+           "k22_integration_test_read32(device, SIM_SCGC7, &clock_gate_value)");
+    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC7, 4u, clock_gate_value | 2u),
+           "cortex_m4_write_memory(cpu, SIM_SCGC7, 4u, clock_gate_value | 2u)");
+    expect(state, k22_integration_test_read32(device, SIM_SCGC6, &clock_gate_value),
+           "k22_integration_test_read32(device, SIM_SCGC6, &clock_gate_value)");
+    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gate_value | 2u | (1u << 23u)),
+           "cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gate_value | 2u | (1u << 23u))");
+    expect(state, cortex_m4_write_memory(cpu, DMA_TCD0, 4u, source_address),
+           "cortex_m4_write_memory(cpu, DMA_TCD0, 4u, source_address)");
     expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 4u, 2u, 0u),
            "cortex_m4_write_memory(cpu, DMA_TCD0 + 4u, 2u, 0u)");
     expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 6u, 2u, 0u),
@@ -75,8 +75,8 @@ static void expect_periodic_dma_trigger(TestState* state) {
            "cortex_m4_write_memory(cpu, DMA_TCD0 + 8u, 4u, 1u)");
     expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 0x0cu, 4u, 0u),
            "cortex_m4_write_memory(cpu, DMA_TCD0 + 0x0cu, 4u, 0u)");
-    expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 0x10u, 4u, destination),
-           "cortex_m4_write_memory(cpu, DMA_TCD0 + 0x10u, 4u, destination)");
+    expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 0x10u, 4u, destination_address),
+           "cortex_m4_write_memory(cpu, DMA_TCD0 + 0x10u, 4u, destination_address)");
     expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 0x14u, 2u, 0u),
            "cortex_m4_write_memory(cpu, DMA_TCD0 + 0x14u, 2u, 0u)");
     expect(state, cortex_m4_write_memory(cpu, DMA_TCD0 + 0x16u, 2u, 1u),
@@ -102,10 +102,10 @@ static void expect_periodic_dma_trigger(TestState* state) {
     expect(state, cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u),
            "cortex_m4_write_memory(cpu, PIT_TCTRL0, 4u, 1u)");
     kinetis_k22_advance(device, k22_test_core_cycles_for_bus_cycles(device, 1u));
-    uint32_t value = 0u;
-    expect(state, cortex_m4_read_memory(cpu, destination, 1u, &value),
-           "cortex_m4_read_memory(cpu, destination, 1u, &value)");
-    expect(state, value == 0x5au, "value == 0x5au");
+    uint32_t read_value = 0u;
+    expect(state, cortex_m4_read_memory(cpu, destination_address, 1u, &read_value),
+           "cortex_m4_read_memory(cpu, destination_address, 1u, &read_value)");
+    expect(state, read_value == 0x5au, "read_value == 0x5au");
     expect(state, k22_integration_test_read16(device, DMA_ERQ, &requests),
            "k22_integration_test_read16(device, DMA_ERQ, &requests)");
     expect(state, (requests & 1u) == 0u, "(requests & 1u) == 0u");
