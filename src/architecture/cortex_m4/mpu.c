@@ -45,7 +45,7 @@ static bool privileged_access(const CortexM4* cpu, CortexM4Access access) {
     return (cpu->xpsr & 0x1ffu) != 0u || (cpu->control & CORTEX_M4_CONTROL_NPRIV) == 0u;
 }
 
-static uint8_t alias_number(uint32_t address) {
+static uint8_t alias_index(uint32_t address) {
     if (address == MPU_RBAR_A1 || address == MPU_RASR_A1) {
         return 1u;
     }
@@ -59,11 +59,11 @@ static uint8_t alias_number(uint32_t address) {
 }
 
 static uint8_t selected_region(const CortexM4* cpu, uint32_t address) {
-    const uint8_t alias = alias_number(address);
-    if (alias == 0u) {
+    const uint8_t alias_index_value = alias_index(address);
+    if (alias_index_value == 0u) {
         return (uint8_t)(cpu->mpu_region_number & 7u);
     }
-    return (uint8_t)(((cpu->mpu_region_number & ~3u) | alias) & 7u);
+    return (uint8_t)(((cpu->mpu_region_number & ~3u) | alias_index_value) & 7u);
 }
 
 static bool is_rbar(uint32_t address) {
@@ -161,25 +161,25 @@ static bool mpu_active(const CortexM4* cpu) {
 }
 
 static bool region_contains(const CortexM4* cpu, uint8_t region, uint32_t address) {
-    const uint32_t attributes = cpu->mpu_region_attributes[region];
-    if ((attributes & MPU_RASR_ENABLE) == 0u) {
+    const uint32_t region_attributes = cpu->mpu_region_attributes[region];
+    if ((region_attributes & MPU_RASR_ENABLE) == 0u) {
         return false;
     }
-    const uint8_t size_encoding = (uint8_t)((attributes & MPU_RASR_SIZE_MASK) >> 1u);
+    const uint8_t size_encoding = (uint8_t)((region_attributes & MPU_RASR_SIZE_MASK) >> 1u);
     if (size_encoding < 4u) {
         return false;
     }
     const uint64_t region_size = UINT64_C(1) << (size_encoding + 1u);
     const uint64_t region_mask = region_size - 1u;
-    const uint64_t base = (uint64_t)cpu->mpu_region_base[region] & ~region_mask;
-    if ((uint64_t)address < base || (uint64_t)address >= base + region_size) {
+    const uint64_t region_base = (uint64_t)cpu->mpu_region_base[region] & ~region_mask;
+    if ((uint64_t)address < region_base || (uint64_t)address >= region_base + region_size) {
         return false;
     }
     if (size_encoding < 7u) {
         return true;
     }
-    const uint8_t subregion = (uint8_t)(((uint64_t)address - base) * 8u / region_size);
-    return (attributes & (UINT32_C(1) << (subregion + 8u))) == 0u;
+    const uint8_t subregion_index = (uint8_t)(((uint64_t)address - region_base) * 8u / region_size);
+    return (region_attributes & (UINT32_C(1) << (subregion_index + 8u))) == 0u;
 }
 
 static int8_t matching_region(const CortexM4* cpu, uint32_t address) {
