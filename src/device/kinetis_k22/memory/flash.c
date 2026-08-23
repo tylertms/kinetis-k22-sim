@@ -2,17 +2,17 @@
 
 #include <string.h>
 
-static uint8_t flash_fccob_offset(uint8_t index) {
+static uint8_t flash_fccob_offset(uint8_t fccob_index) {
     static const uint8_t offsets[12] = {7u, 6u, 5u, 4u, 11u, 10u, 9u, 8u, 15u, 14u, 13u, 12u};
-    return offsets[index];
+    return offsets[fccob_index];
 }
 
-static uint8_t flash_fccob(const K22Data* data, uint8_t index) {
-    return data->flash[flash_fccob_offset(index)];
+static uint8_t flash_fccob(const K22Data* data, uint8_t fccob_index) {
+    return data->flash[flash_fccob_offset(fccob_index)];
 }
 
-static void flash_set_fccob(K22Data* data, uint8_t index, uint8_t value) {
-    data->flash[flash_fccob_offset(index)] = value;
+static void flash_set_fccob(K22Data* data, uint8_t fccob_index, uint8_t byte_value) {
+    data->flash[flash_fccob_offset(fccob_index)] = byte_value;
 }
 
 static uint32_t flash_address(const K22Data* data) {
@@ -27,33 +27,38 @@ uint32_t k22_data_program_flash_address(const K22Data* data, uint32_t address) {
     return address ^ (data->profile->program_flash_size / 2u);
 }
 
-static bool flash_store(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    bool stored = false;
+static bool flash_store(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t write_value) {
+    bool write_succeeded = false;
     const uint32_t physical_address = k22_data_program_flash_address(data, address);
     if (data->bus.program != NULL)
-        stored = data->bus.program(data->bus.context, physical_address, size, value);
+        write_succeeded =
+            data->bus.program(data->bus.context, physical_address, byte_count, write_value);
     else if (data->bus.write != NULL)
-        stored = data->bus.write(data->bus.context, physical_address, size, value);
-    if (!stored)
+        write_succeeded =
+            data->bus.write(data->bus.context, physical_address, byte_count, write_value);
+    if (!write_succeeded)
         return false;
-    if (address < 0x410u && address + size > 0x400u) {
-        for (uint8_t index = 0; index < size; index++) {
-            const uint32_t byte_address = address + index;
+    if (address < 0x410u && address + byte_count > 0x400u) {
+        for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
+            const uint32_t byte_address = address + byte_index;
             if (byte_address >= 0x400u && byte_address < 0x410u)
-                data->flash_config[byte_address - 0x400u] = (uint8_t)(value >> (index * 8u));
+                data->flash_config[byte_address - 0x400u] =
+                    (uint8_t)(write_value >> (byte_index * 8u));
         }
     }
     return true;
 }
 
-static bool flash_load(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    if (address >= 0x400u && address <= 0x410u - size) {
-        *value = k22_data_internal_load_bytes(data->flash_config, address - 0x400u, size);
+static bool flash_load(K22Data* data, uint32_t address, uint8_t byte_count,
+                       uint32_t* output_value) {
+    if (address >= 0x400u && address <= 0x410u - byte_count) {
+        *output_value =
+            k22_data_internal_load_bytes(data->flash_config, address - 0x400u, byte_count);
         return true;
     }
     if (data->bus.read == NULL)
         return false;
-    return data->bus.read(data->bus.context, address, size, value);
+    return data->bus.read(data->bus.context, address, byte_count, output_value);
 }
 
 static uint32_t flash_data_size(const K22Data* data) {
@@ -79,30 +84,32 @@ static uint32_t flash_data_size(const K22Data* data) {
     }
 }
 
-static bool flash_memory_range(const K22Data* data, uint32_t address, uint32_t length,
-                               bool* data_flash, uint32_t* offset) {
-    *data_flash = (address & 0x800000u) != 0u;
-    *offset = address & 0x7fffffu;
-    const uint32_t available =
-        *data_flash ? flash_data_size(data) : data->profile->program_flash_size;
-    return length <= available && *offset <= available - length;
+static bool flash_memory_range(const K22Data* data, uint32_t address, uint32_t range_size,
+                               bool* data_flash_access, uint32_t* flash_offset) {
+    *data_flash_access = (address & 0x800000u) != 0u;
+    *flash_offset = address & 0x7fffffu;
+    const uint32_t available_size =
+        *data_flash_access ? flash_data_size(data) : data->profile->program_flash_size;
+    return range_size <= available_size && *flash_offset <= available_size - range_size;
 }
 
-static bool flash_memory_load(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const bool data_flash = (address & 0x800000u) != 0u;
-    const uint32_t offset = address & 0x7fffffu;
-    if (!data_flash)
-        return flash_load(data, offset, size, value);
-    *value = k22_data_internal_load_bytes(data->flexnvm, offset, size);
+static bool flash_memory_load(K22Data* data, uint32_t address, uint8_t byte_count,
+                              uint32_t* output_value) {
+    const bool data_flash_access = (address & 0x800000u) != 0u;
+    const uint32_t flash_offset = address & 0x7fffffu;
+    if (!data_flash_access)
+        return flash_load(data, flash_offset, byte_count, output_value);
+    *output_value = k22_data_internal_load_bytes(data->flexnvm, flash_offset, byte_count);
     return true;
 }
 
-static bool flash_memory_store(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const bool data_flash = (address & 0x800000u) != 0u;
-    const uint32_t offset = address & 0x7fffffu;
-    if (!data_flash)
-        return flash_store(data, offset, size, value);
-    k22_data_internal_store_bytes(data->flexnvm, offset, size, value);
+static bool flash_memory_store(K22Data* data, uint32_t address, uint8_t byte_count,
+                               uint32_t write_value) {
+    const bool data_flash_access = (address & 0x800000u) != 0u;
+    const uint32_t flash_offset = address & 0x7fffffu;
+    if (!data_flash_access)
+        return flash_store(data, flash_offset, byte_count, write_value);
+    k22_data_internal_store_bytes(data->flexnvm, flash_offset, byte_count, write_value);
     return true;
 }
 
