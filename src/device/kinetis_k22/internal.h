@@ -88,11 +88,11 @@ bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t access_
                            uint32_t write_value);
 bool kinetis_k22_flash_controller_write(KinetisK22* device, uint32_t address, uint8_t access_size,
                                         uint32_t write_value);
-bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t access_size,
                                  CortexM4Access access, uint32_t* output_value);
-bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t access_size,
                                   CortexM4Access access, uint32_t write_value);
-void kinetis_k22_peripheral_advance(KinetisK22* device, uint32_t cycles);
+void kinetis_k22_peripheral_advance(KinetisK22* device, uint32_t cycle_count);
 void kinetis_k22_peripheral_reset(KinetisK22* device);
 void kinetis_k22_warm_reset(KinetisK22* device, uint8_t reset_cause_0, uint8_t reset_cause_1);
 void kinetis_k22_refresh_signals(KinetisK22* device);
@@ -103,7 +103,7 @@ K22TimingSignals kinetis_k22_timing_signals(KinetisK22* device);
 K22IoConfiguration kinetis_k22_io_configuration(KinetisK22* device);
 
 bool kinetis_k22_internal_aips_access_allowed(const KinetisK22* device, uint32_t address,
-                                              CortexM4Access access, bool write);
+                                              CortexM4Access access, bool write_access);
 bool kinetis_k22_internal_axbs_write_allowed(const KinetisK22* device, uint32_t address);
 bool kinetis_k22_internal_enable_debug_clock(KinetisK22* device, K22PeripheralId id);
 bool kinetis_k22_internal_manifest_extension(K22PeripheralId id);
@@ -132,7 +132,7 @@ void kinetis_k22_internal_io_event(void* context, const K22IoEvent* event);
 void kinetis_k22_internal_timing_dma_trigger(void* context, uint8_t channel);
 void kinetis_k22_internal_timing_dma(void* context, uint8_t request_source);
 void kinetis_k22_internal_timing_irq(void* context, uint8_t irq, bool asserted);
-void kinetis_k22_internal_timing_reset(void* context, uint8_t cause_0, uint8_t cause_1);
+void kinetis_k22_internal_timing_reset(void* context, uint8_t reset_cause_0, uint8_t reset_cause_1);
 void kinetis_k22_internal_timing_trigger(void* context, K22TimingTrigger type, uint8_t instance,
                                          uint8_t channel);
 uint32_t kinetis_k22_internal_manifest_access_mask(const K22RegisterDescriptor* descriptor,

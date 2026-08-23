@@ -462,10 +462,10 @@ static bool k22_write_bus(void* context, uint32_t address, uint8_t access_size,
     return kinetis_k22_memory_write(device, address, access_size, access, write_value);
 }
 
-static void k22_advance_bus(void* context, uint32_t cycles) {
+static void k22_advance_bus(void* context, uint32_t cycle_count) {
     KinetisK22* device = context;
-    device->cycles += cycles;
-    kinetis_k22_peripheral_advance(device, cycles);
+    device->cycles += cycle_count;
+    kinetis_k22_peripheral_advance(device, cycle_count);
 }
 
 static void k22_reset_bus(void* context) { kinetis_k22_warm_reset(context, 0, 0x04u); }

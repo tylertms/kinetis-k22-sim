@@ -60,7 +60,7 @@ void kinetis_k22_internal_raw_store(KinetisK22* device, uint32_t address, uint8_
 }
 
 bool kinetis_k22_internal_aips_access_allowed(const KinetisK22* device, uint32_t address,
-                                              CortexM4Access access, bool is_write) {
+                                              CortexM4Access access, bool write_access) {
     if (device->profile->id < K22_PROFILE_MK22FN1M012 || access == CORTEX_M4_ACCESS_DEBUG ||
         address < K22_PERIPHERAL_BASE || address >= K22_PERIPHERAL_BASE + K22_PERIPHERAL_SIZE) {
         return true;
@@ -71,7 +71,7 @@ bool kinetis_k22_internal_aips_access_allowed(const KinetisK22* device, uint32_t
         device, aperture + 0x20u + (uint32_t)(port_slot / 8u) * 4u, 4u);
     const uint8_t permission_shift = (uint8_t)((7u - port_slot % 8u) * 4u);
     const uint8_t access_permission = (uint8_t)(access_control >> permission_shift) & 7u;
-    if (is_write && (access_permission & 2u) != 0u) {
+    if (write_access && (access_permission & 2u) != 0u) {
         return false;
     }
     return !cortex_m4_access_is_unprivileged_data(device->cpu, access) ||
@@ -388,8 +388,9 @@ void kinetis_k22_internal_timing_dma_trigger(void* context, uint8_t channel) {
     k22_data_dma_trigger(device->data, channel);
 }
 
-void kinetis_k22_internal_timing_reset(void* context, uint8_t cause_0, uint8_t cause_1) {
-    kinetis_k22_warm_reset(context, cause_0, cause_1);
+void kinetis_k22_internal_timing_reset(void* context, uint8_t reset_cause_0,
+                                       uint8_t reset_cause_1) {
+    kinetis_k22_warm_reset(context, reset_cause_0, reset_cause_1);
 }
 
 void kinetis_k22_internal_timing_trigger(void* context, K22TimingTrigger type, uint8_t instance,
