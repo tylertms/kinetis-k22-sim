@@ -53,48 +53,49 @@ enum {
 bool k22_timing_internal_contains(const K22Timing* timing, K22PeripheralId peripheral,
                                   uint32_t address, uint8_t size);
 bool k22_timing_internal_ftm_input_capture_mode(const K22FtmState* ftm, uint8_t channel);
-bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* index,
+bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* instance,
                                       uint32_t* offset);
 bool k22_timing_internal_ftm_output_compare_mode(const K22FtmState* ftm, uint8_t channel);
-bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t index, uint32_t offset, uint8_t size,
-                                  uint32_t* value);
+bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t offset,
+                                  uint8_t size, uint32_t* output_value);
 bool k22_timing_internal_has(const K22Timing* timing, K22PeripheralId peripheral);
 bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing);
 bool k22_timing_internal_mcg_register(uint32_t offset);
 bool k22_timing_internal_pdb_auxiliary_offset(uint32_t offset);
 bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* value);
+                                  uint32_t* output_value);
 bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t value);
-bool k22_timing_internal_read_byte_block(const uint8_t* data, uint32_t base, uint32_t length,
-                                         uint32_t address, uint8_t size, uint32_t* value);
+                                   uint32_t write_value);
+bool k22_timing_internal_read_byte_block(const uint8_t* bytes, uint32_t base_address,
+                                         uint32_t block_length, uint32_t address, uint8_t size,
+                                         uint32_t* output_value);
 bool k22_timing_internal_read_ewm(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* value);
+                                  uint32_t* output_value);
 bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* value);
+                                  uint32_t* output_value);
 bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t* value);
+                                   uint32_t* output_value);
 bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t value);
+                                   uint32_t write_value);
 bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t value);
+                                   uint32_t write_value);
 bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t size,
-                                    uint32_t value);
+                                    uint32_t write_value);
 uint32_t k22_timing_internal_rtc_access_reset(const K22Timing* timing);
 uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, uint32_t source_hz,
                                          uint32_t core_hz);
 uint8_t k22_timing_internal_ftm_active_fault_mask(const K22FtmState* ftm);
-uint8_t k22_timing_internal_ftm_channel_count(uint8_t index);
+uint8_t k22_timing_internal_ftm_channel_count(uint8_t instance);
 uint8_t k22_timing_internal_ftm_fault_mode(const K22FtmState* ftm);
 void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t index, uint32_t cycles);
+void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t instance, uint32_t cycles);
 void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_advance_rtc(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_ftm_apply_software_sync(K22FtmState* ftm);
-void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t index);
+void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t instance);
 void k22_timing_internal_ftm_update_fault_status(K22FtmState* ftm);
 void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t source);
 void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t irq, bool asserted);
@@ -104,7 +105,7 @@ void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t channel);
 void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger type, uint8_t instance,
                                  uint8_t channel);
 void k22_timing_internal_update_clocks(K22Timing* timing);
-void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t index);
+void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instance);
 void k22_timing_internal_update_llwu_irq(const K22Timing* timing);
 void k22_timing_internal_update_pmc_irq(const K22Timing* timing);
 void k22_timing_internal_update_rtc_irq(const K22Timing* timing);

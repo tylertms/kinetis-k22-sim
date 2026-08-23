@@ -362,7 +362,7 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
     }
 }
 
-bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* index,
+bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* instance,
                                       uint32_t* offset) {
     const K22PeripheralId ids[4] = {K22_PERIPHERAL_FTM0, K22_PERIPHERAL_FTM1, K22_PERIPHERAL_FTM2,
                                     K22_PERIPHERAL_FTM3};
@@ -370,7 +370,7 @@ bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address,
         K22PeripheralBlock block;
         if (k22_profile_peripheral_block(timing->profile, ids[item], &block) &&
             address >= block.address && address < block.address + block.size) {
-            *index = item;
+            *instance = item;
             *offset = address - block.address;
             return true;
         }
