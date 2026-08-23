@@ -1,31 +1,31 @@
 #include "internal.h"
 
 static uint32_t ftm_register_write_mask(uint8_t instance, uint8_t register_index) {
-    static const uint32_t masks[18] = {
+    static const uint32_t write_masks[18] = {
         0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x7f7f7f7fu, 0x000000ffu,
         0x000000ffu, 0x000000ffu, 0x000000efu, 0x0000ffffu, 0x00000fffu, 0x000000ffu,
         0x000006dfu, 0x0000000fu, 0x001f1fb5u, 0x0000000fu, 0x0000ffffu, 0x000002ffu,
     };
-    uint32_t mask = masks[register_index];
+    uint32_t register_mask = write_masks[register_index];
     if (k22_timing_internal_ftm_channel_count(instance) == 2u) {
         if (register_index == 2u || register_index == 3u || register_index == 7u)
-            mask &= 3u;
+            register_mask &= 3u;
         else if (register_index == 4u)
-            mask &= 0x7fu;
+            register_mask &= 0x7fu;
         else if (register_index == 16u)
-            mask &= 0x0303u;
+            register_mask &= 0x0303u;
         else if (register_index == 17u)
-            mask &= 0x0203u;
+            register_mask &= 0x0203u;
     }
-    return mask;
+    return register_mask;
 }
 
 static uint32_t ftm_write_protection_mask(uint8_t register_index) {
-    static const uint32_t masks[18] = {
+    static const uint32_t protection_masks[18] = {
         0x00000071u, 0u,          0u,          0u, 0x57575757u, 0x000000ffu, 0u, 0x000000ffu, 0u,
         0u,          0x000000ffu, 0x00000001u, 0u, 0x0000000fu, 0u,          0u, 0u,          0u,
     };
-    return masks[register_index];
+    return protection_masks[register_index];
 }
 
 static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t offset, uint8_t size,
