@@ -7,16 +7,19 @@ void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t irq, bool asse
 }
 
 void k22_timing_internal_update_pmc_irq(const K22Timing* timing) {
-    const bool detect = (timing->pmc[0] & 0xa0u) == 0xa0u;
-    const bool warning = (timing->pmc[1] & 0xa0u) == 0xa0u;
-    k22_timing_internal_set_irq(timing, IRQ_LVD, detect || warning);
+    const bool low_voltage_detect_active = (timing->pmc[0] & 0xa0u) == 0xa0u;
+    const bool low_voltage_warning_active = (timing->pmc[1] & 0xa0u) == 0xa0u;
+    k22_timing_internal_set_irq(timing, IRQ_LVD,
+                                low_voltage_detect_active || low_voltage_warning_active);
 }
 
 void k22_timing_internal_update_llwu_irq(const K22Timing* timing) {
-    const bool pin = (timing->llwu[5] | timing->llwu[6]) != 0u;
-    const bool module = timing->llwu[7] != 0u;
-    const bool filter = ((timing->llwu[8] | timing->llwu[9]) & 0x80u) != 0u;
-    k22_timing_internal_set_irq(timing, IRQ_LLWU, pin || module || filter);
+    const bool has_pending_pin_wakeup = (timing->llwu[5] | timing->llwu[6]) != 0u;
+    const bool has_pending_module_wakeup = timing->llwu[7] != 0u;
+    const bool has_pending_filter_wakeup = ((timing->llwu[8] | timing->llwu[9]) & 0x80u) != 0u;
+    k22_timing_internal_set_irq(timing, IRQ_LLWU,
+                                has_pending_pin_wakeup || has_pending_module_wakeup ||
+                                    has_pending_filter_wakeup);
 }
 
 void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t source) {
@@ -30,10 +33,10 @@ void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t channel) {
         timing->signals.dma_trigger(timing->signals.context, channel);
 }
 
-void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger type, uint8_t instance,
+void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger trigger_type, uint8_t instance,
                                  uint8_t channel) {
     if (timing->signals.trigger != NULL)
-        timing->signals.trigger(timing->signals.context, type, instance, channel);
+        timing->signals.trigger(timing->signals.context, trigger_type, instance, channel);
 }
 
 void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t source) {
