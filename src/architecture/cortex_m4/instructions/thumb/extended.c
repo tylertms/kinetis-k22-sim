@@ -125,23 +125,23 @@ static bool execute_register_offset(CortexM4* cpu, uint16_t first, uint16_t seco
     const uint8_t target = (uint8_t)(second >> 12);
     const uint8_t index = (uint8_t)(second & 15u);
     const uint8_t shift = (uint8_t)((second >> 4) & 3u);
-    const uint8_t size = (operation & 0x0040u) != 0 ? 4 : (operation & 0x0020u) != 0 ? 2 : 1;
+    const uint8_t byte_count = (operation & 0x0040u) != 0 ? 4 : (operation & 0x0020u) != 0 ? 2 : 1;
     const uint32_t address = cortex_m4_read_register_internal(cpu, base) +
                              (cortex_m4_read_register_internal(cpu, index) << shift);
     const bool load = (operation & 0x0010u) != 0;
     if (!load) {
-        return cortex_m4_data_write(cpu, address, size, CORTEX_M4_ACCESS_DATA,
+        return cortex_m4_data_write(cpu, address, byte_count, CORTEX_M4_ACCESS_DATA,
                                     cortex_m4_read_register_internal(cpu, target));
     }
-    uint32_t value = 0;
-    if (!cortex_m4_data_read(cpu, address, size, CORTEX_M4_ACCESS_DATA, &value)) {
+    uint32_t loaded_value = 0;
+    if (!cortex_m4_data_read(cpu, address, byte_count, CORTEX_M4_ACCESS_DATA, &loaded_value)) {
         return true;
     }
     if ((operation & 0x0100u) != 0) {
-        const uint32_t sign = 1u << (size * 8u - 1u);
-        value = (value ^ sign) - sign;
+        const uint32_t sign = 1u << (byte_count * 8u - 1u);
+        loaded_value = (loaded_value ^ sign) - sign;
     }
-    cortex_m4_write_register_internal(cpu, target, value);
+    cortex_m4_write_register_internal(cpu, target, loaded_value);
     return true;
 }
 
@@ -155,23 +155,24 @@ static bool execute_unprivileged(CortexM4* cpu, uint16_t first, uint16_t second)
     }
     const uint8_t base = (uint8_t)(first & 15u);
     const uint8_t target = (uint8_t)(second >> 12);
-    const uint8_t size = (operation & 0x0040u) != 0 ? 4 : (operation & 0x0020u) != 0 ? 2 : 1;
+    const uint8_t byte_count = (operation & 0x0040u) != 0 ? 4 : (operation & 0x0020u) != 0 ? 2 : 1;
     const uint32_t address =
         cortex_m4_read_register_internal(cpu, base) + (uint32_t)(second & 0xffu);
     const bool load = (operation & 0x0010u) != 0;
     if (!load) {
-        return cortex_m4_data_write(cpu, address, size, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA,
+        return cortex_m4_data_write(cpu, address, byte_count, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA,
                                     cortex_m4_read_register_internal(cpu, target));
     }
-    uint32_t value = 0;
-    if (!cortex_m4_data_read(cpu, address, size, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA, &value)) {
+    uint32_t loaded_value = 0;
+    if (!cortex_m4_data_read(cpu, address, byte_count, CORTEX_M4_ACCESS_UNPRIVILEGED_DATA,
+                             &loaded_value)) {
         return true;
     }
     if ((operation & 0x0100u) != 0) {
-        const uint32_t sign = 1u << (size * 8u - 1u);
-        value = (value ^ sign) - sign;
+        const uint32_t sign = 1u << (byte_count * 8u - 1u);
+        loaded_value = (loaded_value ^ sign) - sign;
     }
-    cortex_m4_write_register_internal(cpu, target, value);
+    cortex_m4_write_register_internal(cpu, target, loaded_value);
     return true;
 }
 

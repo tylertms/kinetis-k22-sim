@@ -92,7 +92,9 @@ void cortex_m4_set_irq_level(CortexM4* cpu, uint16_t irq, bool asserted);
 bool cortex_m4_get_irq_pending(const CortexM4* cpu, uint16_t irq);
 bool cortex_m4_get_irq_active(const CortexM4* cpu, uint16_t irq);
 
-bool cortex_m4_read_memory(CortexM4* cpu, uint32_t address, uint8_t size, uint32_t* value);
-bool cortex_m4_write_memory(CortexM4* cpu, uint32_t address, uint8_t size, uint32_t value);
+bool cortex_m4_read_memory(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                           uint32_t* output_value);
+bool cortex_m4_write_memory(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                            uint32_t write_value);
 
 #endif
