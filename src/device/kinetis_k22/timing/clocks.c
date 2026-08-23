@@ -15,32 +15,35 @@ uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, u
 }
 
 static uint32_t calculate_fll_clock_hz(const K22Timing* timing) {
-    const uint8_t c4 = timing->mcg[3];
-    const uint16_t multipliers[4] = {640u, 1280u, 1920u, 2560u};
-    uint32_t reference = timing->slow_irc_hz;
+    const uint8_t c4_value = timing->mcg[3];
+    const uint16_t fll_multipliers[4] = {640u, 1280u, 1920u, 2560u};
+    uint32_t reference_clock_hz = timing->slow_irc_hz;
     if ((timing->mcg[0] & 4u) == 0) {
         const uint8_t divider_index = (timing->mcg[0] >> 3u) & 7u;
         const uint16_t low_range_dividers[8] = {1u, 2u, 4u, 8u, 16u, 32u, 64u, 128u};
         const uint16_t high_range_dividers[8] = {32u, 64u, 128u, 256u, 512u, 1024u, 1280u, 1536u};
-        const uint16_t divider = (timing->mcg[1] & 0x30u) == 0 ? low_range_dividers[divider_index]
-                                                               : high_range_dividers[divider_index];
-        reference = timing->external_oscillator_hz / divider;
+        const uint16_t reference_divider = (timing->mcg[1] & 0x30u) == 0
+                                               ? low_range_dividers[divider_index]
+                                               : high_range_dividers[divider_index];
+        reference_clock_hz = timing->external_oscillator_hz / reference_divider;
     }
-    uint32_t multiplier = multipliers[(c4 >> 5u) & 3u];
-    if ((c4 & 0x80u) != 0) {
+    uint32_t fll_multiplier = fll_multipliers[(c4_value >> 5u) & 3u];
+    if ((c4_value & 0x80u) != 0) {
         const uint16_t dmx_multipliers[4] = {732u, 1464u, 2197u, 2929u};
-        multiplier = dmx_multipliers[(c4 >> 5u) & 3u];
+        fll_multiplier = dmx_multipliers[(c4_value >> 5u) & 3u];
     }
-    return reference == 0 ? timing->slow_irc_hz * multiplier : reference * multiplier;
+    return reference_clock_hz == 0 ? timing->slow_irc_hz * fll_multiplier
+                                   : reference_clock_hz * fll_multiplier;
 }
 
 static uint32_t calculate_pll_clock_hz(const K22Timing* timing) {
     if (timing->external_oscillator_hz == 0) {
         return 0;
     }
-    const uint32_t divider = (timing->mcg[4] & 0x1fu) + 1u;
-    const uint32_t multiplier = (timing->mcg[5] & 0x1fu) + 24u;
-    return (uint32_t)(((uint64_t)timing->external_oscillator_hz * multiplier) / (divider * 2u));
+    const uint32_t pll_divider = (timing->mcg[4] & 0x1fu) + 1u;
+    const uint32_t pll_multiplier = (timing->mcg[5] & 0x1fu) + 24u;
+    return (uint32_t)(((uint64_t)timing->external_oscillator_hz * pll_multiplier) /
+                      (pll_divider * 2u));
 }
 
 void k22_timing_internal_update_clocks(K22Timing* timing) {
