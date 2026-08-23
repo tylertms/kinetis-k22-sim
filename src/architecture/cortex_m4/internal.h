@@ -316,10 +316,10 @@ void cortex_m4_timing_reset(CortexM4* cpu);
 void cortex_m4_timing_begin_instruction(CortexM4* cpu);
 void cortex_m4_timing_begin_exception(CortexM4* cpu);
 void cortex_m4_timing_abort(CortexM4* cpu);
-void cortex_m4_timing_prepare_instruction(CortexM4* cpu, uint16_t first, uint16_t second,
-                                          bool wide);
-void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                             bool write);
+void cortex_m4_timing_prepare_instruction(CortexM4* cpu, uint16_t first_halfword,
+                                          uint16_t second_halfword, bool is_wide_instruction);
+void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                             CortexM4Access access, bool is_write_access);
 void cortex_m4_timing_complete_instruction(CortexM4* cpu, uint16_t first, uint16_t second,
                                            bool wide, bool executed, uint32_t sequential_pc);
 void cortex_m4_timing_exception(CortexM4* cpu, CortexM4ExceptionTiming transition);

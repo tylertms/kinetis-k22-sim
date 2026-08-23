@@ -301,41 +301,41 @@ void cortex_m4_timing_abort(CortexM4* cpu) {
     cpu->timing_prepared = false;
 }
 
-void cortex_m4_timing_prepare_instruction(CortexM4* cpu, uint16_t first, uint16_t second,
-                                          bool wide) {
+void cortex_m4_timing_prepare_instruction(CortexM4* cpu, uint16_t first_halfword,
+                                          uint16_t second_halfword, bool is_wide_instruction) {
     if (cpu == NULL || !cpu->timing_instruction_active) {
         return;
     }
     cpu->timing_prepared = false;
-    if (!wide || !divide32(first, second)) {
+    if (!is_wide_instruction || !divide32(first_halfword, second_halfword)) {
         return;
     }
-    const uint8_t dividend_register = (uint8_t)(first & 15u);
-    const uint8_t divisor_register = (uint8_t)(second & 15u);
+    const uint8_t dividend_register = (uint8_t)(first_halfword & 15u);
+    const uint8_t divisor_register = (uint8_t)(second_halfword & 15u);
     cpu->timing_prepared_cycles = cortex_m4_timing_divide_cycles(
         cortex_m4_read_register_internal(cpu, dividend_register),
-        cortex_m4_read_register_internal(cpu, divisor_register), (first & 0x0020u) == 0);
+        cortex_m4_read_register_internal(cpu, divisor_register), (first_halfword & 0x0020u) == 0);
     cpu->timing_prepared = true;
 }
 
-void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                             bool write) {
-    if (cpu == NULL || !cpu->timing_instruction_active || size == 0) {
+void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                             CortexM4Access access, bool is_write_access) {
+    if (cpu == NULL || !cpu->timing_instruction_active || byte_count == 0) {
         return;
     }
-    const bool sequential =
-        cpu->timing_last_access_valid && cpu->timing_last_access_write == write &&
+    const bool is_sequential_access =
+        cpu->timing_last_access_valid && cpu->timing_last_access_write == is_write_access &&
         cpu->timing_last_access_type == access && cpu->timing_last_access_address == address;
     uint32_t wait_cycles = 0;
     const CortexM4TimingBus bus = timing_bus_for_access(address, access);
     if (cpu->wait_states != NULL) {
-        wait_cycles =
-            cpu->wait_states(cpu->wait_state_context, address, size, access, write, sequential);
+        wait_cycles = cpu->wait_states(cpu->wait_state_context, address, byte_count, access,
+                                       is_write_access, is_sequential_access);
     }
-    if (write && (cpu->timing_exception_active || bus == CORTEX_M4_TIMING_BUS_PPB)) {
+    if (is_write_access && (cpu->timing_exception_active || bus == CORTEX_M4_TIMING_BUS_PPB)) {
         cpu->timing_instruction_wait_cycles =
             saturating_add(cpu->timing_instruction_wait_cycles, wait_cycles);
-    } else if (write) {
+    } else if (is_write_access) {
         if (cpu->timing_pending_store_cycles != 0) {
             cpu->timing_instruction_wait_cycles = saturating_add(
                 cpu->timing_instruction_wait_cycles, cpu->timing_pending_store_cycles);
@@ -358,9 +358,9 @@ void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t size, Cort
         cpu->timing_instruction_wait_cycles =
             saturating_add(cpu->timing_instruction_wait_cycles, wait_cycles);
     }
-    cpu->timing_last_access_address = address + size;
+    cpu->timing_last_access_address = address + byte_count;
     cpu->timing_last_access_type = access;
-    cpu->timing_last_access_write = write;
+    cpu->timing_last_access_write = is_write_access;
     cpu->timing_last_access_valid = true;
 }
 
