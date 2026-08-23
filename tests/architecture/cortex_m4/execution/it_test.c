@@ -127,28 +127,29 @@ static void test_condition_sequence(TestState* state) {
 
 static void test_flag_preservation(TestState* state) {
     CortexM4 cpu = {0};
-    const uint32_t previous = CORTEX_M4_XPSR_T | CORTEX_M4_XPSR_N | CORTEX_M4_XPSR_C;
+    const uint32_t previous_xpsr =
+        (uint32_t)(CORTEX_M4_XPSR_T | CORTEX_M4_XPSR_N | CORTEX_M4_XPSR_C);
     cpu.xpsr =
         CORTEX_M4_XPSR_T | CORTEX_M4_XPSR_Q | 0x000f0000u | CORTEX_M4_XPSR_Z | CORTEX_M4_XPSR_V;
-    cortex_m4_it_preserve_flags(&cpu, 0x1800u, 0, false, true, previous);
-    expect(state, (cpu.xpsr & xpsr_nzcv) == (previous & xpsr_nzcv),
-           "(cpu.xpsr & xpsr_nzcv) == (previous & xpsr_nzcv)");
+    cortex_m4_it_preserve_flags(&cpu, 0x1800u, 0, false, true, previous_xpsr);
+    expect(state, (cpu.xpsr & xpsr_nzcv) == (previous_xpsr & xpsr_nzcv),
+           "(cpu.xpsr & xpsr_nzcv) == (previous_xpsr & xpsr_nzcv)");
     expect(state, (cpu.xpsr & CORTEX_M4_XPSR_Q) != 0, "(cpu.xpsr & CORTEX_M4_XPSR_Q) != 0");
     expect(state, (cpu.xpsr & 0x000f0000u) == 0x000f0000u,
            "(cpu.xpsr & 0x000f0000u) == 0x000f0000u");
 
     cpu.xpsr = CORTEX_M4_XPSR_Z;
-    cortex_m4_it_preserve_flags(&cpu, 0x1800u, 0, false, false, previous);
+    cortex_m4_it_preserve_flags(&cpu, 0x1800u, 0, false, false, previous_xpsr);
     expect(state, cpu.xpsr == CORTEX_M4_XPSR_Z, "cpu.xpsr == CORTEX_M4_XPSR_Z");
 
     cpu.xpsr = CORTEX_M4_XPSR_V;
-    cortex_m4_it_preserve_flags(&cpu, 0x2800u, 0, false, true, previous);
+    cortex_m4_it_preserve_flags(&cpu, 0x2800u, 0, false, true, previous_xpsr);
     expect(state, cpu.xpsr == CORTEX_M4_XPSR_V, "cpu.xpsr == CORTEX_M4_XPSR_V");
 
     cpu.xpsr = CORTEX_M4_XPSR_C;
-    cortex_m4_it_preserve_flags(&cpu, 0xf110u, 0x0000u, true, true, previous);
+    cortex_m4_it_preserve_flags(&cpu, 0xf110u, 0x0000u, true, true, previous_xpsr);
     expect(state, cpu.xpsr == CORTEX_M4_XPSR_C, "cpu.xpsr == CORTEX_M4_XPSR_C");
-    cortex_m4_it_preserve_flags(NULL, 0, 0, false, true, previous);
+    cortex_m4_it_preserve_flags(NULL, 0, 0, false, true, previous_xpsr);
 }
 
 typedef struct {

@@ -281,11 +281,13 @@ CortexM4InstructionDisposition cortex_m4_check_instruction_constraints(const Cor
 void cortex_m4_set_nz(CortexM4* cpu, uint32_t value);
 void cortex_m4_set_nzcv(CortexM4* cpu, uint32_t value, bool carry, bool overflow);
 bool cortex_m4_condition_passed(const CortexM4* cpu, uint8_t condition);
-CortexM4FlagWrite cortex_m4_it_flag_write(uint16_t first, uint16_t second, bool is_wide);
+CortexM4FlagWrite cortex_m4_it_flag_write(uint16_t first, uint16_t second,
+                                          bool is_wide_instruction);
 bool cortex_m4_it_condition_passed(const CortexM4* cpu);
 void cortex_m4_it_advance(CortexM4* cpu);
-void cortex_m4_it_preserve_flags(CortexM4* cpu, uint16_t first, uint16_t second, bool is_wide,
-                                 bool inside_it_block, uint32_t previous_xpsr_value);
+void cortex_m4_it_preserve_flags(CortexM4* cpu, uint16_t first, uint16_t second,
+                                 bool is_wide_instruction, bool inside_it_block,
+                                 uint32_t previous_xpsr_value);
 uint32_t cortex_m4_xpsr_value(const CortexM4* cpu);
 void cortex_m4_load_xpsr(CortexM4* cpu, uint32_t value);
 uint32_t cortex_m4_add_with_carry(uint32_t left, uint32_t right, bool carry, bool* carry_out,
