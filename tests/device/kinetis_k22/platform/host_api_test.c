@@ -312,54 +312,57 @@ static void test_io_api(TestState* state, KinetisK22* device) {
 }
 
 static void test_guards(TestState* state, KinetisK22* device) {
-    uint32_t value = 0u;
-    const uint8_t memory[] = {1u, 2u, 3u, 4u};
+    uint32_t guard_value = 0u;
+    const uint8_t guard_memory[] = {1u, 2u, 3u, 4u};
     expect(state, !kinetis_k22_reset(NULL), "!kinetis_k22_reset(NULL)");
-    expect(state, !kinetis_k22_load(NULL, 0u, memory, sizeof(memory)),
-           "!kinetis_k22_load(NULL, 0u, memory, sizeof(memory))");
-    expect(state, !kinetis_k22_load(device, 0u, NULL, sizeof(memory)),
-           "!kinetis_k22_load(device, 0u, NULL, sizeof(memory))");
-    expect(state, !kinetis_k22_load(device, UINT32_MAX, memory, sizeof(memory)),
-           "!kinetis_k22_load(device, UINT32_MAX, memory, sizeof(memory))");
-    expect(state, !kinetis_k22_read(NULL, 0u, &value, sizeof(value)),
-           "!kinetis_k22_read(NULL, 0u, &value, sizeof(value))");
-    expect(state, !kinetis_k22_read(device, 0u, NULL, sizeof(value)),
-           "!kinetis_k22_read(device, 0u, NULL, sizeof(value))");
-    expect(state, !kinetis_k22_write(NULL, 0u, &value, sizeof(value)),
-           "!kinetis_k22_write(NULL, 0u, &value, sizeof(value))");
-    expect(state, !kinetis_k22_write(device, 0u, NULL, sizeof(value)),
-           "!kinetis_k22_write(device, 0u, NULL, sizeof(value))");
+    expect(state, !kinetis_k22_load(NULL, 0u, guard_memory, sizeof(guard_memory)),
+           "!kinetis_k22_load(NULL, 0u, guard_memory, sizeof(guard_memory))");
+    expect(state, !kinetis_k22_load(device, 0u, NULL, sizeof(guard_memory)),
+           "!kinetis_k22_load(device, 0u, NULL, sizeof(guard_memory))");
+    expect(state, !kinetis_k22_load(device, UINT32_MAX, guard_memory, sizeof(guard_memory)),
+           "!kinetis_k22_load(device, UINT32_MAX, guard_memory, sizeof(guard_memory))");
+    expect(state, !kinetis_k22_read(NULL, 0u, &guard_value, sizeof(guard_value)),
+           "!kinetis_k22_read(NULL, 0u, &guard_value, sizeof(guard_value))");
+    expect(state, !kinetis_k22_read(device, 0u, NULL, sizeof(guard_value)),
+           "!kinetis_k22_read(device, 0u, NULL, sizeof(guard_value))");
+    expect(state, !kinetis_k22_write(NULL, 0u, &guard_value, sizeof(guard_value)),
+           "!kinetis_k22_write(NULL, 0u, &guard_value, sizeof(guard_value))");
+    expect(state, !kinetis_k22_write(device, 0u, NULL, sizeof(guard_value)),
+           "!kinetis_k22_write(device, 0u, NULL, sizeof(guard_value))");
     expect(state, !kinetis_k22_copy(NULL, device), "!kinetis_k22_copy(NULL, device)");
     expect(state, !kinetis_k22_copy(device, NULL), "!kinetis_k22_copy(device, NULL)");
-    expect(state, !kinetis_k22_memory_read(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, &value),
-           "!kinetis_k22_memory_read(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, &value)");
+    expect(state, !kinetis_k22_memory_read(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, &guard_value),
+           "!kinetis_k22_memory_read(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, &guard_value)");
     expect(state, !kinetis_k22_memory_read(device, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, NULL),
            "!kinetis_k22_memory_read(device, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, NULL)");
-    expect(state, !kinetis_k22_memory_read(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, &value),
-           "!kinetis_k22_memory_read(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, &value)");
-    expect(state, !kinetis_k22_memory_write(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, value),
-           "!kinetis_k22_memory_write(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, value)");
-    expect(state, !kinetis_k22_memory_write(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, value),
-           "!kinetis_k22_memory_write(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, value)");
-    expect(state, !kinetis_k22_flash_controller_write(NULL, 0u, 4u, value),
-           "!kinetis_k22_flash_controller_write(NULL, 0u, 4u, value)");
-    expect(state, !kinetis_k22_flash_controller_write(device, UINT32_MAX, 4u, value),
-           "!kinetis_k22_flash_controller_write(device, UINT32_MAX, 4u, value)");
-    expect(state, !kinetis_k22_flexbus_attach(NULL, 0u, memory, sizeof(memory), false),
-           "!kinetis_k22_flexbus_attach(NULL, 0u, memory, sizeof(memory), false)");
-    expect(state, !kinetis_k22_flexbus_attach(device, 0u, NULL, sizeof(memory), false),
-           "!kinetis_k22_flexbus_attach(device, 0u, NULL, sizeof(memory), false)");
-    expect(state, !kinetis_k22_flexbus_attach(device, 0u, memory, 0u, false),
-           "!kinetis_k22_flexbus_attach(device, 0u, memory, 0u, false)");
-    expect(state, !kinetis_k22_flexbus_attach(device, UINT32_MAX, memory, sizeof(memory), false),
-           "!kinetis_k22_flexbus_attach(device, UINT32_MAX, memory, sizeof(memory), false)");
+    expect(state, !kinetis_k22_memory_read(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, &guard_value),
+           "!kinetis_k22_memory_read(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, &guard_value)");
+    expect(state, !kinetis_k22_memory_write(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, guard_value),
+           "!kinetis_k22_memory_write(NULL, 0u, 4u, CORTEX_M4_ACCESS_DEBUG, guard_value)");
+    expect(state, !kinetis_k22_memory_write(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, guard_value),
+           "!kinetis_k22_memory_write(device, 0u, 3u, CORTEX_M4_ACCESS_DEBUG, guard_value)");
+    expect(state, !kinetis_k22_flash_controller_write(NULL, 0u, 4u, guard_value),
+           "!kinetis_k22_flash_controller_write(NULL, 0u, 4u, guard_value)");
+    expect(state, !kinetis_k22_flash_controller_write(device, UINT32_MAX, 4u, guard_value),
+           "!kinetis_k22_flash_controller_write(device, UINT32_MAX, 4u, guard_value)");
+    expect(state, !kinetis_k22_flexbus_attach(NULL, 0u, guard_memory, sizeof(guard_memory), false),
+           "!kinetis_k22_flexbus_attach(NULL, 0u, guard_memory, sizeof(guard_memory), false)");
+    expect(state, !kinetis_k22_flexbus_attach(device, 0u, NULL, sizeof(guard_memory), false),
+           "!kinetis_k22_flexbus_attach(device, 0u, NULL, sizeof(guard_memory), false)");
+    expect(state, !kinetis_k22_flexbus_attach(device, 0u, guard_memory, 0u, false),
+           "!kinetis_k22_flexbus_attach(device, 0u, guard_memory, 0u, false)");
+    expect(
+        state,
+        !kinetis_k22_flexbus_attach(device, UINT32_MAX, guard_memory, sizeof(guard_memory), false),
+        "!kinetis_k22_flexbus_attach(device, UINT32_MAX, guard_memory, sizeof(guard_memory), "
+        "false)");
     kinetis_k22_flexbus_detach(NULL);
-    expect(state, !kinetis_k22_flexbus_read(NULL, 0u, &value, sizeof(value)),
-           "!kinetis_k22_flexbus_read(NULL, 0u, &value, sizeof(value))");
-    expect(state, !kinetis_k22_flexbus_read(device, 0u, NULL, sizeof(value)),
-           "!kinetis_k22_flexbus_read(device, 0u, NULL, sizeof(value))");
-    expect(state, !kinetis_k22_flexbus_read(device, 0u, &value, sizeof(value)),
-           "!kinetis_k22_flexbus_read(device, 0u, &value, sizeof(value))");
+    expect(state, !kinetis_k22_flexbus_read(NULL, 0u, &guard_value, sizeof(guard_value)),
+           "!kinetis_k22_flexbus_read(NULL, 0u, &guard_value, sizeof(guard_value))");
+    expect(state, !kinetis_k22_flexbus_read(device, 0u, NULL, sizeof(guard_value)),
+           "!kinetis_k22_flexbus_read(device, 0u, NULL, sizeof(guard_value))");
+    expect(state, !kinetis_k22_flexbus_read(device, 0u, &guard_value, sizeof(guard_value)),
+           "!kinetis_k22_flexbus_read(device, 0u, &guard_value, sizeof(guard_value))");
     expect(state, kinetis_k22_set_usb_charger(device, KINETIS_K22_USB_CHARGER_NONE),
            "kinetis_k22_set_usb_charger(device, KINETIS_K22_USB_CHARGER_NONE)");
     expect(state, kinetis_k22_set_usb_charger(device, KINETIS_K22_USB_CHARGER_ERROR),
