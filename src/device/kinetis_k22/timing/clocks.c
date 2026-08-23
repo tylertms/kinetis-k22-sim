@@ -9,28 +9,28 @@ uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, u
     if (source_hz == 0 || core_hz == 0) {
         return 0;
     }
-    const uint64_t scaled = *remainder + (uint64_t)cycles * source_hz;
-    *remainder = scaled % core_hz;
-    return scaled / core_hz;
+    const uint64_t accumulated_cycles = *remainder + (uint64_t)cycles * source_hz;
+    *remainder = accumulated_cycles % core_hz;
+    return accumulated_cycles / core_hz;
 }
 
 static uint32_t calculate_fll_clock_hz(const K22Timing* timing) {
-    const uint8_t c4_value = timing->mcg[3];
+    const uint8_t mcg_c4_value = timing->mcg[3];
     const uint16_t fll_multipliers[4] = {640u, 1280u, 1920u, 2560u};
     uint32_t reference_clock_hz = timing->slow_irc_hz;
     if ((timing->mcg[0] & 4u) == 0) {
-        const uint8_t divider_index = (timing->mcg[0] >> 3u) & 7u;
+        const uint8_t reference_divider_index = (timing->mcg[0] >> 3u) & 7u;
         const uint16_t low_range_dividers[8] = {1u, 2u, 4u, 8u, 16u, 32u, 64u, 128u};
         const uint16_t high_range_dividers[8] = {32u, 64u, 128u, 256u, 512u, 1024u, 1280u, 1536u};
         const uint16_t reference_divider = (timing->mcg[1] & 0x30u) == 0
-                                               ? low_range_dividers[divider_index]
-                                               : high_range_dividers[divider_index];
+                                               ? low_range_dividers[reference_divider_index]
+                                               : high_range_dividers[reference_divider_index];
         reference_clock_hz = timing->external_oscillator_hz / reference_divider;
     }
-    uint32_t fll_multiplier = fll_multipliers[(c4_value >> 5u) & 3u];
-    if ((c4_value & 0x80u) != 0) {
+    uint32_t fll_multiplier = fll_multipliers[(mcg_c4_value >> 5u) & 3u];
+    if ((mcg_c4_value & 0x80u) != 0) {
         const uint16_t dmx_multipliers[4] = {732u, 1464u, 2197u, 2929u};
-        fll_multiplier = dmx_multipliers[(c4_value >> 5u) & 3u];
+        fll_multiplier = dmx_multipliers[(mcg_c4_value >> 5u) & 3u];
     }
     return reference_clock_hz == 0 ? timing->slow_irc_hz * fll_multiplier
                                    : reference_clock_hz * fll_multiplier;
@@ -47,39 +47,41 @@ static uint32_t calculate_pll_clock_hz(const K22Timing* timing) {
 }
 
 void k22_timing_internal_update_clocks(K22Timing* timing) {
-    const uint8_t clock_source = (timing->mcg[0] >> 6u) & 3u;
-    uint32_t mcg_output_hz = 0;
-    uint8_t mcg_status = timing->mcg[6] & 1u;
+    const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
+    uint32_t mcg_output_clock_hz = 0;
+    uint8_t mcg_status_value = timing->mcg[6] & 1u;
     if (timing->external_oscillator_hz != 0 && (timing->mcg[1] & 4u) != 0) {
-        mcg_status |= 2u;
+        mcg_status_value |= 2u;
     }
-    if (clock_source == 1u) {
-        mcg_output_hz = (timing->mcg[1] & 1u) != 0 ? timing->fast_irc_hz : timing->slow_irc_hz;
-        mcg_status |= 1u << 2u;
-        mcg_status |= 1u << 4u;
-    } else if (clock_source == 2u) {
-        mcg_output_hz = timing->external_oscillator_hz;
-        mcg_status |= 2u << 2u;
+    if (mcg_clock_source == 1u) {
+        mcg_output_clock_hz =
+            (timing->mcg[1] & 1u) != 0 ? timing->fast_irc_hz : timing->slow_irc_hz;
+        mcg_status_value |= 1u << 2u;
+        mcg_status_value |= 1u << 4u;
+    } else if (mcg_clock_source == 2u) {
+        mcg_output_clock_hz = timing->external_oscillator_hz;
+        mcg_status_value |= 2u << 2u;
     } else if ((timing->mcg[5] & 0x40u) != 0) {
-        mcg_output_hz = calculate_pll_clock_hz(timing);
-        mcg_status |= 3u << 2u;
-        mcg_status |= (1u << 5u) | (1u << 6u);
+        mcg_output_clock_hz = calculate_pll_clock_hz(timing);
+        mcg_status_value |= 3u << 2u;
+        mcg_status_value |= (1u << 5u) | (1u << 6u);
     } else {
-        mcg_output_hz = calculate_fll_clock_hz(timing);
+        mcg_output_clock_hz = calculate_fll_clock_hz(timing);
         if ((timing->mcg[0] & 4u) != 0) {
-            mcg_status |= 1u << 4u;
+            mcg_status_value |= 1u << 4u;
         }
     }
-    if (mcg_output_hz == 0) {
-        mcg_output_hz = timing->slow_irc_hz;
+    if (mcg_output_clock_hz == 0) {
+        mcg_output_clock_hz = timing->slow_irc_hz;
     }
-    timing->mcg[6] = mcg_status;
+    timing->mcg[6] = mcg_status_value;
+
     const uint32_t core_divider = ((timing->sim_clkdiv1 >> 28u) & 15u) + 1u;
     const uint32_t bus_divider = ((timing->sim_clkdiv1 >> 24u) & 15u) + 1u;
     const uint32_t flash_divider = ((timing->sim_clkdiv1 >> 16u) & 15u) + 1u;
-    timing->core_clock_hz = mcg_output_hz / core_divider;
-    timing->bus_clock_hz = mcg_output_hz / bus_divider;
-    timing->flash_clock_hz = mcg_output_hz / flash_divider;
+    timing->core_clock_hz = mcg_output_clock_hz / core_divider;
+    timing->bus_clock_hz = mcg_output_clock_hz / bus_divider;
+    timing->flash_clock_hz = mcg_output_clock_hz / flash_divider;
     if (timing->core_clock_hz == 0) {
         timing->core_clock_hz = 1;
     }
