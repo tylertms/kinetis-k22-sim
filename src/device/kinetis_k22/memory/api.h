@@ -42,33 +42,34 @@ typedef enum {
 
 typedef struct {
     void* context;
-    bool (*read)(void* context, uint32_t address, uint8_t size, uint32_t* value);
-    bool (*write)(void* context, uint32_t address, uint8_t size, uint32_t value);
-    bool (*program)(void* context, uint32_t address, uint8_t size, uint32_t value);
+    bool (*read)(void* context, uint32_t address, uint8_t byte_count, uint32_t* output_value);
+    bool (*write)(void* context, uint32_t address, uint8_t byte_count, uint32_t write_value);
+    bool (*program)(void* context, uint32_t address, uint8_t byte_count, uint32_t write_value);
     void (*interrupt)(void* context, K22DataInterrupt interrupt, bool asserted);
-    void (*dma_complete)(void* context, uint8_t source);
+    void (*dma_complete)(void* context, uint8_t request_source);
 } K22DataBus;
 
 K22Data* k22_data_create(const K22Profile* profile, K22DataBus bus);
 void k22_data_destroy(K22Data* data);
 void k22_data_reset(K22Data* data);
 bool k22_data_copy(K22Data* destination, const K22Data* source);
-bool k22_data_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_data_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
-void k22_data_advance(K22Data* data, uint32_t cycles);
+bool k22_data_read(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t* output_value);
+bool k22_data_write(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t write_value);
+void k22_data_advance(K22Data* data, uint32_t cycle_count);
 void k22_data_set_debug_halted(K22Data* data, bool halted);
-bool k22_data_dma_request(K22Data* data, uint8_t source);
+bool k22_data_dma_request(K22Data* data, uint8_t request_source);
 bool k22_data_dma_trigger(K22Data* data, uint8_t channel);
 void k22_data_adc_trigger(K22Data* data, uint8_t instance);
 void k22_data_adc_pretrigger(K22Data* data, uint8_t instance, uint8_t pretrigger);
-bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel, uint16_t value);
-bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t value);
-bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* high);
-bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* value);
+bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel,
+                            uint16_t sample_value);
+bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t input_level);
+bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* output_high);
+bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* output_value);
 void k22_data_dac_trigger(K22Data* data, uint8_t instance);
 void k22_data_rng_seed(K22Data* data, uint32_t seed);
-bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t size);
-bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t offset, uint8_t size);
+bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t byte_count);
+bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t byte_offset, uint8_t byte_count);
 uint32_t k22_data_program_flash_address(const K22Data* data, uint32_t address);
 
 #endif

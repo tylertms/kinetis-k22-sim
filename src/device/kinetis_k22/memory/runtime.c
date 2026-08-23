@@ -3,34 +3,38 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool mapped_memory_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
+static bool mapped_memory_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                               uint32_t* output_value) {
     if (data->profile->flexnvm_size != 0 && address >= data->profile->flexnvm_address &&
-        address - data->profile->flexnvm_address <= data->profile->flexnvm_size - size) {
-        *value = k22_data_internal_load_bytes(data->flexnvm,
-                                              address - data->profile->flexnvm_address, size);
+        address - data->profile->flexnvm_address <= data->profile->flexnvm_size - byte_count) {
+        *output_value = k22_data_internal_load_bytes(
+            data->flexnvm, address - data->profile->flexnvm_address, byte_count);
         return true;
     }
     if (data->profile->flexram_size != 0 && address >= data->profile->flexram_address &&
-        address - data->profile->flexram_address <= data->profile->flexram_size - size) {
-        *value = k22_data_internal_load_bytes(data->flexram,
-                                              address - data->profile->flexram_address, size);
+        address - data->profile->flexram_address <= data->profile->flexram_size - byte_count) {
+        *output_value = k22_data_internal_load_bytes(
+            data->flexram, address - data->profile->flexram_address, byte_count);
         return true;
     }
     return false;
 }
 
-static bool mapped_memory_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
+static bool mapped_memory_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                uint32_t write_value) {
     if (data->profile->flexnvm_size != 0 && address >= data->profile->flexnvm_address &&
-        address - data->profile->flexnvm_address <= data->profile->flexnvm_size - size) {
-        uint32_t offset = address - data->profile->flexnvm_address;
-        uint32_t previous = k22_data_internal_load_bytes(data->flexnvm, offset, size);
-        k22_data_internal_store_bytes(data->flexnvm, offset, size, previous & value);
+        address - data->profile->flexnvm_address <= data->profile->flexnvm_size - byte_count) {
+        const uint32_t byte_offset = address - data->profile->flexnvm_address;
+        const uint32_t previous_value =
+            k22_data_internal_load_bytes(data->flexnvm, byte_offset, byte_count);
+        k22_data_internal_store_bytes(data->flexnvm, byte_offset, byte_count,
+                                      previous_value & write_value);
         return true;
     }
     if (data->profile->flexram_size != 0 && address >= data->profile->flexram_address &&
-        address - data->profile->flexram_address <= data->profile->flexram_size - size) {
-        k22_data_internal_store_bytes(data->flexram, address - data->profile->flexram_address, size,
-                                      value);
+        address - data->profile->flexram_address <= data->profile->flexram_size - byte_count) {
+        k22_data_internal_store_bytes(data->flexram, address - data->profile->flexram_address,
+                                      byte_count, write_value);
         return true;
     }
     return false;
@@ -44,23 +48,24 @@ K22Data* k22_data_create(const K22Profile* profile, K22DataBus bus) {
         return NULL;
     data->profile = profile;
     data->bus = bus;
-    uint32_t size = 0;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, NULL, &size)) {
-        data->dmamux_count = (uint8_t)(size > DMA_CHANNEL_COUNT ? DMA_CHANNEL_COUNT : size);
+    uint32_t peripheral_size = 0;
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, NULL, &peripheral_size)) {
+        data->dmamux_count =
+            (uint8_t)(peripheral_size > DMA_CHANNEL_COUNT ? DMA_CHANNEL_COUNT : peripheral_size);
         data->dma_channel_count = data->dmamux_count;
     }
-    uint32_t base = 0;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_ADC0, &base, NULL))
-        data->adc_base[data->adc_count++] = base;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_ADC1, &base, NULL))
-        data->adc_base[data->adc_count++] = base;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DAC0, &base, NULL))
-        data->dac_base[data->dac_count++] = base;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DAC1, &base, NULL))
-        data->dac_base[data->dac_count++] = base;
-    for (uint8_t index = 0; index < 3; index++) {
-        if (k22_data_internal_profile_block(data, (K22PeripheralId)(K22_PERIPHERAL_CMP0 + index),
-                                            NULL, NULL))
+    uint32_t peripheral_base = 0;
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_ADC0, &peripheral_base, NULL))
+        data->adc_base[data->adc_count++] = peripheral_base;
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_ADC1, &peripheral_base, NULL))
+        data->adc_base[data->adc_count++] = peripheral_base;
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DAC0, &peripheral_base, NULL))
+        data->dac_base[data->dac_count++] = peripheral_base;
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DAC1, &peripheral_base, NULL))
+        data->dac_base[data->dac_count++] = peripheral_base;
+    for (uint8_t comparator_index = 0; comparator_index < 3; comparator_index++) {
+        if (k22_data_internal_profile_block(
+                data, (K22PeripheralId)(K22_PERIPHERAL_CMP0 + comparator_index), NULL, NULL))
             data->cmp_count++;
     }
     if (profile->flexnvm_size != 0)
@@ -97,19 +102,23 @@ void k22_data_reset(K22Data* data) {
         return;
     uint16_t adc_inputs[2][32];
     uint8_t cmp_inputs[3][8];
-    for (uint8_t index = 0; index < 2; index++)
-        memcpy(adc_inputs[index], data->adc[index].inputs, sizeof(adc_inputs[index]));
-    for (uint8_t index = 0; index < 3; index++)
-        memcpy(cmp_inputs[index], data->cmp[index].inputs, sizeof(cmp_inputs[index]));
+    for (uint8_t adc_index = 0; adc_index < 2; adc_index++)
+        memcpy(adc_inputs[adc_index], data->adc[adc_index].inputs, sizeof(adc_inputs[adc_index]));
+    for (uint8_t comparator_index = 0; comparator_index < 3; comparator_index++)
+        memcpy(cmp_inputs[comparator_index], data->cmp[comparator_index].inputs,
+               sizeof(cmp_inputs[comparator_index]));
+
     memset(data->dma, 0, sizeof(data->dma));
     memset(data->dmamux, 0, sizeof(data->dmamux));
     memset(data->adc, 0, sizeof(data->adc));
     memset(data->dac, 0, sizeof(data->dac));
     memset(data->cmp, 0, sizeof(data->cmp));
-    for (uint8_t index = 0; index < 2; index++)
-        memcpy(data->adc[index].inputs, adc_inputs[index], sizeof(adc_inputs[index]));
-    for (uint8_t index = 0; index < 3; index++)
-        memcpy(data->cmp[index].inputs, cmp_inputs[index], sizeof(cmp_inputs[index]));
+    for (uint8_t adc_index = 0; adc_index < 2; adc_index++)
+        memcpy(data->adc[adc_index].inputs, adc_inputs[adc_index], sizeof(adc_inputs[adc_index]));
+    for (uint8_t comparator_index = 0; comparator_index < 3; comparator_index++)
+        memcpy(data->cmp[comparator_index].inputs, cmp_inputs[comparator_index],
+               sizeof(cmp_inputs[comparator_index]));
+
     memset(data->vref, 0, sizeof(data->vref));
     data->dma_requests = 0;
     data->dma_hardware_requests = 0;
@@ -159,11 +168,11 @@ void k22_data_reset(K22Data* data) {
     data->flash_partitioned = data->flash_data_ifr[0x3fcu] != 0xffu;
     if (data->flexram != NULL)
         memset(data->flexram, 0, data->profile->flexram_size);
-    for (uint8_t index = 0; index < data->adc_count; index++)
-        k22_data_internal_adc_reset_registers(&data->adc[index]);
-    for (uint8_t index = 0; index < data->dac_count; index++) {
-        data->dac[index].registers[0x20] = 0x02u;
-        data->dac[index].registers[0x23] = 0x0fu;
+    for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++)
+        k22_data_internal_adc_reset_registers(&data->adc[adc_index]);
+    for (uint8_t dac_index = 0; dac_index < data->dac_count; dac_index++) {
+        data->dac[dac_index].registers[0x20] = 0x02u;
+        data->dac[dac_index].registers[0x23] = 0x0fu;
     }
     for (uint8_t line = 0; line < K22_DATA_INTERRUPT_COUNT; line++)
         k22_data_internal_interrupt(data, (K22DataInterrupt)line, false);
@@ -187,114 +196,123 @@ bool k22_data_copy(K22Data* destination, const K22Data* source) {
     return true;
 }
 
-bool k22_data_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    if (data == NULL || value == NULL || (size != 1 && size != 2 && size != 4))
+bool k22_data_read(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t* output_value) {
+    if (data == NULL || output_value == NULL ||
+        (byte_count != 1 && byte_count != 2 && byte_count != 4))
         return false;
-    if (mapped_memory_read(data, address, size, value))
+    if (mapped_memory_read(data, address, byte_count, output_value))
         return true;
-    if (address >= 0x400u && address - 0x400u <= sizeof(data->flash_config) - size &&
-        size <= sizeof(data->flash_config)) {
-        *value = k22_data_internal_load_bytes(data->flash_config, address - 0x400u, size);
+    if (address >= 0x400u && address - 0x400u <= sizeof(data->flash_config) - byte_count &&
+        byte_count <= sizeof(data->flash_config)) {
+        *output_value =
+            k22_data_internal_load_bytes(data->flash_config, address - 0x400u, byte_count);
         return true;
     }
-    uint32_t base = 0;
+    uint32_t block_base = 0;
     uint32_t block_size = 0;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMA, &base, &block_size) &&
-        address >= base && address - base < block_size)
-        return k22_data_internal_dma_read(data, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, &base, &block_size) &&
-        address >= base && address - base < block_size)
-        return k22_data_internal_dmamux_read(data, address, size, value);
-    for (uint8_t index = 0; index < data->adc_count; index++)
-        if (address >= data->adc_base[index] && address - data->adc_base[index] < ADC_REGISTER_SIZE)
-            return k22_data_internal_adc_read(data, index, address, size, value);
-    for (uint8_t index = 0; index < data->dac_count; index++)
-        if (address >= data->dac_base[index] && address - data->dac_base[index] < DAC_REGISTER_SIZE)
-            return k22_data_internal_dac_read(data, index, address, size, value);
-    for (uint8_t index = 0; index < data->cmp_count; index++)
-        if (address >= CMP_BASE + (uint32_t)index * 8u &&
-            address - (CMP_BASE + (uint32_t)index * 8u) < CMP_REGISTER_SIZE)
-            return k22_data_internal_cmp_read(data, index, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_VREF, &base, NULL) &&
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMA, &block_base, &block_size) &&
+        address >= block_base && address - block_base < block_size)
+        return k22_data_internal_dma_read(data, address, byte_count, output_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, &block_base, &block_size) &&
+        address >= block_base && address - block_base < block_size)
+        return k22_data_internal_dmamux_read(data, address, byte_count, output_value);
+    for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++)
+        if (address >= data->adc_base[adc_index] &&
+            address - data->adc_base[adc_index] < ADC_REGISTER_SIZE)
+            return k22_data_internal_adc_read(data, adc_index, address, byte_count, output_value);
+    for (uint8_t dac_index = 0; dac_index < data->dac_count; dac_index++)
+        if (address >= data->dac_base[dac_index] &&
+            address - data->dac_base[dac_index] < DAC_REGISTER_SIZE)
+            return k22_data_internal_dac_read(data, dac_index, address, byte_count, output_value);
+    for (uint8_t comparator_index = 0; comparator_index < data->cmp_count; comparator_index++)
+        if (address >= CMP_BASE + (uint32_t)comparator_index * 8u &&
+            address - (CMP_BASE + (uint32_t)comparator_index * 8u) < CMP_REGISTER_SIZE)
+            return k22_data_internal_cmp_read(data, comparator_index, address, byte_count,
+                                              output_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_VREF, &block_base, NULL) &&
         address >= VREF_BASE && address - VREF_BASE < 2u) {
-        if (!k22_data_internal_valid_access(address - VREF_BASE, size, 2))
+        if (!k22_data_internal_valid_access(address - VREF_BASE, byte_count, 2))
             return false;
-        *value = k22_data_internal_load_bytes(data->vref, address - VREF_BASE, size);
+        *output_value = k22_data_internal_load_bytes(data->vref, address - VREF_BASE, byte_count);
         return true;
     }
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_RNG, &base, NULL) &&
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_RNG, &block_base, NULL) &&
         address >= RNG_BASE && address - RNG_BASE < 16u)
-        return k22_data_internal_rng_read(data, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_CRC, &base, NULL) &&
+        return k22_data_internal_rng_read(data, address, byte_count, output_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_CRC, &block_base, NULL) &&
         address >= CRC_BASE && address - CRC_BASE < 12u)
-        return k22_data_internal_crc_read(data, address, size, value);
-    if ((k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFA, &base, NULL) ||
-         k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFE, &base, NULL)) &&
+        return k22_data_internal_crc_read(data, address, byte_count, output_value);
+    if ((k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFA, &block_base, NULL) ||
+         k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFE, &block_base, NULL)) &&
         address >= FLASH_BASE && address - FLASH_BASE < sizeof(data->flash))
-        return k22_data_internal_flash_read(data, address, size, value);
+        return k22_data_internal_flash_read(data, address, byte_count, output_value);
     return false;
 }
 
-bool k22_data_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    if (data == NULL || (size != 1 && size != 2 && size != 4))
+bool k22_data_write(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t write_value) {
+    if (data == NULL || (byte_count != 1 && byte_count != 2 && byte_count != 4))
         return false;
-    if (mapped_memory_write(data, address, size, value))
+    if (mapped_memory_write(data, address, byte_count, write_value))
         return true;
-    if (address >= 0x400u && address - 0x400u <= sizeof(data->flash_config) - size &&
-        size <= sizeof(data->flash_config))
+    if (address >= 0x400u && address - 0x400u <= sizeof(data->flash_config) - byte_count &&
+        byte_count <= sizeof(data->flash_config))
         return false;
-    uint32_t base = 0;
+    uint32_t block_base = 0;
     uint32_t block_size = 0;
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMA, &base, &block_size) &&
-        address >= base && address - base < block_size)
-        return k22_data_internal_dma_write(data, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, &base, &block_size) &&
-        address >= base && address - base < block_size)
-        return k22_data_internal_dmamux_write(data, address, size, value);
-    for (uint8_t index = 0; index < data->adc_count; index++)
-        if (address >= data->adc_base[index] && address - data->adc_base[index] < ADC_REGISTER_SIZE)
-            return k22_data_internal_adc_write(data, index, address, size, value);
-    for (uint8_t index = 0; index < data->dac_count; index++)
-        if (address >= data->dac_base[index] && address - data->dac_base[index] < DAC_REGISTER_SIZE)
-            return k22_data_internal_dac_write(data, index, address, size, value);
-    for (uint8_t index = 0; index < data->cmp_count; index++)
-        if (address >= CMP_BASE + (uint32_t)index * 8u &&
-            address - (CMP_BASE + (uint32_t)index * 8u) < CMP_REGISTER_SIZE)
-            return k22_data_internal_cmp_write(data, index, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_VREF, &base, NULL) &&
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMA, &block_base, &block_size) &&
+        address >= block_base && address - block_base < block_size)
+        return k22_data_internal_dma_write(data, address, byte_count, write_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_DMAMUX, &block_base, &block_size) &&
+        address >= block_base && address - block_base < block_size)
+        return k22_data_internal_dmamux_write(data, address, byte_count, write_value);
+    for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++)
+        if (address >= data->adc_base[adc_index] &&
+            address - data->adc_base[adc_index] < ADC_REGISTER_SIZE)
+            return k22_data_internal_adc_write(data, adc_index, address, byte_count, write_value);
+    for (uint8_t dac_index = 0; dac_index < data->dac_count; dac_index++)
+        if (address >= data->dac_base[dac_index] &&
+            address - data->dac_base[dac_index] < DAC_REGISTER_SIZE)
+            return k22_data_internal_dac_write(data, dac_index, address, byte_count, write_value);
+    for (uint8_t comparator_index = 0; comparator_index < data->cmp_count; comparator_index++)
+        if (address >= CMP_BASE + (uint32_t)comparator_index * 8u &&
+            address - (CMP_BASE + (uint32_t)comparator_index * 8u) < CMP_REGISTER_SIZE)
+            return k22_data_internal_cmp_write(data, comparator_index, address, byte_count,
+                                               write_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_VREF, &block_base, NULL) &&
         address >= VREF_BASE && address - VREF_BASE < 2u) {
-        if (!k22_data_internal_valid_access(address - VREF_BASE, size, 2))
+        if (!k22_data_internal_valid_access(address - VREF_BASE, byte_count, 2))
             return false;
-        k22_data_internal_store_bytes(data->vref, address - VREF_BASE, size, value);
+        k22_data_internal_store_bytes(data->vref, address - VREF_BASE, byte_count, write_value);
         data->vref[1] &= 0xfbu;
         data->vref_cycles = (data->vref[1] & 0x80u) != 0 ? 100u : 0;
         return true;
     }
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_RNG, &base, NULL) &&
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_RNG, &block_base, NULL) &&
         address >= RNG_BASE && address - RNG_BASE < 16u)
-        return k22_data_internal_rng_write(data, address, size, value);
-    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_CRC, &base, NULL) &&
+        return k22_data_internal_rng_write(data, address, byte_count, write_value);
+    if (k22_data_internal_profile_block(data, K22_PERIPHERAL_CRC, &block_base, NULL) &&
         address >= CRC_BASE && address - CRC_BASE < 12u)
-        return k22_data_internal_crc_write(data, address, size, value);
-    if ((k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFA, &base, NULL) ||
-         k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFE, &base, NULL)) &&
+        return k22_data_internal_crc_write(data, address, byte_count, write_value);
+    if ((k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFA, &block_base, NULL) ||
+         k22_data_internal_profile_block(data, K22_PERIPHERAL_FTFE, &block_base, NULL)) &&
         address >= FLASH_BASE && address - FLASH_BASE < sizeof(data->flash))
-        return k22_data_internal_flash_write(data, address, size, value);
+        return k22_data_internal_flash_write(data, address, byte_count, write_value);
     return false;
 }
 
-bool k22_data_dma_request(K22Data* data, uint8_t source) {
-    if (data == NULL || !k22_data_internal_dma_source_valid(data, source))
+bool k22_data_dma_request(K22Data* data, uint8_t request_source) {
+    if (data == NULL || !k22_data_internal_dma_source_valid(data, request_source))
         return false;
     bool accepted = false;
     const uint16_t enabled = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
     for (uint8_t channel = 0; channel < data->dmamux_count; channel++) {
         const uint8_t mux = data->dmamux[channel];
-        if ((mux & 0x80u) != 0 && (mux & 0x3fu) == source && (enabled & (1u << channel)) != 0) {
+        if ((mux & 0x80u) != 0 && (mux & 0x3fu) == request_source &&
+            (enabled & (1u << channel)) != 0) {
             if (channel < 4u && (mux & 0x40u) != 0u)
                 data->dma_trigger_waiting |= (uint16_t)(1u << channel);
             else
-                k22_data_internal_dma_queue_hardware_channel(data, channel, source);
+                k22_data_internal_dma_queue_hardware_channel(data, channel, request_source);
             accepted = true;
         }
     }
@@ -305,14 +323,14 @@ bool k22_data_dma_trigger(K22Data* data, uint8_t channel) {
     if (data == NULL || channel >= 4u || channel >= data->dma_channel_count)
         return false;
     const uint8_t mux = data->dmamux[channel];
-    const uint8_t source = mux & 0x3fu;
+    const uint8_t request_source = mux & 0x3fu;
     const uint16_t enabled = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
     if ((mux & 0xc0u) != 0xc0u || (enabled & (1u << channel)) == 0u ||
-        (!k22_data_internal_dma_source_always_enabled(data, source) &&
+        (!k22_data_internal_dma_source_always_enabled(data, request_source) &&
          (data->dma_trigger_waiting & (1u << channel)) == 0u))
         return false;
     data->dma_trigger_waiting &= (uint16_t)~(1u << channel);
-    k22_data_internal_dma_queue_hardware_channel(data, channel, source);
+    k22_data_internal_dma_queue_hardware_channel(data, channel, request_source);
     return true;
 }
 
@@ -326,32 +344,33 @@ void k22_data_adc_pretrigger(K22Data* data, uint8_t instance, uint8_t pretrigger
         k22_data_internal_adc_start(&data->adc[instance], pretrigger);
 }
 
-bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel, uint16_t value) {
+bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel,
+                            uint16_t sample_value) {
     if (data == NULL || instance >= data->adc_count || channel >= 32)
         return false;
-    data->adc[instance].inputs[channel] = value;
+    data->adc[instance].inputs[channel] = sample_value;
     return true;
 }
 
-bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t value) {
+bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t input_level) {
     if (data == NULL || instance >= data->cmp_count || input >= 8)
         return false;
-    data->cmp[instance].inputs[input] = value;
+    data->cmp[instance].inputs[input] = input_level;
     k22_data_internal_cmp_evaluate(data, instance);
     return true;
 }
 
-bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* high) {
-    if (data == NULL || high == NULL || instance >= data->cmp_count)
+bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* output_high) {
+    if (data == NULL || output_high == NULL || instance >= data->cmp_count)
         return false;
-    *high = (data->cmp[instance].registers[3] & 1u) != 0u;
+    *output_high = (data->cmp[instance].registers[3] & 1u) != 0u;
     return true;
 }
 
-bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* value) {
-    if (data == NULL || value == NULL || instance >= data->dac_count)
+bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* output_value) {
+    if (data == NULL || output_value == NULL || instance >= data->dac_count)
         return false;
-    *value = data->dac[instance].output;
+    *output_value = data->dac[instance].output;
     return true;
 }
 
@@ -361,28 +380,28 @@ void k22_data_dac_trigger(K22Data* data, uint8_t instance) {
     K22Dac* dac = &data->dac[instance];
     if ((dac->registers[0x21] & 0x80u) == 0 || (dac->registers[0x22] & 0x80u) == 0)
         return;
-    uint8_t pointer = (dac->registers[0x23] >> 4) & 15u;
-    const uint8_t upper = dac->registers[0x23] & 15u;
-    uint8_t flags = 0;
+    uint8_t buffer_index = (dac->registers[0x23] >> 4) & 15u;
+    const uint8_t upper_index = dac->registers[0x23] & 15u;
+    uint8_t status_flags = 0;
     if ((dac->registers[0x22] & 3u) == 1u) {
-        if (pointer == 0) {
-            flags |= 2u;
-            pointer = upper;
+        if (buffer_index == 0) {
+            status_flags |= 2u;
+            buffer_index = upper_index;
         } else {
-            pointer--;
+            buffer_index--;
         }
     } else {
-        pointer++;
-        if (pointer == upper)
-            flags |= 4u;
-        if (pointer > upper) {
-            pointer = 0;
-            flags |= 1u;
+        buffer_index++;
+        if (buffer_index == upper_index)
+            status_flags |= 4u;
+        if (buffer_index > upper_index) {
+            buffer_index = 0;
+            status_flags |= 1u;
         }
     }
-    dac->registers[0x23] = (uint8_t)((pointer << 4) | upper);
+    dac->registers[0x23] = (uint8_t)((buffer_index << 4) | upper_index);
     k22_data_internal_dac_update_output(data, instance);
-    k22_data_internal_dac_flags(data, instance, flags);
+    k22_data_internal_dac_flags(data, instance, status_flags);
 }
 
 void k22_data_rng_seed(K22Data* data, uint32_t seed) {
@@ -390,28 +409,28 @@ void k22_data_rng_seed(K22Data* data, uint32_t seed) {
         data->rng_state = seed == 0 ? 0x6d2b79f5u : seed;
 }
 
-bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t size) {
-    if (data == NULL || bytes == NULL || (size != 0x0eu && size != 0x10u))
+bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t byte_count) {
+    if (data == NULL || bytes == NULL || (byte_count != 0x0eu && byte_count != 0x10u))
         return false;
     memset(data->flash_config, 0xff, sizeof(data->flash_config));
-    memcpy(data->flash_config, bytes, size);
+    memcpy(data->flash_config, bytes, byte_count);
     memcpy(data->flash + 0x10, bytes + 8, 4);
     data->flash[2] = bytes[0x0c];
     data->flash[3] = bytes[0x0d];
-    if (size == 0x10u) {
+    if (byte_count == 0x10u) {
         data->flash[0x16] = bytes[0x0e];
         data->flash[0x17] = bytes[0x0f];
     }
     return true;
 }
 
-bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t offset, uint8_t size) {
+bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t byte_offset, uint8_t byte_count) {
     if (data == NULL)
         return false;
     const uint8_t bank = data_flash ? 2u : 1u;
     const bool same_block = data->flash_busy_banks == 3u ||
-                            (offset < data->flash_busy_start + data->flash_busy_length &&
-                             (uint64_t)offset + size > data->flash_busy_start);
+                            (byte_offset < data->flash_busy_start + data->flash_busy_length &&
+                             (uint64_t)byte_offset + byte_count > data->flash_busy_start);
     if (data->flash_cycles == 0u || (data->flash_busy_banks & bank) == 0u || !same_block)
         return true;
     data->flash[0] |= 0x40u;
@@ -419,10 +438,10 @@ bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t offset, uint8_
     return false;
 }
 
-void k22_data_advance(K22Data* data, uint32_t cycles) {
-    if (data == NULL || cycles == 0)
+void k22_data_advance(K22Data* data, uint32_t cycle_count) {
+    if (data == NULL || cycle_count == 0)
         return;
-    uint32_t always_enabled_budget = cycles;
+    uint32_t always_enabled_budget = cycle_count;
     while (data->dma_requests != 0u &&
            (k22_data_internal_load_bytes(data->dma, 0u, 4u) & 0x20u) == 0u &&
            !((k22_data_internal_load_bytes(data->dma, 0u, 4u) & 2u) != 0u && data->debug_halted)) {
@@ -439,39 +458,39 @@ void k22_data_advance(K22Data* data, uint32_t cycles) {
         data->dma_requests &= (uint16_t)~(1u << channel);
         data->dma_hardware_requests &= (uint16_t)~(1u << channel);
         data->dma_last_channel = channel;
-        const uint8_t source = data->dma_request_source[channel];
+        const uint8_t request_source = data->dma_request_source[channel];
         data->dma_request_source[channel] = UINT8_MAX;
         const bool completed = k22_data_internal_dma_service_channel(data, channel);
-        if (completed && source != UINT8_MAX && data->bus.dma_complete != NULL)
-            data->bus.dma_complete(data->bus.context, source);
-        if (completed && source != UINT8_MAX &&
-            k22_data_internal_dma_source_always_enabled(data, source)) {
+        if (completed && request_source != UINT8_MAX && data->bus.dma_complete != NULL)
+            data->bus.dma_complete(data->bus.context, request_source);
+        if (completed && request_source != UINT8_MAX &&
+            k22_data_internal_dma_source_always_enabled(data, request_source)) {
             k22_data_internal_dma_queue_always_enabled(data, channel);
             if ((data->dma_requests & (1u << channel)) != 0u && --always_enabled_budget == 0u)
                 break;
         }
     }
-    for (uint8_t index = 0; index < data->adc_count; index++) {
-        K22Adc* adc = &data->adc[index];
+    for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++) {
+        K22Adc* adc = &data->adc[adc_index];
         if (!adc->converting)
             continue;
-        if (cycles >= adc->remaining_cycles) {
+        if (cycle_count >= adc->remaining_cycles) {
             adc->remaining_cycles = 0;
-            k22_data_internal_adc_complete(data, index);
+            k22_data_internal_adc_complete(data, adc_index);
         } else {
-            adc->remaining_cycles -= cycles;
+            adc->remaining_cycles -= cycle_count;
         }
     }
     if (data->vref_cycles != 0) {
-        if (cycles >= data->vref_cycles) {
+        if (cycle_count >= data->vref_cycles) {
             data->vref_cycles = 0;
             data->vref[1] |= 4u;
         } else {
-            data->vref_cycles -= cycles;
+            data->vref_cycles -= cycle_count;
         }
     }
     if ((data->rng_control & 1u) != 0 && data->rng_cycles != 0) {
-        if (cycles >= data->rng_cycles) {
+        if (cycle_count >= data->rng_cycles) {
             data->rng_cycles = 0;
             data->rng_state = k22_data_internal_rng_next(data->rng_state);
             data->rng_output = data->rng_state;
@@ -479,11 +498,11 @@ void k22_data_advance(K22Data* data, uint32_t cycles) {
             if ((data->rng_control & 2u) != 0)
                 k22_data_internal_interrupt(data, K22_DATA_INTERRUPT_RNG, true);
         } else {
-            data->rng_cycles -= cycles;
+            data->rng_cycles -= cycle_count;
         }
     }
     if (data->flash_cycles != 0) {
-        if (cycles >= data->flash_cycles) {
+        if (cycle_count >= data->flash_cycles) {
             data->flash_cycles = 0;
             data->flash_busy_banks = 0u;
             data->flash_busy_start = 0u;
@@ -491,7 +510,7 @@ void k22_data_advance(K22Data* data, uint32_t cycles) {
             data->flash[0] |= 0x80u;
             k22_data_internal_flash_update_interrupts(data);
         } else {
-            data->flash_cycles -= cycles;
+            data->flash_cycles -= cycle_count;
         }
     }
 }
