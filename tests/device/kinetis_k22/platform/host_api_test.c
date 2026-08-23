@@ -271,39 +271,40 @@ static void test_io_api(TestState* state, KinetisK22* device) {
     io_write(state, device, CAN0 + 0x10u, 4u, 0u);
     io_write(state, device, CAN0 + 0x28u, 4u, 1u);
     io_write(state, device, CAN0 + 0x80u, 4u, 4u << 24u);
-    KinetisK22CanFrame frame = {0x123u, 2u, {1u, 2u}, false, false};
-    expect(state, kinetis_k22_can_receive(device, &frame),
-           "kinetis_k22_can_receive(device, &frame)");
+    KinetisK22CanFrame can_frame = {0x123u, 2u, {1u, 2u}, false, false};
+    expect(state, kinetis_k22_can_receive(device, &can_frame),
+           "kinetis_k22_can_receive(device, &can_frame)");
     expect(state, !kinetis_k22_can_receive(device, NULL), "!kinetis_k22_can_receive(device, NULL)");
-    expect(state, !kinetis_k22_can_receive(NULL, &frame), "!kinetis_k22_can_receive(NULL, &frame)");
+    expect(state, !kinetis_k22_can_receive(NULL, &can_frame),
+           "!kinetis_k22_can_receive(NULL, &can_frame)");
 
     k22_io_set_clock(&device->io, K22_PERIPHERAL_I2S0, true);
     io_write(state, device, I2S0, 4u, UINT32_C(0x80000000));
     io_write(state, device, I2S0 + 0x80u, 4u, UINT32_C(0x80000000));
     io_write(state, device, I2S0 + 0x20u, 4u, 0x11223344u);
-    uint32_t sample = 0u;
-    expect(state, kinetis_k22_i2s_transmit(device, &sample),
-           "kinetis_k22_i2s_transmit(device, &sample)");
-    expect(state, sample == 0x11223344u, "sample == 0x11223344u");
+    uint32_t i2s_sample = 0u;
+    expect(state, kinetis_k22_i2s_transmit(device, &i2s_sample),
+           "kinetis_k22_i2s_transmit(device, &i2s_sample)");
+    expect(state, i2s_sample == 0x11223344u, "i2s_sample == 0x11223344u");
     expect(state, kinetis_k22_i2s_receive(device, 0x55667788u),
            "kinetis_k22_i2s_receive(device, 0x55667788u)");
-    expect(state, !kinetis_k22_i2s_transmit(NULL, &sample),
-           "!kinetis_k22_i2s_transmit(NULL, &sample)");
+    expect(state, !kinetis_k22_i2s_transmit(NULL, &i2s_sample),
+           "!kinetis_k22_i2s_transmit(NULL, &i2s_sample)");
     expect(state, !kinetis_k22_i2s_receive(NULL, 0u), "!kinetis_k22_i2s_receive(NULL, 0u)");
 
-    bool high = false;
+    bool gpio_high = false;
     expect(state, kinetis_k22_gpio_drive(device, 0u, 1u, true),
            "kinetis_k22_gpio_drive(device, 0u, 1u, true)");
-    expect(state, kinetis_k22_gpio_pin(device, 0u, 1u, &high) && high,
-           "kinetis_k22_gpio_pin(device, 0u, 1u, &high) && high");
+    expect(state, kinetis_k22_gpio_pin(device, 0u, 1u, &gpio_high) && gpio_high,
+           "kinetis_k22_gpio_pin(device, 0u, 1u, &gpio_high) && gpio_high");
     expect(state, kinetis_k22_gpio_release(device, 0u, 1u),
            "kinetis_k22_gpio_release(device, 0u, 1u)");
-    expect(state, !kinetis_k22_gpio_pin(NULL, 0u, 1u, &high),
-           "!kinetis_k22_gpio_pin(NULL, 0u, 1u, &high)");
+    expect(state, !kinetis_k22_gpio_pin(NULL, 0u, 1u, &gpio_high),
+           "!kinetis_k22_gpio_pin(NULL, 0u, 1u, &gpio_high)");
     expect(state, !kinetis_k22_gpio_pin(device, 0u, 1u, NULL),
            "!kinetis_k22_gpio_pin(device, 0u, 1u, NULL)");
-    expect(state, !kinetis_k22_gpio_pin(device, UINT8_MAX, 0u, &high),
-           "!kinetis_k22_gpio_pin(device, UINT8_MAX, 0u, &high)");
+    expect(state, !kinetis_k22_gpio_pin(device, UINT8_MAX, 0u, &gpio_high),
+           "!kinetis_k22_gpio_pin(device, UINT8_MAX, 0u, &gpio_high)");
     expect(state, !kinetis_k22_gpio_drive(NULL, 0u, 0u, false),
            "!kinetis_k22_gpio_drive(NULL, 0u, 0u, false)");
     expect(state, !kinetis_k22_gpio_release(NULL, 0u, 0u),
