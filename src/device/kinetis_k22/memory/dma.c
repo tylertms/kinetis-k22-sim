@@ -208,89 +208,103 @@ static void dma_complete_major(K22Data* data, uint8_t channel, uint8_t* descript
 }
 
 bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel) {
-    uint8_t* descriptor = data->dma + 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
-    uint16_t current = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x16, 2);
-    uint16_t count = dma_iteration_count(current);
-    const uint16_t beginning =
-        dma_iteration_count((uint16_t)k22_data_internal_load_bytes(descriptor, 0x1e, 2));
-    const uint32_t minor = k22_data_internal_load_bytes(descriptor, 8, 4);
-    const bool minor_mapping = (k22_data_internal_load_bytes(data->dma, 0, 4) & 0x80u) != 0;
-    const uint32_t bytes = minor_mapping ? minor & 0x3ffu : minor & 0x3fffffffu;
-    int32_t minor_offset = 0;
-    if (minor_mapping) {
-        minor_offset = (int32_t)((minor >> 10) & 0xfffffu);
-        if ((minor_offset & 0x80000) != 0)
-            minor_offset |= (int32_t)0xfff00000u;
+    uint8_t* transfer_descriptor = data->dma + 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
+    uint16_t encoded_iteration =
+        (uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x16u, 2u);
+    uint16_t iteration_count = dma_iteration_count(encoded_iteration);
+    const uint16_t initial_iteration_count =
+        dma_iteration_count((uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x1eu, 2u));
+    const uint32_t minor_loop_config = k22_data_internal_load_bytes(transfer_descriptor, 8u, 4u);
+    const bool minor_offset_mapping =
+        (k22_data_internal_load_bytes(data->dma, 0u, 4u) & 0x80u) != 0u;
+    const uint32_t transfer_byte_count =
+        minor_offset_mapping ? minor_loop_config & 0x3ffu : minor_loop_config & 0x3fffffffu;
+    int32_t minor_loop_offset = 0;
+    if (minor_offset_mapping) {
+        minor_loop_offset = (int32_t)((minor_loop_config >> 10u) & 0xfffffu);
+        if ((minor_loop_offset & 0x80000) != 0)
+            minor_loop_offset |= (int32_t)0xfff00000u;
     }
-    const uint16_t attributes = (uint16_t)k22_data_internal_load_bytes(descriptor, 6, 2);
-    const uint8_t source_size = dma_transfer_size((uint8_t)((attributes >> 8) & 7u));
-    const uint8_t destination_size = dma_transfer_size((uint8_t)(attributes & 7u));
-    if (count == 0 || bytes == 0 || source_size == 0 || destination_size == 0 ||
-        bytes % source_size != 0 || bytes % destination_size != 0) {
+    const uint16_t transfer_attributes =
+        (uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 6u, 2u);
+    const uint8_t source_transfer_size =
+        dma_transfer_size((uint8_t)((transfer_attributes >> 8u) & 7u));
+    const uint8_t destination_transfer_size =
+        dma_transfer_size((uint8_t)(transfer_attributes & 7u));
+    if (iteration_count == 0u || transfer_byte_count == 0u || source_transfer_size == 0u ||
+        destination_transfer_size == 0u || transfer_byte_count % source_transfer_size != 0u ||
+        transfer_byte_count % destination_transfer_size != 0u) {
         k22_data_internal_dma_error(data, channel, 1u << 4);
         return false;
     }
-    uint32_t source = k22_data_internal_load_bytes(descriptor, 0, 4);
-    uint32_t destination = k22_data_internal_load_bytes(descriptor, 0x10, 4);
-    const int16_t source_offset = (int16_t)k22_data_internal_load_bytes(descriptor, 4, 2);
-    const int16_t destination_offset = (int16_t)k22_data_internal_load_bytes(descriptor, 0x14, 2);
-    const uint8_t source_modulo = (uint8_t)((attributes >> 11) & 31u);
-    const uint8_t destination_modulo = (uint8_t)((attributes >> 3) & 31u);
-    uint16_t running_control = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1c, 2);
-    k22_data_internal_store_bytes(descriptor, 0x1c, 2, running_control | 0x40u);
+    uint32_t source_address = k22_data_internal_load_bytes(transfer_descriptor, 0u, 4u);
+    uint32_t destination_address = k22_data_internal_load_bytes(transfer_descriptor, 0x10u, 4u);
+    const int16_t source_address_delta =
+        (int16_t)k22_data_internal_load_bytes(transfer_descriptor, 4u, 2u);
+    const int16_t destination_address_delta =
+        (int16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x14u, 2u);
+    const uint8_t source_modulo_bits = (uint8_t)((transfer_attributes >> 11u) & 31u);
+    const uint8_t destination_modulo_bits = (uint8_t)((transfer_attributes >> 3u) & 31u);
+    uint16_t running_control =
+        (uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x1cu, 2u);
+    k22_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, running_control | 0x40u);
     data->dma_active |= (uint16_t)(1u << channel);
     uint64_t transfer_buffer = 0;
     uint8_t buffered_bytes = 0;
     uint32_t source_bytes = 0;
     uint32_t destination_bytes = 0;
-    while (destination_bytes < bytes) {
-        while (buffered_bytes < destination_size && source_bytes < bytes) {
-            uint32_t value = 0;
-            if (!dma_bus_read(data, source, source_size, &value)) {
+    while (destination_bytes < transfer_byte_count) {
+        while (buffered_bytes < destination_transfer_size && source_bytes < transfer_byte_count) {
+            uint32_t transfer_value = 0u;
+            if (!dma_bus_read(data, source_address, source_transfer_size, &transfer_value)) {
                 k22_data_internal_dma_error(data, channel, 1u << 2);
                 data->dma_active &= (uint16_t)~(1u << channel);
-                k22_data_internal_store_bytes(descriptor, 0x1c, 2, running_control);
+                k22_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, running_control);
                 return false;
             }
-            transfer_buffer |= (uint64_t)value << (buffered_bytes * 8u);
-            buffered_bytes = (uint8_t)(buffered_bytes + source_size);
-            source_bytes += source_size;
-            source = dma_advance_address(source, source_offset, source_modulo);
+            transfer_buffer |= (uint64_t)transfer_value << (buffered_bytes * 8u);
+            buffered_bytes = (uint8_t)(buffered_bytes + source_transfer_size);
+            source_bytes += source_transfer_size;
+            source_address =
+                dma_advance_address(source_address, source_address_delta, source_modulo_bits);
         }
-        if (buffered_bytes < destination_size ||
-            !dma_bus_write(data, destination, destination_size, (uint32_t)transfer_buffer)) {
+        if (buffered_bytes < destination_transfer_size ||
+            !dma_bus_write(data, destination_address, destination_transfer_size,
+                           (uint32_t)transfer_buffer)) {
             k22_data_internal_dma_error(data, channel, 1u << 2);
             data->dma_active &= (uint16_t)~(1u << channel);
-            k22_data_internal_store_bytes(descriptor, 0x1c, 2, running_control);
+            k22_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, running_control);
             return false;
         }
-        destination = dma_advance_address(destination, destination_offset, destination_modulo);
-        destination_bytes += destination_size;
-        transfer_buffer >>= destination_size * 8u;
-        buffered_bytes = (uint8_t)(buffered_bytes - destination_size);
+        destination_address = dma_advance_address(destination_address, destination_address_delta,
+                                                  destination_modulo_bits);
+        destination_bytes += destination_transfer_size;
+        transfer_buffer >>= destination_transfer_size * 8u;
+        buffered_bytes = (uint8_t)(buffered_bytes - destination_transfer_size);
     }
-    if (minor_mapping && (minor & 0x80000000u) != 0)
-        source = (uint32_t)((int64_t)source + minor_offset);
-    if (minor_mapping && (minor & 0x40000000u) != 0)
-        destination = (uint32_t)((int64_t)destination + minor_offset);
+    if (minor_offset_mapping && (minor_loop_config & 0x80000000u) != 0u)
+        source_address = (uint32_t)((int64_t)source_address + minor_loop_offset);
+    if (minor_offset_mapping && (minor_loop_config & 0x40000000u) != 0u)
+        destination_address = (uint32_t)((int64_t)destination_address + minor_loop_offset);
     data->dma_active &= (uint16_t)~(1u << channel);
-    k22_data_internal_store_bytes(descriptor, 0x1c, 2, running_control);
-    k22_data_internal_store_bytes(descriptor, 0, 4, source);
-    k22_data_internal_store_bytes(descriptor, 0x10, 4, destination);
-    count--;
-    dma_set_iteration_count(descriptor, 0x16, count);
-    if ((current & 0x8000u) != 0)
-        dma_queue_channel(data, dma_link_channel(current));
-    const uint16_t control = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1c, 2);
-    if (beginning > 1 && count == beginning / 2u && (control & 0x04u) != 0 &&
-        (data->dma_half & (1u << channel)) == 0) {
+    k22_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, running_control);
+    k22_data_internal_store_bytes(transfer_descriptor, 0u, 4u, source_address);
+    k22_data_internal_store_bytes(transfer_descriptor, 0x10u, 4u, destination_address);
+    iteration_count--;
+    dma_set_iteration_count(transfer_descriptor, 0x16u, iteration_count);
+    if ((encoded_iteration & 0x8000u) != 0u)
+        dma_queue_channel(data, dma_link_channel(encoded_iteration));
+    const uint16_t control_flags =
+        (uint16_t)k22_data_internal_load_bytes(transfer_descriptor, 0x1cu, 2u);
+    if (initial_iteration_count > 1u && iteration_count == initial_iteration_count / 2u &&
+        (control_flags & 0x04u) != 0u && (data->dma_half & (1u << channel)) == 0) {
         data->dma_half |= (uint16_t)(1u << channel);
-        uint16_t pending = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24, 2);
-        k22_data_internal_store_bytes(data->dma, 0x24, 2, pending | (1u << channel));
+        uint16_t pending_interrupts = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
+        k22_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupts | (1u << channel));
     }
-    if (count == 0) {
+    if (iteration_count == 0u) {
         data->dma_half &= (uint16_t)~(1u << channel);
-        dma_complete_major(data, channel, descriptor);
+        dma_complete_major(data, channel, transfer_descriptor);
     }
     k22_data_internal_dma_update_interrupts(data);
     return true;
