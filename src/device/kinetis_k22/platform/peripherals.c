@@ -7,14 +7,14 @@ uint32_t kinetis_k22_internal_width_mask(uint8_t byte_count) {
 }
 
 bool kinetis_k22_internal_pop_serial_event(K22Serial* serial, K22SerialEndpoint endpoint,
-                                           K22SerialEvent* event) {
+                                           K22SerialEvent* output_event) {
     for (uint8_t event_offset = 0; event_offset < serial->event_count; event_offset++) {
         const uint8_t event_index =
             (uint8_t)((serial->event_read_index + event_offset) % K22_SERIAL_EVENT_CAPACITY);
         if (serial->events[event_index].endpoint != endpoint) {
             continue;
         }
-        *event = serial->events[event_index];
+        *output_event = serial->events[event_index];
         for (uint8_t current_offset = event_offset; current_offset + 1u < serial->event_count;
              current_offset++) {
             const uint8_t destination =
@@ -39,10 +39,10 @@ uint32_t kinetis_k22_internal_raw_load(const KinetisK22* device, uint32_t addres
         address - K22_PERIPHERAL_BASE > (uint32_t)K22_PERIPHERAL_SIZE - byte_count) {
         return 0;
     }
-    const uint8_t* bytes = device->peripheral + address - K22_PERIPHERAL_BASE;
+    const uint8_t* peripheral_bytes = device->peripheral + address - K22_PERIPHERAL_BASE;
     uint32_t register_value = 0;
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
-        register_value |= (uint32_t)bytes[byte_index] << (byte_index * 8u);
+        register_value |= (uint32_t)peripheral_bytes[byte_index] << (byte_index * 8u);
     }
     return register_value;
 }
@@ -53,28 +53,29 @@ void kinetis_k22_internal_raw_store(KinetisK22* device, uint32_t address, uint8_
         address - K22_PERIPHERAL_BASE > (uint32_t)K22_PERIPHERAL_SIZE - byte_count) {
         return;
     }
-    uint8_t* bytes = device->peripheral + address - K22_PERIPHERAL_BASE;
+    uint8_t* peripheral_bytes = device->peripheral + address - K22_PERIPHERAL_BASE;
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
-        bytes[byte_index] = (uint8_t)(write_value >> (byte_index * 8u));
+        peripheral_bytes[byte_index] = (uint8_t)(write_value >> (byte_index * 8u));
     }
 }
 
 bool kinetis_k22_internal_aips_access_allowed(const KinetisK22* device, uint32_t address,
-                                              CortexM4Access access, bool write) {
+                                              CortexM4Access access, bool is_write) {
     if (device->profile->id < K22_PROFILE_MK22FN1M012 || access == CORTEX_M4_ACCESS_DEBUG ||
         address < K22_PERIPHERAL_BASE || address >= K22_PERIPHERAL_BASE + K22_PERIPHERAL_SIZE) {
         return true;
     }
     const uint32_t aperture = address < K22_AIPS1 ? K22_AIPS0 : K22_AIPS1;
-    const uint8_t slot = (uint8_t)((address - aperture) >> 12u);
-    const uint32_t control =
-        kinetis_k22_internal_raw_load(device, aperture + 0x20u + (uint32_t)(slot / 8u) * 4u, 4u);
-    const uint8_t shift = (uint8_t)((7u - slot % 8u) * 4u);
-    const uint8_t permission = (uint8_t)(control >> shift) & 7u;
-    if (write && (permission & 2u) != 0u) {
+    const uint8_t port_slot = (uint8_t)((address - aperture) >> 12u);
+    const uint32_t access_control = kinetis_k22_internal_raw_load(
+        device, aperture + 0x20u + (uint32_t)(port_slot / 8u) * 4u, 4u);
+    const uint8_t permission_shift = (uint8_t)((7u - port_slot % 8u) * 4u);
+    const uint8_t access_permission = (uint8_t)(access_control >> permission_shift) & 7u;
+    if (is_write && (access_permission & 2u) != 0u) {
         return false;
     }
-    return !cortex_m4_access_is_unprivileged_data(device->cpu, access) || (permission & 4u) == 0u;
+    return !cortex_m4_access_is_unprivileged_data(device->cpu, access) ||
+           (access_permission & 4u) == 0u;
 }
 
 bool kinetis_k22_internal_axbs_write_allowed(const KinetisK22* device, uint32_t address) {
@@ -86,9 +87,9 @@ bool kinetis_k22_internal_axbs_write_allowed(const KinetisK22* device, uint32_t 
     if (register_offset != 0u && register_offset != 0x10u) {
         return true;
     }
-    const uint32_t control =
+    const uint32_t write_control =
         kinetis_k22_internal_raw_load(device, address - register_offset + 0x10u, 4u);
-    return (control & 0x80000000u) == 0u;
+    return (write_control & 0x80000000u) == 0u;
 }
 
 static void cmt_clear_eoc(KinetisK22* device);
@@ -108,63 +109,67 @@ static bool cmt_read(KinetisK22* device, uint32_t address, uint8_t byte_count,
 }
 
 static void cmt_refresh_irq(KinetisK22* device) {
-    const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+    const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
     const uint8_t dma = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
     if (device->cpu != NULL)
-        cortex_m4_set_irq_level(device->cpu, 45u, (control & 0x82u) == 0x82u && (dma & 1u) == 0u);
+        cortex_m4_set_irq_level(device->cpu, 45u,
+                                (cmt_control & 0x82u) == 0x82u && (dma & 1u) == 0u);
 }
 
 static void cmt_refresh_dma(KinetisK22* device) {
-    const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+    const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
     const uint8_t dma = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 0x0bu, 1u);
-    if ((control & 0x82u) == 0x82u && (dma & 1u) != 0u && !device->cmt_dma_pending)
+    if ((cmt_control & 0x82u) == 0x82u && (dma & 1u) != 0u && !device->cmt_dma_pending)
         device->cmt_dma_pending = k22_data_dma_request(device->data, 47u);
 }
 
-static void cmt_raise_cycle(KinetisK22* device, uint8_t control) {
-    kinetis_k22_internal_raw_store(device, K22_CMT + 5u, 1u, control | 0x80u);
+static void cmt_raise_cycle(KinetisK22* device, uint8_t cmt_control) {
+    kinetis_k22_internal_raw_store(device, K22_CMT + 5u, 1u, cmt_control | 0x80u);
     cmt_refresh_dma(device);
     cmt_refresh_irq(device);
 }
 
 static uint64_t cmt_clock_ticks(const KinetisK22* device) {
-    const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
-    const uint64_t primary = kinetis_k22_internal_raw_load(device, K22_CMT + 0x0au, 1u) + 1u;
-    return primary << ((control >> 5u) & 3u);
+    const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+    const uint64_t clock_divider = kinetis_k22_internal_raw_load(device, K22_CMT + 0x0au, 1u) + 1u;
+    return clock_divider << ((cmt_control >> 5u) & 3u);
 }
 
 static void cmt_load_cycle(KinetisK22* device) {
-    const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+    const uint8_t cmt_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
     const uint64_t clock_ticks = cmt_clock_ticks(device);
-    const uint64_t mark = (kinetis_k22_internal_raw_load(device, K22_CMT + 6u, 1u) << 8u) |
-                          kinetis_k22_internal_raw_load(device, K22_CMT + 7u, 1u);
-    const uint64_t space = (kinetis_k22_internal_raw_load(device, K22_CMT + 8u, 1u) << 8u) |
-                           kinetis_k22_internal_raw_load(device, K22_CMT + 9u, 1u);
-    uint64_t unit = clock_ticks * 8u;
-    const uint8_t carrier = device->cmt_fsk_secondary ? 2u : 0u;
-    const uint64_t high = kinetis_k22_internal_raw_load(device, K22_CMT + carrier, 1u);
-    const uint64_t low = kinetis_k22_internal_raw_load(device, K22_CMT + carrier + 1u, 1u);
-    device->cmt_carrier_high_ticks = high * clock_ticks;
-    device->cmt_carrier_period_ticks = (high + low) * clock_ticks;
-    if ((control & 4u) != 0u && (control & 8u) == 0u && device->cmt_carrier_period_ticks != 0u)
-        unit = device->cmt_carrier_period_ticks;
-    device->cmt_extended_space = (control & 0x10u) != 0u;
-    device->cmt_mark_ticks = device->cmt_extended_space ? 0u : (mark + 1u) * unit;
-    device->cmt_period_ticks = (mark + 1u + space) * unit;
+    const uint64_t mark_count = (kinetis_k22_internal_raw_load(device, K22_CMT + 6u, 1u) << 8u) |
+                                kinetis_k22_internal_raw_load(device, K22_CMT + 7u, 1u);
+    const uint64_t space_count = (kinetis_k22_internal_raw_load(device, K22_CMT + 8u, 1u) << 8u) |
+                                 kinetis_k22_internal_raw_load(device, K22_CMT + 9u, 1u);
+    uint64_t time_unit_ticks = clock_ticks * 8u;
+    const uint8_t carrier_offset = device->cmt_fsk_secondary ? 2u : 0u;
+    const uint64_t carrier_high_count =
+        kinetis_k22_internal_raw_load(device, K22_CMT + carrier_offset, 1u);
+    const uint64_t carrier_low_count =
+        kinetis_k22_internal_raw_load(device, K22_CMT + carrier_offset + 1u, 1u);
+    device->cmt_carrier_high_ticks = carrier_high_count * clock_ticks;
+    device->cmt_carrier_period_ticks = (carrier_high_count + carrier_low_count) * clock_ticks;
+    if ((cmt_control & 4u) != 0u && (cmt_control & 8u) == 0u &&
+        device->cmt_carrier_period_ticks != 0u)
+        time_unit_ticks = device->cmt_carrier_period_ticks;
+    device->cmt_extended_space = (cmt_control & 0x10u) != 0u;
+    device->cmt_mark_ticks = device->cmt_extended_space ? 0u : (mark_count + 1u) * time_unit_ticks;
+    device->cmt_period_ticks = (mark_count + 1u + space_count) * time_unit_ticks;
     device->cmt_carrier_offset_ticks = 0u;
     device->cmt_cycles = 0u;
 }
 
-static void cmt_start(KinetisK22* device, uint8_t control) {
+static void cmt_start(KinetisK22* device, uint8_t cmt_control) {
     device->cmt_running = true;
     device->cmt_stop_pending = false;
     device->cmt_fsk_secondary = false;
     cmt_load_cycle(device);
-    const uint64_t primary = kinetis_k22_internal_raw_load(device, K22_CMT + 0x0au, 1u);
+    const uint64_t clock_divider = kinetis_k22_internal_raw_load(device, K22_CMT + 0x0au, 1u);
     device->cmt_output_delay_ticks =
-        ((control >> 5u) & 3u) == 0u ? primary + 2u : primary * 2u + 3u;
+        ((cmt_control >> 5u) & 3u) == 0u ? clock_divider + 2u : clock_divider * 2u + 3u;
     device->cmt_carrier_offset_ticks = device->cmt_output_delay_ticks;
-    cmt_raise_cycle(device, control);
+    cmt_raise_cycle(device, cmt_control);
 }
 
 static void cmt_clear_eoc(KinetisK22* device) {
@@ -180,14 +185,16 @@ static bool cmt_write(KinetisK22* device, uint32_t address, uint8_t byte_count,
         return false;
     const uint32_t register_offset = address - K22_CMT;
     if (register_offset == 5u) {
-        const uint8_t previous_value = (uint8_t)kinetis_k22_internal_raw_load(device, address, 1u);
-        const uint8_t control = (uint8_t)(write_value & 0x7fu);
-        kinetis_k22_internal_raw_store(device, address, 1u, (previous_value & 0x80u) | control);
-        if ((control & 1u) == 0u && device->cmt_running)
+        const uint8_t previous_control =
+            (uint8_t)kinetis_k22_internal_raw_load(device, address, 1u);
+        const uint8_t cmt_control = (uint8_t)(write_value & 0x7fu);
+        kinetis_k22_internal_raw_store(device, address, 1u,
+                                       (previous_control & 0x80u) | cmt_control);
+        if ((cmt_control & 1u) == 0u && device->cmt_running)
             device->cmt_stop_pending = true;
-        else if ((control & 1u) != 0u && !device->cmt_running)
-            cmt_start(device, control);
-        else if ((control & 1u) != 0u)
+        else if ((cmt_control & 1u) != 0u && !device->cmt_running)
+            cmt_start(device, cmt_control);
+        else if ((cmt_control & 1u) != 0u)
             device->cmt_stop_pending = false;
         cmt_refresh_dma(device);
         cmt_refresh_irq(device);
@@ -212,22 +219,22 @@ void kinetis_k22_internal_cmt_advance(KinetisK22* device, uint32_t cycle_count) 
     if (!device->cmt_running ||
         (device->cpu != NULL && device->cpu->sleeping && (device->cpu->scr & 4u) != 0u))
         return;
-    const uint64_t core_hz = k22_timing_core_clock_hz(&device->timing);
-    const uint64_t bus_hz = k22_timing_bus_clock_hz(&device->timing);
-    const uint64_t scaled = device->cmt_bus_remainder + (uint64_t)cycle_count * bus_hz;
-    uint64_t ticks = core_hz == 0u ? 0u : scaled / core_hz;
-    device->cmt_bus_remainder = core_hz == 0u ? 0u : scaled % core_hz;
-    if (device->cmt_output_delay_ticks > ticks)
-        device->cmt_output_delay_ticks -= ticks;
+    const uint64_t core_clock_hz = k22_timing_core_clock_hz(&device->timing);
+    const uint64_t bus_clock_hz = k22_timing_bus_clock_hz(&device->timing);
+    const uint64_t scaled_ticks = device->cmt_bus_remainder + (uint64_t)cycle_count * bus_clock_hz;
+    uint64_t elapsed_ticks = core_clock_hz == 0u ? 0u : scaled_ticks / core_clock_hz;
+    device->cmt_bus_remainder = core_clock_hz == 0u ? 0u : scaled_ticks % core_clock_hz;
+    if (device->cmt_output_delay_ticks > elapsed_ticks)
+        device->cmt_output_delay_ticks -= elapsed_ticks;
     else
         device->cmt_output_delay_ticks = 0u;
-    while (ticks != 0u && device->cmt_running) {
-        const uint64_t remaining = device->cmt_period_ticks - device->cmt_cycles;
-        if (ticks < remaining) {
-            device->cmt_cycles += ticks;
+    while (elapsed_ticks != 0u && device->cmt_running) {
+        const uint64_t remaining_ticks = device->cmt_period_ticks - device->cmt_cycles;
+        if (elapsed_ticks < remaining_ticks) {
+            device->cmt_cycles += elapsed_ticks;
             break;
         }
-        ticks -= remaining;
+        elapsed_ticks -= remaining_ticks;
         if (device->cmt_stop_pending ||
             (kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u) & 1u) == 0u) {
             device->cmt_running = false;
@@ -235,11 +242,12 @@ void kinetis_k22_internal_cmt_advance(KinetisK22* device, uint32_t cycle_count) 
             device->cmt_cycles = 0u;
             break;
         }
-        const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
-        if ((control & 0x0cu) == 4u)
+        const uint8_t cmt_control =
+            (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+        if ((cmt_control & 0x0cu) == 4u)
             device->cmt_fsk_secondary = !device->cmt_fsk_secondary;
         cmt_load_cycle(device);
-        cmt_raise_cycle(device, control);
+        cmt_raise_cycle(device, cmt_control);
     }
 }
 
