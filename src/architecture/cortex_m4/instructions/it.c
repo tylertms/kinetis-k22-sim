@@ -32,8 +32,8 @@ static bool writes_apsr(uint16_t first, uint16_t second) {
     return msr || vmrs;
 }
 
-CortexM4FlagWrite cortex_m4_it_flag_write(uint16_t first, uint16_t second, bool wide) {
-    if (!wide) {
+CortexM4FlagWrite cortex_m4_it_flag_write(uint16_t first, uint16_t second, bool is_wide) {
+    if (!is_wide) {
         return narrow_flag_write(first);
     }
     if (writes_apsr(first, second)) {
@@ -61,11 +61,11 @@ void cortex_m4_it_advance(CortexM4* cpu) {
     cpu->it_state = (uint8_t)((cpu->it_state & 0xe0u) | ((cpu->it_state << 1) & 0x1fu));
 }
 
-void cortex_m4_it_preserve_flags(CortexM4* cpu, uint16_t first, uint16_t second, bool wide,
-                                 bool in_it_block, uint32_t previous_xpsr) {
-    if (cpu == NULL || !in_it_block ||
-        cortex_m4_it_flag_write(first, second, wide) != CORTEX_M4_FLAGS_IMPLICIT) {
+void cortex_m4_it_preserve_flags(CortexM4* cpu, uint16_t first, uint16_t second, bool is_wide,
+                                 bool inside_it_block, uint32_t previous_xpsr_value) {
+    if (cpu == NULL || !inside_it_block ||
+        cortex_m4_it_flag_write(first, second, is_wide) != CORTEX_M4_FLAGS_IMPLICIT) {
         return;
     }
-    cpu->xpsr = (cpu->xpsr & ~xpsr_nzcv) | (previous_xpsr & xpsr_nzcv);
+    cpu->xpsr = (cpu->xpsr & ~xpsr_nzcv) | (previous_xpsr_value & xpsr_nzcv);
 }
