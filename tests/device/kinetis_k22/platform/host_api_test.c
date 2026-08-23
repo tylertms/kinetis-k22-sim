@@ -393,28 +393,29 @@ static void test_allocation_failures(TestState* state) {
     configuration.package = KINETIS_K22_PACKAGE_LQ_144_LQFP;
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
-    uint32_t failures = 0u;
-    uint32_t successes = 0u;
-    for (size_t accepted = 0u; accepted < 24u; accepted++) {
-        test_fail_allocation_after(accepted);
+    uint32_t failure_count = 0u;
+    uint32_t success_count = 0u;
+    for (size_t allocation_index = 0u; allocation_index < 24u; allocation_index++) {
+        test_fail_allocation_after(allocation_index);
         KinetisK22* device = kinetis_k22_create(configuration);
         test_allow_allocations();
         if (device == NULL) {
-            failures++;
+            failure_count++;
         } else {
-            successes++;
+            success_count++;
             kinetis_k22_destroy(device);
         }
     }
-    expect(state, failures >= 6u && successes != 0u,
+    expect(state, failure_count >= 6u && success_count != 0u,
            "device construction handles each allocation boundary");
 
     KinetisK22* device = kinetis_k22_create(configuration);
-    const uint8_t memory[] = {1u, 2u, 3u, 4u};
+    const uint8_t card_data[] = {1u, 2u, 3u, 4u};
     test_fail_allocation_after(0u);
-    bool attached = kinetis_k22_flexbus_attach(device, 0u, memory, sizeof(memory), false);
+    bool flexbus_attached =
+        kinetis_k22_flexbus_attach(device, 0u, card_data, sizeof(card_data), false);
     test_allow_allocations();
-    expect(state, !attached, "FlexBus attachment reports allocation failure");
+    expect(state, !flexbus_attached, "FlexBus attachment reports allocation failure");
     kinetis_k22_destroy(device);
 }
 #endif
