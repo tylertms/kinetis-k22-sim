@@ -226,10 +226,10 @@ static bool flexbus_offset_valid(uint32_t offset) {
     return (offset < 0x48u && (offset % 12u) <= 8u) || offset == 0x60u;
 }
 
-bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t size, bool is_write,
+bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t access_size, bool is_write_access,
                              uint32_t write_value) {
     if (io == NULL || !k22_io_clock_enabled(io, K22_PERIPHERAL_FB) ||
-        (size != 1u && size != 2u && size != 4u))
+        (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
     for (uint8_t chip_select = 0u; chip_select < 6u; chip_select++) {
         const uint32_t base = io->flexbus[chip_select * 3u] & 0xffff0000u;
@@ -240,7 +240,7 @@ bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t size, bool is_
         if ((address & comparison) != (base & comparison))
             continue;
         k22_io_internal_emit(io, K22_IO_EVENT_FLEXBUS_TRANSFER, chip_select, write_value,
-                             (uint32_t)size | (is_write ? 0x100u : 0u));
+                             (uint32_t)access_size | (is_write_access ? 0x100u : 0u));
         return true;
     }
     return false;
