@@ -1,6 +1,6 @@
 #include "internal.h"
 
-static uint32_t ftm_register_mask(uint8_t instance, uint8_t register_index) {
+static uint32_t ftm_register_write_mask(uint8_t instance, uint8_t register_index) {
     static const uint32_t masks[18] = {
         0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x7f7f7f7fu, 0x000000ffu,
         0x000000ffu, 0x000000ffu, 0x000000efu, 0x0000ffffu, 0x00000fffu, 0x000000ffu,
@@ -20,7 +20,7 @@ static uint32_t ftm_register_mask(uint8_t instance, uint8_t register_index) {
     return mask;
 }
 
-static uint32_t ftm_write_protected_mask(uint8_t register_index) {
+static uint32_t ftm_write_protection_mask(uint8_t register_index) {
     static const uint32_t masks[18] = {
         0x00000071u, 0u,          0u,          0u, 0x57575757u, 0x000000ffu, 0u, 0x000000ffu, 0u,
         0u,          0x000000ffu, 0x00000001u, 0u, 0x0000000fu, 0u,          0u, 0u,          0u,
@@ -28,20 +28,20 @@ static uint32_t ftm_write_protected_mask(uint8_t register_index) {
     return masks[register_index];
 }
 
-static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint8_t size,
-                      uint32_t write_value) {
+static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t offset, uint8_t size,
+                               uint32_t write_value) {
     if (size != 4 || (offset & 3u) != 0) {
         return false;
     }
     K22FtmState* ftm = &timing->ftm[instance];
     if (offset == 0) {
-        const bool clock_stopped = (ftm->sc & 0x18u) == 0u;
-        uint32_t flag = ftm->sc & 0x80u;
+        const bool was_clock_stopped = (ftm->sc & 0x18u) == 0u;
+        uint32_t overflow_flag = ftm->sc & 0x80u;
         if ((write_value & 0x80u) == 0u && ftm->overflow_flag_read)
-            flag = 0u;
-        ftm->sc = flag | (write_value & 0x7fu);
+            overflow_flag = 0u;
+        ftm->sc = overflow_flag | (write_value & 0x7fu);
         ftm->overflow_flag_read = false;
-        if (clock_stopped && (ftm->sc & 0x18u) != 0u && ftm->counter == ftm->initial &&
+        if (was_clock_stopped && (ftm->sc & 0x18u) != 0u && ftm->counter == ftm->initial &&
             (ftm->registers[6] & (1u << 6u)) != 0u)
             k22_timing_internal_ftm_trigger(timing, instance);
         k22_timing_internal_update_ftm_irq(timing, instance);
@@ -69,10 +69,10 @@ static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint
         if (channel >= k22_timing_internal_ftm_channel_count(instance))
             return false;
         if (((offset - 0x0cu) & 4u) == 0) {
-            uint32_t flag = ftm->channel_sc[channel] & 0x80u;
+            uint32_t channel_flag = ftm->channel_sc[channel] & 0x80u;
             if ((write_value & 0x80u) == 0u && ftm->channel_flag_read[channel])
-                flag = 0u;
-            ftm->channel_sc[channel] = flag | (write_value & 0x7fu);
+                channel_flag = 0u;
+            ftm->channel_sc[channel] = channel_flag | (write_value & 0x7fu);
             ftm->channel_flag_read[channel] = false;
             k22_timing_internal_update_ftm_irq(timing, instance);
         } else if (!k22_timing_internal_ftm_input_capture_mode(ftm, channel)) {
@@ -103,20 +103,21 @@ static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint
         k22_timing_internal_update_ftm_irq(timing, instance);
     } else if (offset >= 0x54u && offset <= 0x98u) {
         const uint8_t register_index = (uint8_t)((offset - 0x54u) / 4u);
-        write_value &= ftm_register_mask(instance, register_index);
+        write_value &= ftm_register_write_mask(instance, register_index);
         if (offset == 0x54u) {
             const uint32_t current = ftm->registers[register_index];
-            const uint32_t protected_mask = ftm_write_protected_mask(register_index);
-            uint32_t next = (current & protected_mask) | (write_value & ~protected_mask & ~6u);
+            const uint32_t protected_mask = ftm_write_protection_mask(register_index);
+            uint32_t next_value =
+                (current & protected_mask) | (write_value & ~protected_mask & ~6u);
             if ((current & 4u) != 0u)
-                next = (next & ~protected_mask) | (write_value & protected_mask);
+                next_value = (next_value & ~protected_mask) | (write_value & protected_mask);
             if ((current & 4u) != 0u || ((write_value & 4u) != 0u && ftm->write_protection_read))
-                next |= 4u;
+                next_value |= 4u;
             if ((current & 4u) == 0u && (write_value & 4u) != 0u && ftm->write_protection_read) {
                 ftm->registers[8] &= ~0x40u;
                 ftm->write_protection_read = false;
             }
-            ftm->registers[register_index] = next;
+            ftm->registers[register_index] = next_value;
             if ((write_value & 2u) != 0u) {
                 const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
                 for (uint8_t channel = 0u; channel < channels; channel++)
@@ -168,10 +169,11 @@ static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint
             ftm->registers[register_index] = (write_value & ~6u) | (current & 6u);
         } else if (offset == 0x6cu) {
             const uint32_t mask = instance == 0u || instance == 3u ? 0xffu : 0xf0u;
-            uint32_t next = (ftm->registers[register_index] & 0x80u) | (write_value & mask & 0x7fu);
+            uint32_t next_value =
+                (ftm->registers[register_index] & 0x80u) | (write_value & mask & 0x7fu);
             if ((write_value & 0x80u) == 0u && ftm->trigger_flag_read)
-                next &= ~0x80u;
-            ftm->registers[register_index] = next;
+                next_value &= ~0x80u;
+            ftm->registers[register_index] = next_value;
             ftm->trigger_flag_read = false;
         } else if (offset == 0x90u) {
             ftm->invctrl_buffer = write_value;
@@ -182,7 +184,7 @@ static bool ftm_write(K22Timing* timing, uint8_t instance, uint32_t offset, uint
         } else if (offset == 0x98u) {
             ftm->registers[17] = write_value;
         } else {
-            const uint32_t protected_mask = ftm_write_protected_mask(register_index);
+            const uint32_t protected_mask = ftm_write_protection_mask(register_index);
             if ((ftm->registers[0] & 4u) == 0u)
                 write_value = (write_value & ~protected_mask) |
                               (ftm->registers[register_index] & protected_mask);
@@ -459,7 +461,7 @@ static bool write_timed_register(K22Timing* timing, uint32_t address, uint8_t si
     uint8_t ftm_instance;
     uint32_t offset;
     return k22_timing_internal_ftm_location(timing, address, &ftm_instance, &offset) &&
-           ftm_write(timing, ftm_instance, offset, size, write_value);
+           write_ftm_register(timing, ftm_instance, offset, size, write_value);
 }
 
 bool k22_timing_init(K22Timing* timing, const K22Profile* profile, uint32_t external_oscillator_hz,
