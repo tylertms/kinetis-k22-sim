@@ -1,13 +1,14 @@
 #include "device/kinetis_k22/internal.h"
 
-void kinetis_k22_set_adc0_channel(KinetisK22* device, uint8_t channel, uint16_t value) {
-    (void)kinetis_k22_set_adc_channel(device, 0, channel, value);
+void kinetis_k22_set_adc0_channel(KinetisK22* device, uint8_t channel, uint16_t sample_value) {
+    (void)kinetis_k22_set_adc_channel(device, 0, channel, sample_value);
 }
 
-bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input, uint8_t value) {
+bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input,
+                               uint8_t input_level) {
     if (device == NULL)
         return false;
-    return k22_data_set_cmp_input(device->data, instance, input, value);
+    return k22_data_set_cmp_input(device->data, instance, input, input_level);
 }
 
 bool kinetis_k22_set_lptmr_input(KinetisK22* device, uint8_t input, bool high) {
@@ -52,25 +53,27 @@ bool kinetis_k22_ewm_output(const KinetisK22* device) {
     return k22_timing_ewm_output(&device->timing);
 }
 
-bool kinetis_k22_get_cmt_output(const KinetisK22* device, bool* driven, bool* high) {
-    if (device == NULL || driven == NULL || high == NULL ||
+bool kinetis_k22_get_cmt_output(const KinetisK22* device, bool* is_driven, bool* is_high) {
+    if (device == NULL || is_driven == NULL || is_high == NULL ||
         !k22_profile_has_peripheral(device->profile, K22_PERIPHERAL_CMT))
         return false;
-    const uint8_t output = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 4u, 1u);
-    *driven = (output & 0x20u) != 0u;
-    bool active = (output & 0x80u) != 0u;
+    const uint8_t output_control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 4u, 1u);
+    *is_driven = (output_control & 0x20u) != 0u;
+    bool is_active = (output_control & 0x80u) != 0u;
     if (device->cmt_running) {
-        const uint8_t control = (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
-        active = false;
+        const uint8_t cmt_control =
+            (uint8_t)kinetis_k22_internal_raw_load(device, K22_CMT + 5u, 1u);
+        is_active = false;
         if (!device->cmt_extended_space && device->cmt_cycles < device->cmt_mark_ticks &&
             device->cmt_output_delay_ticks == 0u) {
             const uint64_t carrier_ticks = device->cmt_cycles - device->cmt_carrier_offset_ticks;
-            active = (control & 8u) != 0u || (device->cmt_carrier_period_ticks != 0u &&
-                                              carrier_ticks % device->cmt_carrier_period_ticks <
-                                                  device->cmt_carrier_high_ticks);
+            is_active =
+                (cmt_control & 8u) != 0u ||
+                (device->cmt_carrier_period_ticks != 0u &&
+                 carrier_ticks % device->cmt_carrier_period_ticks < device->cmt_carrier_high_ticks);
         }
     }
-    *high = active == ((output & 0x40u) != 0u);
+    *is_high = is_active == ((output_control & 0x40u) != 0u);
     return true;
 }
 
@@ -99,12 +102,13 @@ bool kinetis_k22_get_ftm_output(const KinetisK22* device, uint8_t instance, uint
     return k22_timing_get_ftm_output(&device->timing, instance, channel, high);
 }
 
-bool kinetis_k22_get_dac_output(const KinetisK22* device, uint8_t instance, uint16_t* value) {
+bool kinetis_k22_get_dac_output(const KinetisK22* device, uint8_t instance,
+                                uint16_t* output_value) {
     if (device == NULL || instance >= 2u ||
         !k22_package_has_peripheral(device->package,
                                     (K22PeripheralId)(K22_PERIPHERAL_DAC0 + instance)))
         return false;
-    return k22_data_get_dac_output(device->data, instance, value);
+    return k22_data_get_dac_output(device->data, instance, output_value);
 }
 
 bool kinetis_k22_set_usb_charger(KinetisK22* device, KinetisK22UsbCharger charger) {
@@ -152,14 +156,14 @@ bool kinetis_k22_gpio_pin(const KinetisK22* device, uint8_t port, uint8_t pin, b
 }
 
 bool kinetis_k22_serial_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
-                                uint16_t value, uint8_t status) {
+                                uint16_t received_value, uint8_t status) {
     if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint)) {
         return false;
     }
     const K22PeripheralId id = kinetis_k22_internal_serial_endpoint_peripheral(endpoint);
     (void)k22_serial_set_clock_gate(&device->serial, id, true);
-    const bool result =
-        k22_serial_push_receive(&device->serial, (K22SerialEndpoint)endpoint, value, status);
+    const bool result = k22_serial_push_receive(&device->serial, (K22SerialEndpoint)endpoint,
+                                                received_value, status);
     k22_serial_advance_endpoint(&device->serial, (K22SerialEndpoint)endpoint);
     kinetis_k22_internal_refresh_serial_signals(device);
     kinetis_k22_sync_clock_gates(device);
@@ -167,10 +171,10 @@ bool kinetis_k22_serial_receive(KinetisK22* device, KinetisK22SerialEndpoint end
 }
 
 bool kinetis_k22_serial_transmit(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
-                                 uint16_t* value) {
+                                 uint16_t* output_value) {
     if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint))
         return false;
-    return k22_serial_pop_transmit(&device->serial, (K22SerialEndpoint)endpoint, value);
+    return k22_serial_pop_transmit(&device->serial, (K22SerialEndpoint)endpoint, output_value);
 }
 
 bool kinetis_k22_spi_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
@@ -197,20 +201,20 @@ bool kinetis_k22_i2c_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpo
         endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
         return false;
     }
-    K22SerialEvent event;
+    K22SerialEvent serial_event;
     if (!kinetis_k22_internal_pop_serial_event(&device->serial, (K22SerialEndpoint)endpoint,
-                                               &event)) {
+                                               &serial_event)) {
         return false;
     }
-    static const KinetisK22I2cTransferType types[] = {
+    static const KinetisK22I2cTransferType transfer_types[] = {
         KINETIS_K22_I2C_START, KINETIS_K22_I2C_REPEATED_START, KINETIS_K22_I2C_STOP,
         KINETIS_K22_I2C_WRITE, KINETIS_K22_I2C_READ,
     };
-    if ((unsigned)event.type >= sizeof(types) / sizeof(types[0])) {
+    if ((unsigned)serial_event.type >= sizeof(transfer_types) / sizeof(transfer_types[0])) {
         return false;
     }
-    transfer->type = types[event.type];
-    transfer->value = (uint8_t)event.value;
+    transfer->type = transfer_types[serial_event.type];
+    transfer->value = (uint8_t)serial_event.value;
     return true;
 }
 
