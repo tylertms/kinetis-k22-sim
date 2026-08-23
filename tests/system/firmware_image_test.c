@@ -111,18 +111,18 @@ static void test_files(TestState* state, KinetisK22* device) {
     const uint8_t binary[] = {0x78u, 0x56u, 0x34u, 0x12u};
     initialize_image(elf);
     expect(state, write_file(elf_path, elf, sizeof(elf)), "write ELF file");
-    uint32_t entry = UINT32_MAX;
-    expect(state, cortex_m4_load_elf(device, elf_path, &entry),
-           "cortex_m4_load_elf(device, elf_path, &entry)");
-    expect(state, entry == 0x101u, "file ELF entry == 0x101u");
+    uint32_t entry_address = UINT32_MAX;
+    expect(state, cortex_m4_load_elf(device, elf_path, &entry_address),
+           "cortex_m4_load_elf(device, elf_path, &entry_address)");
+    expect(state, entry_address == 0x101u, "file ELF entry_address == 0x101u");
     expect(state, write_file(binary_path, binary, sizeof(binary)), "write binary file");
     expect(state, cortex_m4_load_binary(device, binary_path, 0x20000020u),
            "cortex_m4_load_binary(device, binary_path, 0x20000020u)");
     expect(state, write_file(binary_path, binary, 0u), "write empty binary file");
     expect(state, !cortex_m4_load_binary(device, binary_path, 0u), "empty binary file is rejected");
     expect(state, write_file(elf_path, elf, 16u), "write truncated ELF file");
-    expect(state, !cortex_m4_load_elf(device, elf_path, &entry), "truncated file ELF is rejected");
-    expect(state, !cortex_m4_load_elf(device, missing_path, &entry),
+    expect(state, !cortex_m4_load_elf(device, elf_path, &entry_address), "truncated file ELF is rejected");
+    expect(state, !cortex_m4_load_elf(device, missing_path, &entry_address),
            "missing file ELF is rejected");
     expect(state, !cortex_m4_load_binary(device, missing_path, 0u),
            "missing binary file is rejected");
@@ -132,10 +132,11 @@ static void test_files(TestState* state, KinetisK22* device) {
 
 static void test_binary(TestState* state, KinetisK22* device) {
     const uint8_t image[] = {0x78, 0x56, 0x34, 0x12};
-    uint32_t entry = UINT32_MAX;
-    expect(state, cortex_m4_load_binary_data(device, image, sizeof(image), 0x20000010u, &entry),
-           "cortex_m4_load_binary_data(device, image, sizeof(image), address, &entry)");
-    expect(state, entry == 0x20000010u, "entry == 0x20000010u");
+    uint32_t entry_address = UINT32_MAX;
+    expect(state,
+           cortex_m4_load_binary_data(device, image, sizeof(image), 0x20000010u, &entry_address),
+           "cortex_m4_load_binary_data(device, image, sizeof(image), address, &entry_address)");
+    expect(state, entry_address == 0x20000010u, "entry_address == 0x20000010u");
     uint32_t value = 0;
     expect(state, kinetis_k22_read(device, 0x20000010u, &value, sizeof(value)),
            "kinetis_k22_read(device, 0x20000010u, &value, sizeof(value))");
@@ -171,10 +172,10 @@ int main(void) {
     test_symbol(&state);
     test_files(&state, device);
 
-    uint32_t entry = 0;
-    expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), &entry),
-           "cortex_m4_load_elf_data(device, image, sizeof(image), &entry)");
-    expect(&state, entry == 0x101u, "entry == 0x101u");
+    uint32_t entry_address = 0;
+    expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), &entry_address),
+           "cortex_m4_load_elf_data(device, image, sizeof(image), &entry_address)");
+    expect(&state, entry_address == 0x101u, "entry_address == 0x101u");
     uint32_t value = 0;
     expect(&state, kinetis_k22_read(device, 0x100u, &value, sizeof(value)),
            "kinetis_k22_read(device, 0x100u, &value, sizeof(value))");
