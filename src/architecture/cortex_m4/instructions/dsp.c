@@ -52,8 +52,8 @@ static uint32_t extract_unsigned_lane(uint32_t value, uint8_t lane, uint8_t widt
 }
 
 static uint32_t insert_lane(uint32_t result, uint32_t value, uint8_t lane, uint8_t width) {
-    const uint32_t mask = (1u << width) - 1u;
-    return result | ((value & mask) << (lane * width));
+    const uint32_t lane_mask = (1u << width) - 1u;
+    return result | ((value & lane_mask) << (lane * width));
 }
 
 static void set_greater_equal_flags(CortexM4* cpu, uint8_t ge) {
