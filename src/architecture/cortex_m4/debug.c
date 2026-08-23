@@ -109,8 +109,9 @@ static void debug_load_xpsr(CortexM4* cpu, uint32_t value) {
 static uint32_t core_register_read(const CortexM4* cpu, uint8_t selector) {
     if (selector < 16u) {
         if (selector == 13u) {
-            const bool thread = (cpu->xpsr & 0x1ffu) == 0;
-            return thread && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0 ? cpu->psp : cpu->msp;
+            const bool in_thread_mode = (cpu->xpsr & 0x1ffu) == 0;
+            return in_thread_mode && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0 ? cpu->psp
+                                                                                   : cpu->msp;
         }
         return cpu->registers[selector];
     }
@@ -136,37 +137,37 @@ static uint32_t core_register_read(const CortexM4* cpu, uint8_t selector) {
     return 0;
 }
 
-static void core_register_write(CortexM4* cpu, uint8_t selector, uint32_t value) {
+static void core_register_write(CortexM4* cpu, uint8_t selector, uint32_t register_value) {
     if (selector < 16u) {
         if (selector == 13u) {
-            const bool thread = (cpu->xpsr & 0x1ffu) == 0;
-            value &= ~3u;
-            if (thread && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0) {
-                cpu->psp = value;
+            const bool in_thread_mode = (cpu->xpsr & 0x1ffu) == 0;
+            register_value &= ~3u;
+            if (in_thread_mode && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0) {
+                cpu->psp = register_value;
             } else {
-                cpu->msp = value;
+                cpu->msp = register_value;
             }
-            cpu->registers[13] = value;
+            cpu->registers[13] = register_value;
         } else {
-            cpu->registers[selector] = selector == 15u ? value & ~1u : value;
+            cpu->registers[selector] = selector == 15u ? register_value & ~1u : register_value;
         }
         return;
     }
     if (selector == 16u) {
-        debug_load_xpsr(cpu, value);
+        debug_load_xpsr(cpu, register_value);
     } else if (selector == 17u) {
-        cpu->msp = value & ~3u;
+        cpu->msp = register_value & ~3u;
     } else if (selector == 18u) {
-        cpu->psp = value & ~3u;
+        cpu->psp = register_value & ~3u;
     } else if (selector == 20u) {
-        cpu->control = (value >> 24) & 7u;
-        cpu->faultmask = (value >> 16) & 1u;
-        cpu->basepri = (value >> 8) & 0xf0u;
-        cpu->primask = value & 1u;
+        cpu->control = (register_value >> 24) & 7u;
+        cpu->faultmask = (register_value >> 16) & 1u;
+        cpu->basepri = (register_value >> 8) & 0xf0u;
+        cpu->primask = register_value & 1u;
     } else if (selector == 33u) {
-        cpu->fpscr = value;
+        cpu->fpscr = register_value;
     } else if (selector >= 64u && selector < 96u) {
-        cpu->fp_registers[selector - 64u] = value;
+        cpu->fp_registers[selector - 64u] = register_value;
     }
 }
 
