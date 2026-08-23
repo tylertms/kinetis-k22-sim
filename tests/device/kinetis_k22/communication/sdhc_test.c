@@ -32,41 +32,42 @@ typedef struct {
     bool fail_write;
 } BusMemory;
 
-static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* value) {
+static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* read_value) {
     BusMemory* memory = context;
-    if (value == NULL || memory->fail_read || address > sizeof(memory->data) ||
+    if (read_value == NULL || memory->fail_read || address > sizeof(memory->data) ||
         size > sizeof(memory->data) - address)
         return false;
-    *value = 0u;
-    memcpy(value, memory->data + address, size);
+    *read_value = 0u;
+    memcpy(read_value, memory->data + address, size);
     return true;
 }
 
-static bool bus_write(void* context, uint32_t address, uint8_t size, uint32_t value) {
+static bool bus_write(void* context, uint32_t address, uint8_t size, uint32_t write_value) {
     BusMemory* memory = context;
     if (memory->fail_write || address > sizeof(memory->data) ||
         size > sizeof(memory->data) - address)
         return false;
-    memcpy(memory->data + address, &value, size);
+    memcpy(memory->data + address, &write_value, size);
     return true;
 }
 
 static uint32_t read_register(TestState* state, K22Sdhc* sdhc, uint32_t address) {
-    uint32_t value = 0u;
-    expect(state, k22_sdhc_read(sdhc, address, 4u, &value),
-           "k22_sdhc_read(sdhc, address, 4u, &value)");
-    return value;
+    uint32_t register_value = 0u;
+    expect(state, k22_sdhc_read(sdhc, address, 4u, &register_value),
+           "k22_sdhc_read(sdhc, address, 4u, &register_value)");
+    return register_value;
 }
 
-static void write_register(TestState* state, K22Sdhc* sdhc, uint32_t address, uint32_t value) {
-    expect(state, k22_sdhc_write(sdhc, address, 4u, value),
-           "k22_sdhc_write(sdhc, address, 4u, value)");
+static void write_register(TestState* state, K22Sdhc* sdhc, uint32_t address,
+                           uint32_t register_value) {
+    expect(state, k22_sdhc_write(sdhc, address, 4u, register_value),
+           "k22_sdhc_write(sdhc, address, 4u, register_value)");
 }
 
-static void command(TestState* state, K22Sdhc* sdhc, uint8_t index, uint32_t argument,
+static void command(TestState* state, K22Sdhc* sdhc, uint8_t command_index, uint32_t argument,
                     uint32_t options) {
     write_register(state, sdhc, SDHC_CMDARG, argument);
-    write_register(state, sdhc, SDHC_XFERTYP, (uint32_t)index << 24u | options);
+    write_register(state, sdhc, SDHC_XFERTYP, (uint32_t)command_index << 24u | options);
 }
 
 static K22Sdhc create_sdhc(TestState* state, BusMemory* memory) {
@@ -90,11 +91,13 @@ static void expect_initialization_and_access(TestState* state) {
     BusMemory memory = {0};
     K22Sdhc sdhc = create_sdhc(state, &memory);
     uint8_t card[1024];
-    for (size_t index = 0u; index < sizeof(card); index++)
-        card[index] = (uint8_t)index;
+    for (size_t card_index = 0u; card_index < sizeof(card); card_index++) {
+        card[card_index] = (uint8_t)card_index;
+    }
 
     expect(state, k22_sdhc_insert(&sdhc, card, sizeof(card), false),
            "k22_sdhc_insert(&sdhc, card, sizeof(card), false)");
+
     expect(state, k22_sdhc_irq(&sdhc), "k22_sdhc_irq(&sdhc)");
     expect(state, (read_register(state, &sdhc, SDHC_PRSSTAT) & (1u << 16u)) != 0u,
            "(read_register(state, &sdhc, SDHC_PRSSTAT) & (1u << 16u)) != 0u");
@@ -128,32 +131,34 @@ static void expect_initialization_and_access(TestState* state) {
     write_register(state, &sdhc, SDHC_DATPORT, 0x55667788u);
     write_register(state, &sdhc, SDHC_DATPORT, 0x99aabbccu);
     write_register(state, &sdhc, SDHC_DATPORT, 0xddeeff00u);
-    uint32_t stored[4] = {0};
-    expect(state, k22_sdhc_read_card(&sdhc, 0u, stored, sizeof(stored)),
-           "k22_sdhc_read_card(&sdhc, 0u, stored, sizeof(stored))");
-    expect(state, stored[0] == 0x11223344u, "stored[0] == 0x11223344u");
-    expect(state, stored[3] == 0xddeeff00u, "stored[3] == 0xddeeff00u");
+    uint32_t stored_words[4] = {0};
+    expect(state, k22_sdhc_read_card(&sdhc, 0u, stored_words, sizeof(stored_words)),
+           "k22_sdhc_read_card(&sdhc, 0u, stored_words, sizeof(stored_words))");
+    expect(state, stored_words[0] == 0x11223344u, "stored_words[0] == 0x11223344u");
+    expect(state, stored_words[3] == 0xddeeff00u, "stored_words[3] == 0xddeeff00u");
 
     write_register(state, &sdhc, SDHC_DSADDR, 0x100u);
     command(state, &sdhc, 17u, 1u, 1u);
     expect(state, memcmp(memory.data + 0x100u, card + 512u, 16u) == 0,
            "memcmp(memory.data + 0x100u, card + 512u, 16u) == 0");
-    for (size_t index = 0u; index < 16u; index++)
-        memory.data[0x200u + index] = (uint8_t)(0xf0u + index);
+
+    for (size_t card_index = 0u; card_index < 16u; card_index++) {
+        memory.data[0x200u + card_index] = (uint8_t)(0xf0u + card_index);
+    }
     write_register(state, &sdhc, SDHC_DSADDR, 0x200u);
     command(state, &sdhc, 24u, 1u, 1u);
-    uint8_t written[16] = {0};
-    expect(state, k22_sdhc_read_card(&sdhc, 512u, written, sizeof(written)),
-           "k22_sdhc_read_card(&sdhc, 512u, written, sizeof(written))");
-    expect(state, memcmp(written, memory.data + 0x200u, sizeof(written)) == 0,
-           "memcmp(written, memory.data + 0x200u, sizeof(written)) == 0");
+    uint8_t written_bytes[16] = {0};
+    expect(state, k22_sdhc_read_card(&sdhc, 512u, written_bytes, sizeof(written_bytes)),
+           "k22_sdhc_read_card(&sdhc, 512u, written_bytes, sizeof(written_bytes))");
+    expect(state, memcmp(written_bytes, memory.data + 0x200u, sizeof(written_bytes)) == 0,
+           "memcmp(written_bytes, memory.data + 0x200u, sizeof(written_bytes)) == 0");
 
     expect(state, read_register(state, &sdhc, SDHC_HOSTVER) == 0x00001201u,
            "read_register(state, &sdhc, SDHC_HOSTVER) == 0x00001201u");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE + 0x48u, 4u, stored),
-           "!k22_sdhc_read(&sdhc, SDHC_BASE + 0x48u, 4u, stored)");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE, 1u, stored),
-           "!k22_sdhc_read(&sdhc, SDHC_BASE, 1u, stored)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE + 0x48u, 4u, stored_words),
+           "!k22_sdhc_read(&sdhc, SDHC_BASE + 0x48u, 4u, stored_words)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE, 1u, stored_words),
+           "!k22_sdhc_read(&sdhc, SDHC_BASE, 1u, stored_words)");
     k22_sdhc_destroy(&sdhc);
 }
 
@@ -181,10 +186,11 @@ static void expect_errors_reset_and_copy(TestState* state) {
     const K22SdhcBus bus = {&memory, bus_read, bus_write};
     expect(state, k22_sdhc_copy(&copy, &sdhc, bus), "k22_sdhc_copy(&copy, &sdhc, bus)");
     k22_sdhc_eject(&sdhc);
-    uint8_t value = 0u;
-    expect(state, k22_sdhc_read_card(&copy, 0u, &value, 1u),
-           "k22_sdhc_read_card(&copy, 0u, &value, 1u)");
-    expect(state, value == 0xa5u, "value == 0xa5u");
+    uint8_t read_value = 0u;
+    expect(state, k22_sdhc_read_card(&copy, 0u, &read_value, 1u),
+           "k22_sdhc_read_card(&copy, 0u, &read_value, 1u)");
+    expect(state, read_value == 0xa5u, "read_value == 0xa5u");
+
     k22_sdhc_reset(&copy);
     k22_sdhc_set_clock(&copy, true);
     expect(state, (read_register(state, &copy, SDHC_PRSSTAT) & (1u << 16u)) != 0u,
@@ -200,8 +206,10 @@ static void expect_command_and_transfer_lifecycle(TestState* state) {
     BusMemory memory = {0};
     K22Sdhc sdhc = create_sdhc(state, &memory);
     uint8_t card[1024];
-    for (size_t index = 0u; index < sizeof(card); index++)
-        card[index] = (uint8_t)(index ^ 0x5au);
+    for (size_t card_index = 0u; card_index < sizeof(card); card_index++) {
+        card[card_index] = (uint8_t)(card_index ^ 0x5au);
+    }
+
     expect(state, k22_sdhc_insert(&sdhc, card, sizeof(card), false),
            "k22_sdhc_insert(&sdhc, card, sizeof(card), false)");
 
@@ -242,25 +250,27 @@ static void expect_command_and_transfer_lifecycle(TestState* state) {
 
     write_register(state, &sdhc, SDHC_BLKATTR, 2u << 16u);
     command(state, &sdhc, 18u, 0u, 0u);
-    for (size_t offset = 0u; offset < 16u; offset += 4u) {
-        uint32_t expected = 0u;
-        memcpy(&expected, card + offset, sizeof(expected));
-        expect(state, read_register(state, &sdhc, SDHC_DATPORT) == expected,
-               "read_register(state, &sdhc, SDHC_DATPORT) == expected");
+    for (size_t card_offset = 0u; card_offset < 16u; card_offset += 4u) {
+        uint32_t expected_word = 0u;
+        memcpy(&expected_word, card + card_offset, sizeof(expected_word));
+        expect(state, read_register(state, &sdhc, SDHC_DATPORT) == expected_word,
+               "read_register(state, &sdhc, SDHC_DATPORT) == expected_word");
     }
     expect(state, (read_register(state, &sdhc, SDHC_IRQSTAT) & 2u) != 0u,
            "(read_register(state, &sdhc, SDHC_IRQSTAT) & 2u) != 0u");
 
     write_register(state, &sdhc, SDHC_BLKATTR, 8u | (2u << 16u));
     command(state, &sdhc, 25u, 1u, 0u);
-    const uint32_t words[] = {0x10203040u, 0x50607080u, 0x90a0b0c0u, 0xd0e0f000u};
-    for (size_t index = 0u; index < sizeof(words) / sizeof(words[0]); index++)
-        write_register(state, &sdhc, SDHC_DATPORT, words[index]);
-    uint32_t stored[4] = {0};
-    expect(state, k22_sdhc_read_card(&sdhc, 512u, stored, sizeof(stored)),
-           "k22_sdhc_read_card(&sdhc, 512u, stored, sizeof(stored))");
-    expect(state, memcmp(stored, words, sizeof(words)) == 0,
-           "memcmp(stored, words, sizeof(words)) == 0");
+    const uint32_t write_words[] = {0x10203040u, 0x50607080u, 0x90a0b0c0u, 0xd0e0f000u};
+    for (size_t word_index = 0u; word_index < sizeof(write_words) / sizeof(write_words[0]);
+         word_index++) {
+        write_register(state, &sdhc, SDHC_DATPORT, write_words[word_index]);
+    }
+    uint32_t stored_words[4] = {0};
+    expect(state, k22_sdhc_read_card(&sdhc, 512u, stored_words, sizeof(stored_words)),
+           "k22_sdhc_read_card(&sdhc, 512u, stored_words, sizeof(stored_words))");
+    expect(state, memcmp(stored_words, write_words, sizeof(write_words)) == 0,
+           "memcmp(stored_words, write_words, sizeof(write_words)) == 0");
 
     write_register(state, &sdhc, SDHC_BLKATTR, 4u);
     command(state, &sdhc, 18u, 0u, 0u);
@@ -339,28 +349,28 @@ static void expect_invalid_inputs(TestState* state) {
     expect(state, !k22_sdhc_read_card(&sdhc, 0u, memory.data, 1u),
            "!k22_sdhc_read_card(&sdhc, 0u, memory.data, 1u)");
     expect(state, !k22_sdhc_irq(NULL), "!k22_sdhc_irq(NULL)");
-    uint32_t value = 0u;
-    expect(state, !k22_sdhc_read(NULL, SDHC_BASE, 4u, &value),
-           "!k22_sdhc_read(NULL, SDHC_BASE, 4u, &value)");
+    uint32_t read_value = 0u;
+    expect(state, !k22_sdhc_read(NULL, SDHC_BASE, 4u, &read_value),
+           "!k22_sdhc_read(NULL, SDHC_BASE, 4u, &read_value)");
     expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE, 4u, NULL),
            "!k22_sdhc_read(&sdhc, SDHC_BASE, 4u, NULL)");
     expect(state, !k22_sdhc_write(NULL, SDHC_BASE, 4u, 0u),
            "!k22_sdhc_write(NULL, SDHC_BASE, 4u, 0u)");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE, 4u, &value),
-           "!k22_sdhc_read(&sdhc, SDHC_BASE, 4u, &value)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE, 4u, &read_value),
+           "!k22_sdhc_read(&sdhc, SDHC_BASE, 4u, &read_value)");
     expect(state, !k22_sdhc_write(&sdhc, SDHC_BASE, 4u, 0u),
            "!k22_sdhc_write(&sdhc, SDHC_BASE, 4u, 0u)");
     k22_sdhc_set_clock(&sdhc, true);
     expect(state,
-           !k22_sdhc_read(&sdhc, SDHC_DATPORT, 4u, &value) &&
+           !k22_sdhc_read(&sdhc, SDHC_DATPORT, 4u, &read_value) &&
                !k22_sdhc_write(&sdhc, SDHC_DATPORT, 4u, 0u),
            "inactive SDHC data port rejects transfers");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE - 4u, 4u, &value),
-           "!k22_sdhc_read(&sdhc, SDHC_BASE - 4u, 4u, &value)");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE + 2u, 4u, &value),
-           "!k22_sdhc_read(&sdhc, SDHC_BASE + 2u, 4u, &value)");
-    expect(state, !k22_sdhc_read(&sdhc, SDHC_HOSTVER + 4u, 4u, &value),
-           "!k22_sdhc_read(&sdhc, SDHC_HOSTVER + 4u, 4u, &value)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE - 4u, 4u, &read_value),
+           "!k22_sdhc_read(&sdhc, SDHC_BASE - 4u, 4u, &read_value)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_BASE + 2u, 4u, &read_value),
+           "!k22_sdhc_read(&sdhc, SDHC_BASE + 2u, 4u, &read_value)");
+    expect(state, !k22_sdhc_read(&sdhc, SDHC_HOSTVER + 4u, 4u, &read_value),
+           "!k22_sdhc_read(&sdhc, SDHC_HOSTVER + 4u, 4u, &read_value)");
     expect(state, !k22_sdhc_write(&sdhc, SDHC_HOSTVER, 4u, 0u),
            "!k22_sdhc_write(&sdhc, SDHC_HOSTVER, 4u, 0u)");
     k22_sdhc_destroy(&sdhc);
