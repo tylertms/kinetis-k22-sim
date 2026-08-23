@@ -133,11 +133,11 @@ static bool is_lptmr_running(const K22Timing* timing) {
 }
 
 bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing) {
-    const uint8_t input = (uint8_t)((timing->lptmr_csr >> 4u) & 3u);
-    if (input >= 3u)
+    const uint8_t input_index = (uint8_t)((timing->lptmr_csr >> 4u) & 3u);
+    if (input_index >= 3u)
         return false;
-    const bool high = timing->lptmr_input[input];
-    return (timing->lptmr_csr & 8u) == 0 ? high : !high;
+    const bool input_high = timing->lptmr_input[input_index];
+    return (timing->lptmr_csr & 8u) == 0 ? input_high : !input_high;
 }
 
 static void advance_lptmr_counter(K22Timing* timing, uint64_t ticks) {
@@ -207,13 +207,13 @@ void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles) {
     advance_lptmr_counter(timing, ticks);
 }
 
-bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input, bool high) {
-    if (timing == NULL || timing->profile == NULL || input >= 3u ||
+bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input_index, bool input_high) {
+    if (timing == NULL || timing->profile == NULL || input_index >= 3u ||
         !k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0))
         return false;
-    timing->lptmr_input[input] = high;
+    timing->lptmr_input[input_index] = input_high;
     if (!is_lptmr_running(timing) || (timing->lptmr_csr & 2u) == 0 ||
-        (timing->lptmr_psr & 4u) == 0 || ((timing->lptmr_csr >> 4u) & 3u) != input)
+        (timing->lptmr_psr & 4u) == 0 || ((timing->lptmr_csr >> 4u) & 3u) != input_index)
         return true;
     const bool active = k22_timing_internal_lptmr_selected_active(timing);
     if (active != timing->lptmr_observed_active) {
