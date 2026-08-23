@@ -27,10 +27,10 @@ static void crc_accumulate(K22Data* data, uint8_t input_byte) {
 static uint32_t crc_result(const K22Data* data) {
     const bool wide_crc = (data->crc_control & 0x01000000u) != 0u;
     const uint8_t crc_bit_count = wide_crc ? 32u : 16u;
-    const uint32_t stored_high = wide_crc ? 0u : data->crc_value & 0xffff0000u;
+    const uint32_t stored_high_bits = wide_crc ? 0u : data->crc_value & 0xffff0000u;
     uint32_t crc_value = data->crc_value;
     const uint8_t transpose = (uint8_t)((data->crc_control >> 28) & 3u);
-    uint32_t transformed = 0;
+    uint32_t transformed_value = 0;
     const uint8_t byte_count = (uint8_t)(crc_bit_count / 8u);
     for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
         uint8_t output_byte = (uint8_t)(crc_value >> (byte_index * 8u));
@@ -38,12 +38,12 @@ static uint32_t crc_result(const K22Data* data) {
             output_byte = (uint8_t)reverse_bits(output_byte, 8u);
         const uint8_t target_index =
             transpose >= 2 ? (uint8_t)(byte_count - 1u - byte_index) : byte_index;
-        transformed |= (uint32_t)output_byte << (target_index * 8u);
+        transformed_value |= (uint32_t)output_byte << (target_index * 8u);
     }
-    crc_value = transformed;
+    crc_value = transformed_value;
     if ((data->crc_control & 0x04000000u) != 0)
         crc_value = ~crc_value;
-    return wide_crc ? crc_value : stored_high | (crc_value & 0xffffu);
+    return wide_crc ? crc_value : stored_high_bits | (crc_value & 0xffffu);
 }
 
 bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_count,
@@ -69,9 +69,10 @@ bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t byte_c
         return false;
     if (register_offset < 4u) {
         if ((data->crc_control & 0x02000000u) != 0) {
-            uint32_t mask = byte_count == 4u ? UINT32_MAX : (1u << (byte_count * 8u)) - 1u;
-            data->crc_value = (data->crc_value & ~(mask << (register_offset * 8u))) |
-                              ((write_value & mask) << (register_offset * 8u));
+            const uint32_t write_mask =
+                byte_count == 4u ? UINT32_MAX : (1u << (byte_count * 8u)) - 1u;
+            data->crc_value = (data->crc_value & ~(write_mask << (register_offset * 8u))) |
+                              ((write_value & write_mask) << (register_offset * 8u));
             return true;
         }
         const uint8_t transpose = (uint8_t)((data->crc_control >> 30) & 3u);
