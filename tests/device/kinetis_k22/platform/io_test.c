@@ -32,10 +32,10 @@ static void record_event(void* context, const K22IoEvent* event) {
 }
 
 static uint32_t read_value(TestState* state, K22Io* io, uint32_t address, uint8_t access_size) {
-    uint32_t read_data = 0u;
-    expect(state, k22_io_read(io, address, access_size, &read_data),
-           "k22_io_read(io, address, access_size, &read_data)");
-    return read_data;
+    uint32_t output_value = 0u;
+    expect(state, k22_io_read(io, address, access_size, &output_value),
+           "k22_io_read(io, address, access_size, &output_value)");
+    return output_value;
 }
 
 static void write_value(TestState* state, K22Io* io, uint32_t address, uint8_t access_size,
@@ -79,14 +79,17 @@ static void test_reset_clock_and_configuration(TestState* state) {
     K22Io io;
     expect(state, !k22_io_init(NULL, configuration), "!k22_io_init(NULL, configuration)");
     expect(state, k22_io_init(&io, configuration), "k22_io_init(&io, configuration)");
+
     expect(state, read_value(state, &io, 0x400u, 2) == 0x3412u,
            "read_value(state, &io, 0x400u, 2) == 0x3412u");
     expect(state, !k22_io_write(&io, 0x400u, 1, 0), "!k22_io_write(&io, 0x400u, 1, 0)");
+
     uint32_t read_data = 0u;
     expect(state, !k22_io_read(&io, PORTA, 4, &read_data),
            "!k22_io_read(&io, PORTA, 4, &read_data)");
     expect(state, has_event(&log, K22_IO_EVENT_ACCESS_ERROR, PORTA),
            "has_event(&log, K22_IO_EVENT_ACCESS_ERROR, PORTA)");
+
     k22_io_set_clock(&io, K22_PERIPHERAL_PORTA, true);
     expect(state, k22_io_clock_enabled(&io, K22_PERIPHERAL_PORTA),
            "k22_io_clock_enabled(&io, K22_PERIPHERAL_PORTA)");
@@ -94,6 +97,7 @@ static void test_reset_clock_and_configuration(TestState* state) {
            "k22_io_clock_enabled(&io, K22_PERIPHERAL_GPIOA)");
     expect(state, read_value(state, &io, PORTA, 4) == 0x702u,
            "read_value(state, &io, PORTA, 4) == 0x702u");
+
     expect(state, !k22_io_read(&io, PORTA + 16u, 4, &read_data),
            "!k22_io_read(&io, PORTA + 16u, 4, &read_data)");
     expect(state, read_value(state, &io, MCM, 2) == 0x1fu,
