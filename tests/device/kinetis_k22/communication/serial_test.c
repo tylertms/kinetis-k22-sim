@@ -83,9 +83,11 @@ static void test_profiles_and_gates(TestState* state) {
 
 static void test_uart_transfer_status_interrupt_and_dma(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
+
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART0, true)");
     serial.uart[0].registers[UART_S1] |= 0x10u;
+
     write_register(state, &serial, UART0_BASE + 3, 1, 0x10u);
     expect(state, k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0),
            "k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0)");
@@ -96,12 +98,13 @@ static void test_uart_transfer_status_interrupt_and_dma(TestState* state) {
     write_register(state, &serial, UART0_BASE + 0x0b, 1, 0x20u);
     expect(state, k22_serial_push_receive(&serial, K22_SERIAL_UART0, 0x15au, 0x02u),
            "k22_serial_push_receive(&serial, K22_SERIAL_UART0, 0x15au, 0x02u)");
+
     k22_serial_advance(&serial, 159);
     expect(state, (read_register(state, &serial, UART0_BASE + 4, 1) & 0x20u) == 0,
            "(read_register(state, &serial, UART0_BASE + 4, 1) & 0x20u) == 0");
     k22_serial_advance(&serial, 1);
-    uint32_t status = read_register(state, &serial, UART0_BASE + 4, 1);
-    expect(state, (status & 0x22u) == 0x22u, "(status & 0x22u) == 0x22u");
+    uint32_t status_register = read_register(state, &serial, UART0_BASE + 4, 1);
+    expect(state, (status_register & 0x22u) == 0x22u, "(status_register & 0x22u) == 0x22u");
     expect(state, k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0),
            "k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0)");
     expect(state, k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0_ERROR),
@@ -116,60 +119,65 @@ static void test_uart_transfer_status_interrupt_and_dma(TestState* state) {
            "!k22_serial_irq(&serial, K22_SERIAL_IRQ_UART0)");
 
     write_register(state, &serial, UART0_BASE + 7, 1, 0xa5u);
+
     k22_serial_advance(&serial, 159);
-    uint16_t transmitted = 0;
-    expect(state, !k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted),
-           "!k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted)");
+    uint16_t transmitted_value = 0;
+    expect(state, !k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted_value),
+           "!k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted_value)");
     k22_serial_advance(&serial, 1);
-    expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted),
-           "k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted)");
-    expect(state, transmitted == 0xa5u, "transmitted == 0xa5u");
+    expect(state, k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted_value),
+           "k22_serial_pop_transmit(&serial, K22_SERIAL_UART0, &transmitted_value)");
+    expect(state, transmitted_value == 0xa5u, "transmitted_value == 0xa5u");
     expect(state, (read_register(state, &serial, UART0_BASE + 4, 1) & 0xc0u) == 0xc0u,
            "(read_register(state, &serial, UART0_BASE + 4, 1) & 0xc0u) == 0xc0u");
 }
 
 static void test_uart_fifo_overrun_flush_and_copy(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
+
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART1, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_UART1, true)");
-    uint32_t base = serial.uart[1].base;
-    write_register(state, &serial, base, 1, 0);
-    write_register(state, &serial, base + 1, 1, 1);
-    write_register(state, &serial, base + 3, 1, 0x04u);
+
+    uint32_t uart_base = serial.uart[1].base;
+    write_register(state, &serial, uart_base, 1, 0);
+    write_register(state, &serial, uart_base + 1, 1, 1);
+    write_register(state, &serial, uart_base + 3, 1, 0x04u);
     expect(state, k22_serial_push_receive(&serial, K22_SERIAL_UART1, 0x11, 0),
            "k22_serial_push_receive(&serial, K22_SERIAL_UART1, 0x11, 0)");
     expect(state, k22_serial_push_receive(&serial, K22_SERIAL_UART1, 0x22, 0),
            "k22_serial_push_receive(&serial, K22_SERIAL_UART1, 0x22, 0)");
     k22_serial_advance(&serial, 320);
-    expect(state, (read_register(state, &serial, base + 4, 1) & 0x08u) != 0,
-           "(read_register(state, &serial, base + 4, 1) & 0x08u) != 0");
-    expect(state, (read_register(state, &serial, base + 0x12, 1) & 0x04u) != 0,
-           "(read_register(state, &serial, base + 0x12, 1) & 0x04u) != 0");
-    write_register(state, &serial, base + 0x12, 1, 0x04u);
-    write_register(state, &serial, base + 0x11, 1, 0x40u);
-    expect(state, read_register(state, &serial, base + 0x16, 1) == 0,
-           "read_register(state, &serial, base + 0x16, 1) == 0");
+    expect(state, (read_register(state, &serial, uart_base + 4, 1) & 0x08u) != 0,
+           "(read_register(state, &serial, uart_base + 4, 1) & 0x08u) != 0");
+    expect(state, (read_register(state, &serial, uart_base + 0x12, 1) & 0x04u) != 0,
+           "(read_register(state, &serial, uart_base + 0x12, 1) & 0x04u) != 0");
+    write_register(state, &serial, uart_base + 0x12, 1, 0x04u);
+    write_register(state, &serial, uart_base + 0x11, 1, 0x40u);
+    expect(state, read_register(state, &serial, uart_base + 0x16, 1) == 0,
+           "read_register(state, &serial, uart_base + 0x16, 1) == 0");
 
-    write_register(state, &serial, base + 0x10, 1, 0x88u);
-    for (uint16_t value = 0; value < 8; value++)
-        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_UART1, value, 0),
-               "k22_serial_push_receive(&serial, K22_SERIAL_UART1, value, 0)");
+    write_register(state, &serial, uart_base + 0x10, 1, 0x88u);
+    for (uint16_t receive_value = 0u; receive_value < 8u; receive_value++) {
+        expect(state, k22_serial_push_receive(&serial, K22_SERIAL_UART1, receive_value, 0),
+               "k22_serial_push_receive(&serial, K22_SERIAL_UART1, receive_value, 0)");
+    }
     k22_serial_advance(&serial, 1280);
-    expect(state, read_register(state, &serial, base + 0x16, 1) == 1,
-           "read_register(state, &serial, base + 0x16, 1) == 1");
+    expect(state, read_register(state, &serial, uart_base + 0x16, 1) == 1,
+           "read_register(state, &serial, uart_base + 0x16, 1) == 1");
 
-    K22Serial copy;
-    expect(state, k22_serial_copy(&copy, &serial), "k22_serial_copy(&copy, &serial)");
-    expect(state, memcmp(&copy, &serial, sizeof(serial)) == 0,
-           "memcmp(&copy, &serial, sizeof(serial)) == 0");
-    k22_serial_reset(&copy);
-    expect(state, !copy.uart[1].clock_enabled, "!copy.uart[1].clock_enabled");
-    expect(state, copy.uart[1].receive.count == 0, "copy.uart[1].receive.count == 0");
+    K22Serial serial_copy;
+    expect(state, k22_serial_copy(&serial_copy, &serial), "k22_serial_copy(&serial_copy, &serial)");
+    expect(state, memcmp(&serial_copy, &serial, sizeof(serial)) == 0,
+           "memcmp(&serial_copy, &serial, sizeof(serial)) == 0");
+    k22_serial_reset(&serial_copy);
+    expect(state, !serial_copy.uart[1].clock_enabled, "!serial_copy.uart[1].clock_enabled");
+    expect(state, serial_copy.uart[1].receive.count == 0, "serial_copy.uart[1].receive.count == 0");
     expect(state, serial.uart[1].receive.count != 0, "serial.uart[1].receive.count != 0");
 }
 
 static void test_lpuart(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
+
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_LPUART0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_LPUART0, true)");
     expect(state, read_register(state, &serial, LPUART0_BASE, 4) == 0x0f000004u,
