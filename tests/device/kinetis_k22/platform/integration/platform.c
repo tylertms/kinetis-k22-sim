@@ -137,11 +137,13 @@ static void launch_swap_command(TestState* state, KinetisK22* device, uint32_t a
                                 uint8_t control) {
     const uint8_t command[5] = {0x46u, (uint8_t)(address >> 16u), (uint8_t)(address >> 8u),
                                 (uint8_t)address, control};
-    for (uint8_t index = 0u; index < sizeof(command); index++)
-        expect(
-            state,
-            k22_integration_test_cpu_write8(device, flash_fccob_address(index), command[index]),
-            "k22_integration_test_cpu_write8(device, flash_fccob_address(index), command[index])");
+    for (uint8_t command_index = 0u; command_index < sizeof(command); command_index++) {
+        expect(state,
+               k22_integration_test_cpu_write8(device, flash_fccob_address(command_index),
+                                               command[command_index]),
+               "k22_integration_test_cpu_write8(device, flash_fccob_address(command_index), "
+               "command[command_index])");
+    }
     expect(state, k22_integration_test_cpu_write8(device, FTFA_FSTAT, 0x80u),
            "k22_integration_test_cpu_write8(device, FTFA_FSTAT, 0x80u)");
     kinetis_k22_advance(device, 40u);
@@ -150,25 +152,25 @@ static void launch_swap_command(TestState* state, KinetisK22* device, uint32_t a
 void k22_integration_test_expect_integrated_flash_swap(TestState* state) {
     KinetisK22* device =
         k22_integration_test_create_f12_device(state, KINETIS_K22_PACKAGE_MC_121_MAPBGA);
-    uint8_t lower = 0x11u;
-    uint8_t upper = 0x22u;
-    expect(state, kinetis_k22_write(device, 0x20u, &lower, sizeof(lower)),
-           "kinetis_k22_write(device, 0x20u, &lower, sizeof(lower))");
-    expect(state, kinetis_k22_write(device, 0x80020u, &upper, sizeof(upper)),
-           "kinetis_k22_write(device, 0x80020u, &upper, sizeof(upper))");
+    uint8_t lower_bank_byte = 0x11u;
+    uint8_t upper_bank_byte = 0x22u;
+    expect(state, kinetis_k22_write(device, 0x20u, &lower_bank_byte, sizeof(lower_bank_byte)),
+           "kinetis_k22_write(device, 0x20u, &lower_bank_byte, sizeof(lower_bank_byte))");
+    expect(state, kinetis_k22_write(device, 0x80020u, &upper_bank_byte, sizeof(upper_bank_byte)),
+           "kinetis_k22_write(device, 0x80020u, &upper_bank_byte, sizeof(upper_bank_byte))");
     launch_swap_command(state, device, 0x1000u, 1u);
     launch_swap_command(state, device, 0x1000u, 4u);
     expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    uint8_t value = 0u;
-    expect(state, k22_integration_test_read8(device, 0x20u, &value),
-           "k22_integration_test_read8(device, 0x20u, &value)");
-    expect(state, value == upper, "value == upper");
-    expect(state, k22_integration_test_read8(device, 0x80020u, &value),
-           "k22_integration_test_read8(device, 0x80020u, &value)");
-    expect(state, value == lower, "value == lower");
-    expect(state, k22_integration_test_read8(device, FTFA_FSTAT + 1u, &value),
-           "k22_integration_test_read8(device, FTFA_FSTAT + 1u, &value)");
-    expect(state, (value & 8u) != 0u, "(value & 8u) != 0u");
+    uint8_t read_byte = 0u;
+    expect(state, k22_integration_test_read8(device, 0x20u, &read_byte),
+           "k22_integration_test_read8(device, 0x20u, &read_byte)");
+    expect(state, read_byte == upper_bank_byte, "read_byte == upper_bank_byte");
+    expect(state, k22_integration_test_read8(device, 0x80020u, &read_byte),
+           "k22_integration_test_read8(device, 0x80020u, &read_byte)");
+    expect(state, read_byte == lower_bank_byte, "read_byte == lower_bank_byte");
+    expect(state, k22_integration_test_read8(device, FTFA_FSTAT + 1u, &read_byte),
+           "k22_integration_test_read8(device, FTFA_FSTAT + 1u, &read_byte)");
+    expect(state, (read_byte & 8u) != 0u, "(read_byte & 8u) != 0u");
     kinetis_k22_destroy(device);
 }
 
@@ -227,13 +229,13 @@ void k22_integration_test_expect_can_irq_level(TestState* state) {
            "k22_integration_test_write32(device, CAN0_IMASK1, 1u)");
     expect(state, k22_integration_test_write32(device, CAN0_MB0_CS, 4u << 24u),
            "k22_integration_test_write32(device, CAN0_MB0_CS, 4u << 24u)");
-    const KinetisK22CanFrame frame = {
+    const KinetisK22CanFrame receive_frame = {
         .identifier = 0x123u,
         .length = 8u,
         .data = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u},
     };
-    expect(state, kinetis_k22_can_receive(device, &frame),
-           "kinetis_k22_can_receive(device, &frame)");
+    expect(state, kinetis_k22_can_receive(device, &receive_frame),
+           "kinetis_k22_can_receive(device, &receive_frame)");
     expect(state, irq_level(device, 75u), "irq_level(device, 75u)");
     expect(state, k22_integration_test_write32(device, CAN0_IFLAG1, 1u),
            "k22_integration_test_write32(device, CAN0_IFLAG1, 1u)");
