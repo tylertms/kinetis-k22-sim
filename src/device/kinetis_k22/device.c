@@ -53,7 +53,7 @@ static uint32_t fmc_data_address(uint8_t cache_way, uint8_t cache_set, uint8_t w
     return 0x4001f200u + ((uint32_t)cache_way * 4u + cache_set) * 16u + (3u - word_index) * 4u;
 }
 
-static uint32_t fmc_tag_value(const KinetisK22* device, uint32_t cache_line);
+static uint32_t fmc_tag_value(const KinetisK22* device, uint32_t cache_line_address);
 
 static void fmc_clear_entry(KinetisK22* device, uint8_t cache_way, uint8_t cache_set) {
     fmc_raw_store(device, fmc_tag_address(cache_way, cache_set), 0u);
@@ -65,9 +65,9 @@ static void fmc_clear_entry(KinetisK22* device, uint8_t cache_way, uint8_t cache
 }
 
 static void fmc_clear_cache(KinetisK22* device) {
-    for (uint8_t way = 0u; way < 4u; way++) {
+    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
         for (uint8_t cache_set = 0u; cache_set < 4u; cache_set++) {
-            fmc_clear_entry(device, way, cache_set);
+            fmc_clear_entry(device, cache_way, cache_set);
         }
     }
     device->fmc_access_count = 0u;
@@ -109,17 +109,17 @@ static uint8_t fmc_replacement_way(KinetisK22* device, uint8_t cache_set, bool i
             return cache_way;
         }
     }
-    uint8_t selected_way = UINT8_MAX;
+    uint8_t selected_cache_way = UINT8_MAX;
     uint64_t oldest_age = UINT64_MAX;
     for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
         if ((locked_way_mask & (1u << cache_way)) == 0u &&
             fmc_way_allowed(replacement_mode, instruction_access, cache_way) &&
             device->fmc_age[cache_way][cache_set] < oldest_age) {
-            selected_way = cache_way;
+            selected_cache_way = cache_way;
             oldest_age = device->fmc_age[cache_way][cache_set];
         }
     }
-    return selected_way;
+    return selected_cache_way;
 }
 
 static uint8_t fmc_source_byte(KinetisK22* device, uint8_t flash_bank, uint32_t flash_offset) {
@@ -177,126 +177,131 @@ static bool fmc_cache_enabled(const KinetisK22* device, uint8_t bank, CortexM4Ac
     return (cache_control & (access == CORTEX_M4_ACCESS_INSTRUCTION ? 8u : 16u)) != 0u;
 }
 
-static bool sysmpu_access_allowed(KinetisK22* device, uint32_t address, uint8_t size,
+static bool sysmpu_access_allowed(KinetisK22* device, uint32_t address, uint8_t access_size,
                                   uint8_t master, bool supervisor, K22SysMpuAccess access) {
     if (!k22_profile_has_peripheral(device->profile, K22_PERIPHERAL_SYSMPU) ||
         !k22_io_clock_enabled(&device->io, K22_PERIPHERAL_SYSMPU))
         return true;
     if (!k22_io_sysmpu_access(&device->io, address, master, supervisor, access))
         return false;
-    return k22_io_sysmpu_access(&device->io, address + size - 1u, master, supervisor, access);
+    return k22_io_sysmpu_access(&device->io, address + access_size - 1u, master, supervisor,
+                                access);
 }
 
-static bool memory_read_unprotected(KinetisK22* device, uint32_t address, uint8_t size,
-                                    CortexM4Access access, uint8_t flash_master,
+static bool memory_read_unprotected(KinetisK22* device, uint32_t address, uint8_t access_size,
+                                    CortexM4Access access, uint8_t flash_master_id,
                                     uint32_t* output_value) {
-    if (valid_range(address, size, K22_FLASH_BASE, device->configuration.flash_size)) {
-        if (!flash_access_allowed(device, access, flash_master, false)) {
+    if (valid_range(address, access_size, K22_FLASH_BASE, device->configuration.flash_size)) {
+        if (!flash_access_allowed(device, access, flash_master_id, false)) {
             return false;
         }
-        if (!k22_data_flash_read(device->data, false, address, size)) {
-            *output_value = size == 4u ? UINT32_MAX : (1u << (size * 8u)) - 1u;
+        if (!k22_data_flash_read(device->data, false, address, access_size)) {
+            *output_value = access_size == 4u ? UINT32_MAX : (1u << (access_size * 8u)) - 1u;
             return true;
         }
         if (fmc_cache_enabled(device, 0u, access)) {
             *output_value = 0u;
-            for (uint8_t byte_index = 0u; byte_index < size; byte_index++)
+            for (uint8_t byte_index = 0u; byte_index < access_size; byte_index++) {
                 *output_value |= (uint32_t)fmc_cached_byte(device, 0u, address + byte_index, access)
                                  << (byte_index * 8u);
+            }
         } else {
             *output_value = 0u;
-            for (uint8_t byte_index = 0u; byte_index < size; byte_index++)
+            for (uint8_t byte_index = 0u; byte_index < access_size; byte_index++) {
                 *output_value |=
                     (uint32_t)device
                         ->flash[k22_data_program_flash_address(device->data, address + byte_index)]
                     << (byte_index * 8u);
+            }
         }
         return true;
     }
-    if (valid_range(address, size, device->sram_base, device->configuration.sram_size)) {
-        *output_value = load_little_endian(device->sram + address - device->sram_base, size);
+    if (valid_range(address, access_size, device->sram_base, device->configuration.sram_size)) {
+        *output_value = load_little_endian(device->sram + address - device->sram_base, access_size);
         return true;
     }
     if (device->profile->flexnvm_size != 0u &&
-        valid_range(address, size, device->profile->flexnvm_address,
+        valid_range(address, access_size, device->profile->flexnvm_address,
                     device->profile->flexnvm_size)) {
-        if (!flash_access_allowed(device, access, flash_master, false))
+        if (!flash_access_allowed(device, access, flash_master_id, false))
             return false;
         const uint32_t offset = address - device->profile->flexnvm_address;
-        if (!k22_data_flash_read(device->data, true, offset, size)) {
-            *output_value = size == 4u ? UINT32_MAX : (1u << (size * 8u)) - 1u;
+        if (!k22_data_flash_read(device->data, true, offset, access_size)) {
+            *output_value = access_size == 4u ? UINT32_MAX : (1u << (access_size * 8u)) - 1u;
             return true;
         }
         if (fmc_cache_enabled(device, 1u, access)) {
             *output_value = 0u;
-            for (uint8_t byte_index = 0u; byte_index < size; byte_index++)
+            for (uint8_t byte_index = 0u; byte_index < access_size; byte_index++) {
                 *output_value |= (uint32_t)fmc_cached_byte(device, 1u, offset + byte_index, access)
                                  << (byte_index * 8u);
+            }
             return true;
         }
-        return k22_data_read(device->data, address, size, output_value);
+        return k22_data_read(device->data, address, access_size, output_value);
     }
     if (device->profile->flexram_size != 0u &&
-        valid_range(address, size, device->profile->flexram_address,
+        valid_range(address, access_size, device->profile->flexram_address,
                     device->profile->flexram_size)) {
-        if (!flash_access_allowed(device, access, flash_master, false))
+        if (!flash_access_allowed(device, access, flash_master_id, false))
             return false;
-        return k22_data_read(device->data, address, size, output_value);
+        return k22_data_read(device->data, address, access_size, output_value);
     }
     if (device->flexbus_memory != NULL &&
-        valid_range(address, size, device->flexbus_address, device->flexbus_size) &&
-        k22_io_flexbus_transfer(&device->io, address, size, false, 0u)) {
-        *output_value =
-            load_little_endian(device->flexbus_memory + address - device->flexbus_address, size);
+        valid_range(address, access_size, device->flexbus_address, device->flexbus_size) &&
+        k22_io_flexbus_transfer(&device->io, address, access_size, false, 0u)) {
+        *output_value = load_little_endian(
+            device->flexbus_memory + address - device->flexbus_address, access_size);
         return true;
     }
-    return kinetis_k22_peripheral_read(device, address, size, access, output_value);
+    return kinetis_k22_peripheral_read(device, address, access_size, access, output_value);
 }
 
-static bool memory_write_unprotected(KinetisK22* device, uint32_t address, uint8_t size,
-                                     CortexM4Access access, uint8_t flash_master,
+static bool memory_write_unprotected(KinetisK22* device, uint32_t address, uint8_t access_size,
+                                     CortexM4Access access, uint8_t flash_master_id,
                                      uint32_t write_value) {
-    if (valid_range(address, size, K22_FLASH_BASE, device->configuration.flash_size)) {
+    if (valid_range(address, access_size, K22_FLASH_BASE, device->configuration.flash_size)) {
         if (access != CORTEX_M4_ACCESS_DEBUG) {
             return false;
         }
-        for (uint8_t byte_index = 0u; byte_index < size; byte_index++)
+        for (uint8_t byte_index = 0u; byte_index < access_size; byte_index++) {
             device->flash[k22_data_program_flash_address(device->data, address + byte_index)] =
                 (uint8_t)(write_value >> (byte_index * 8u));
+        }
         fmc_invalidate_line(device, 0u, address);
-        fmc_invalidate_line(device, 0u, address + size - 1u);
+        fmc_invalidate_line(device, 0u, address + access_size - 1u);
         return true;
     }
-    if (valid_range(address, size, device->sram_base, device->configuration.sram_size)) {
-        store_little_endian(device->sram + address - device->sram_base, size, write_value);
+    if (valid_range(address, access_size, device->sram_base, device->configuration.sram_size)) {
+        store_little_endian(device->sram + address - device->sram_base, access_size, write_value);
         return true;
     }
     if (device->profile->flexnvm_size != 0u &&
-        valid_range(address, size, device->profile->flexnvm_address,
+        valid_range(address, access_size, device->profile->flexnvm_address,
                     device->profile->flexnvm_size)) {
         if (access != CORTEX_M4_ACCESS_DEBUG ||
-            !k22_data_write(device->data, address, size, write_value))
+            !k22_data_write(device->data, address, access_size, write_value))
             return false;
         const uint32_t offset = address - device->profile->flexnvm_address;
         fmc_invalidate_line(device, 1u, offset);
-        fmc_invalidate_line(device, 1u, offset + size - 1u);
+        fmc_invalidate_line(device, 1u, offset + access_size - 1u);
         return true;
     }
     if (device->profile->flexram_size != 0u &&
-        valid_range(address, size, device->profile->flexram_address,
+        valid_range(address, access_size, device->profile->flexram_address,
                     device->profile->flexram_size)) {
-        if (!flash_access_allowed(device, access, flash_master, true))
+        if (!flash_access_allowed(device, access, flash_master_id, true))
             return false;
-        return k22_data_write(device->data, address, size, write_value);
+        return k22_data_write(device->data, address, access_size, write_value);
     }
     if (device->flexbus_memory != NULL && !device->flexbus_read_only &&
-        valid_range(address, size, device->flexbus_address, device->flexbus_size) &&
-        k22_io_flexbus_transfer(&device->io, address, size, true, write_value)) {
-        store_little_endian(device->flexbus_memory + address - device->flexbus_address, size,
+        valid_range(address, access_size, device->flexbus_address, device->flexbus_size) &&
+        k22_io_flexbus_transfer(&device->io, address, access_size, true, write_value)) {
+        store_little_endian(device->flexbus_memory + address - device->flexbus_address, access_size,
                             write_value);
         return true;
     }
-    return kinetis_k22_peripheral_write(device, address, size, access, write_value);
+    return kinetis_k22_peripheral_write(device, address, access_size, access, write_value);
 }
 
 bool kinetis_k22_memory_read(KinetisK22* device, uint32_t address, uint8_t size,
