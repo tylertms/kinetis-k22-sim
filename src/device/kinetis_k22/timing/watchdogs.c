@@ -197,8 +197,8 @@ static uint16_t merge_watchdog_write(uint16_t previous_value, uint32_t address, 
     if (size == 2u)
         return (uint16_t)write_value;
     const uint8_t shift = (uint8_t)((address & 1u) * 8u);
-    const uint16_t mask = (uint16_t)(0xffu << shift);
-    return (previous_value & (uint16_t)~mask) | (uint16_t)(((uint8_t)write_value) << shift);
+    const uint16_t byte_mask = (uint16_t)(0xffu << shift);
+    return (previous_value & (uint16_t)~byte_mask) | (uint16_t)(((uint8_t)write_value) << shift);
 }
 
 static void accept_wdog_unlock(K22Timing* timing, uint16_t sequence_value) {
