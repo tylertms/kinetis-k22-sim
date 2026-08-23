@@ -24,9 +24,9 @@ void cortex_m4_raise_fault(CortexM4* cpu, uint8_t exception) {
 
 static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     cortex_m4_timing_begin_exception(cpu);
-    const bool was_in_thread = (cpu->xpsr & 0x1ffu) == 0;
-    const bool used_psp = was_in_thread && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0;
-    uint32_t stack_pointer = used_psp ? cpu->psp : cpu->msp;
+    const bool is_thread_mode = (cpu->xpsr & 0x1ffu) == 0;
+    const bool uses_process_stack = is_thread_mode && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0;
+    uint32_t stack_pointer = uses_process_stack ? cpu->psp : cpu->msp;
     uint32_t exception_return = 0;
     if (!cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &exception_return)) {
         cortex_m4_timing_abort(cpu);
@@ -34,7 +34,7 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
                                                  cpu->exception_frame_memory_management_fault);
         return false;
     }
-    if (used_psp) {
+    if (uses_process_stack) {
         cpu->psp = stack_pointer;
     } else {
         cpu->msp = stack_pointer;
@@ -78,9 +78,10 @@ bool cortex_m4_take_pending_exception(CortexM4* cpu) {
     }
     uint16_t selected_exception = 0;
     const uint8_t system_exceptions[] = {4, 5, 6, 11, 12, 14, 15};
-    for (uint8_t index = 0; index < sizeof(system_exceptions) / sizeof(system_exceptions[0]);
-         index++) {
-        const uint8_t exception = system_exceptions[index];
+    for (uint8_t exception_index = 0;
+         exception_index < sizeof(system_exceptions) / sizeof(system_exceptions[0]);
+         exception_index++) {
+        const uint8_t exception = system_exceptions[exception_index];
         if ((cpu->system_pending & (1u << exception)) == 0) {
             continue;
         }
@@ -124,8 +125,8 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t exception_return) {
         cortex_m4_timing_abort(cpu);
         return true;
     }
-    const bool use_psp = (exception_return & 4u) != 0;
-    uint32_t stack_pointer = use_psp ? cpu->psp : cpu->msp;
+    const bool uses_process_stack = (exception_return & 4u) != 0;
+    uint32_t stack_pointer = uses_process_stack ? cpu->psp : cpu->msp;
     if (!cortex_m4_system_unstack_exception_frame(cpu, &stack_pointer, exception_return,
                                                   current_exception)) {
         cortex_m4_timing_abort(cpu);
@@ -137,7 +138,7 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t exception_return) {
         }
         return true;
     }
-    if (use_psp) {
+    if (uses_process_stack) {
         cpu->psp = stack_pointer;
     } else {
         cpu->msp = stack_pointer;
