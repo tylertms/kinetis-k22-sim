@@ -1,41 +1,41 @@
 #include "device/kinetis_k22/platform/integration/internal.h"
 
-bool k22_integration_test_read8(KinetisK22* device, uint32_t address, uint8_t* value) {
-    return kinetis_k22_read(device, address, value, sizeof(*value));
+bool k22_integration_test_read8(KinetisK22* device, uint32_t address, uint8_t* read_value) {
+    return kinetis_k22_read(device, address, read_value, sizeof(*read_value));
 }
 
-bool k22_integration_test_read32(KinetisK22* device, uint32_t address, uint32_t* value) {
-    return kinetis_k22_read(device, address, value, sizeof(*value));
+bool k22_integration_test_read32(KinetisK22* device, uint32_t address, uint32_t* read_value) {
+    return kinetis_k22_read(device, address, read_value, sizeof(*read_value));
 }
 
-bool k22_integration_test_write16(KinetisK22* device, uint32_t address, uint16_t value) {
-    return kinetis_k22_write(device, address, &value, sizeof(value));
+bool k22_integration_test_write16(KinetisK22* device, uint32_t address, uint16_t write_value) {
+    return kinetis_k22_write(device, address, &write_value, sizeof(write_value));
 }
 
-static bool write8(KinetisK22* device, uint32_t address, uint8_t value) {
-    return kinetis_k22_write(device, address, &value, sizeof(value));
+static bool write8(KinetisK22* device, uint32_t address, uint8_t write_value) {
+    return kinetis_k22_write(device, address, &write_value, sizeof(write_value));
 }
 
-bool k22_integration_test_read16(KinetisK22* device, uint32_t address, uint16_t* value) {
-    return kinetis_k22_read(device, address, value, sizeof(*value));
+bool k22_integration_test_read16(KinetisK22* device, uint32_t address, uint16_t* read_value) {
+    return kinetis_k22_read(device, address, read_value, sizeof(*read_value));
 }
 
-bool k22_integration_test_write32(KinetisK22* device, uint32_t address, uint32_t value) {
-    return kinetis_k22_write(device, address, &value, sizeof(value));
+bool k22_integration_test_write32(KinetisK22* device, uint32_t address, uint32_t write_value) {
+    return kinetis_k22_write(device, address, &write_value, sizeof(write_value));
 }
 
-bool k22_integration_test_cpu_write8(KinetisK22* device, uint32_t address, uint8_t value) {
-    return cortex_m4_write_memory(kinetis_k22_cpu(device), address, 1u, value);
+bool k22_integration_test_cpu_write8(KinetisK22* device, uint32_t address, uint8_t write_value) {
+    return cortex_m4_write_memory(kinetis_k22_cpu(device), address, 1u, write_value);
 }
 
-static bool irq_level(const KinetisK22* device, uint8_t irq) {
+static bool irq_level(const KinetisK22* device, uint8_t interrupt_number) {
     const CortexM4* cpu = kinetis_k22_cpu_const(device);
-    return (cpu->irq_level[irq / 32u] & (1u << (irq & 31u))) != 0u;
+    return (cpu->irq_level[interrupt_number / 32u] & (1u << (interrupt_number & 31u))) != 0u;
 }
 
-static uint32_t flash_fccob_address(uint8_t index) {
+static uint32_t flash_fccob_address(uint8_t byte_index) {
     static const uint8_t offsets[12] = {7u, 6u, 5u, 4u, 11u, 10u, 9u, 8u, 15u, 14u, 13u, 12u};
-    return FTFA_FCCOB3 - 4u + offsets[index];
+    return FTFA_FCCOB3 - 4u + offsets[byte_index];
 }
 
 KinetisK22* k22_integration_test_create_device(TestState* state, KinetisK22Package package) {
@@ -72,58 +72,65 @@ void k22_integration_test_expect_package_selection(TestState* state) {
     invalid.package = KINETIS_K22_PACKAGE_AH_64_WLCSP;
     expect(state, kinetis_k22_create(invalid) == NULL, "kinetis_k22_create(invalid) == NULL");
 
-    KinetisK22* small = k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_LH_64_LQFP);
-    uint16_t value = 0;
+    KinetisK22* small_device =
+        k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_LH_64_LQFP);
+    uint16_t dac_value = 0u;
     uint8_t register_value = 0;
-    expect(state, kinetis_k22_read(small, DAC1_DAT0L, &register_value, sizeof(register_value)),
-           "kinetis_k22_read(small, DAC1_DAT0L, &register_value, sizeof(register_value))");
-    expect(state, kinetis_k22_get_dac_output(small, 1, &value),
-           "kinetis_k22_get_dac_output(small, 1, &value)");
-    kinetis_k22_gpio_drive(small, 4, 31, true);
-    uint32_t input = UINT32_MAX;
-    expect(state, k22_integration_test_read32(small, GPIOA_PDIR + 4u * 0x40u, &input),
-           "k22_integration_test_read32(small, GPIOA_PDIR + 4u * 0x40u, &input)");
-    expect(state, input == 0, "input == 0");
-    kinetis_k22_destroy(small);
+    expect(state,
+           kinetis_k22_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
+           "kinetis_k22_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
+    expect(state, kinetis_k22_get_dac_output(small_device, 1, &dac_value),
+           "kinetis_k22_get_dac_output(small_device, 1, &dac_value)");
+    kinetis_k22_gpio_drive(small_device, 4, 31, true);
+    uint32_t pin_input = UINT32_MAX;
+    expect(state, k22_integration_test_read32(small_device, GPIOA_PDIR + 4u * 0x40u, &pin_input),
+           "k22_integration_test_read32(small_device, GPIOA_PDIR + 4u * 0x40u, &pin_input)");
+    expect(state, pin_input == 0, "pin_input == 0");
+    kinetis_k22_destroy(small_device);
 
-    KinetisK22* large = k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_DC_121_XFBGA);
-    expect(state, kinetis_k22_read(large, DAC1_DAT0L, &register_value, sizeof(register_value)),
-           "kinetis_k22_read(large, DAC1_DAT0L, &register_value, sizeof(register_value))");
-    kinetis_k22_destroy(large);
+    KinetisK22* large_device =
+        k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_DC_121_XFBGA);
+    expect(state,
+           kinetis_k22_read(large_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
+           "kinetis_k22_read(large_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
+    kinetis_k22_destroy(large_device);
 
-    KinetisK22* limited =
+    KinetisK22* limited_device =
         k22_integration_test_create_device(state, KINETIS_K22_PACKAGE_FX_88_HVQFN);
-    expect(state, !kinetis_k22_read(limited, DAC1_DAT0L, &register_value, sizeof(register_value)),
-           "!kinetis_k22_read(limited, DAC1_DAT0L, &register_value, sizeof(register_value))");
-    expect(state, !kinetis_k22_get_dac_output(limited, 1, &value),
-           "!kinetis_k22_get_dac_output(limited, 1, &value)");
-    kinetis_k22_destroy(limited);
+    expect(
+        state,
+        !kinetis_k22_read(limited_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
+        "!kinetis_k22_read(limited_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
+    expect(state, !kinetis_k22_get_dac_output(limited_device, 1, &dac_value),
+           "!kinetis_k22_get_dac_output(limited_device, 1, &dac_value)");
+    kinetis_k22_destroy(limited_device);
 }
 
 void k22_integration_test_expect_integrated_flash_command(TestState* state, KinetisK22* device) {
-    const uint32_t target = 0x00001000u;
-    uint32_t value = 0u;
-    expect(state, k22_integration_test_read32(device, target, &value),
-           "k22_integration_test_read32(device, target, &value)");
-    expect(state, value == UINT32_MAX, "value == UINT32_MAX");
+    const uint32_t target_address = 0x00001000u;
+    uint32_t read_value = 0u;
+    expect(state, k22_integration_test_read32(device, target_address, &read_value),
+           "k22_integration_test_read32(device, target_address, &read_value)");
+    expect(state, read_value == UINT32_MAX, "read_value == UINT32_MAX");
     const uint8_t command[8] = {0x06u, 0x00u, 0x10u, 0x00u, 0x78u, 0x56u, 0x34u, 0x12u};
-    for (uint8_t index = 0u; index < sizeof(command); index++)
-        expect(
-            state,
-            k22_integration_test_cpu_write8(device, flash_fccob_address(index), command[index]),
-            "k22_integration_test_cpu_write8(device, flash_fccob_address(index), command[index])");
+    for (uint8_t command_index = 0u; command_index < sizeof(command); command_index++)
+        expect(state,
+               k22_integration_test_cpu_write8(device, flash_fccob_address(command_index),
+                                               command[command_index]),
+               "k22_integration_test_cpu_write8(device, flash_fccob_address(command_index), "
+               "command[command_index])");
     expect(state, k22_integration_test_cpu_write8(device, FTFA_FSTAT, 0x80u),
            "k22_integration_test_cpu_write8(device, FTFA_FSTAT, 0x80u)");
-    expect(state, k22_integration_test_read32(device, target, &value),
-           "k22_integration_test_read32(device, target, &value)");
-    expect(state, value == UINT32_MAX, "value == UINT32_MAX");
+    expect(state, k22_integration_test_read32(device, target_address, &read_value),
+           "k22_integration_test_read32(device, target_address, &read_value)");
+    expect(state, read_value == UINT32_MAX, "read_value == UINT32_MAX");
     const uint32_t fstat_bit_band = 0x42000000u + (FTFA_FSTAT - 0x40000000u) * 32u + 6u * 4u;
     expect(state, k22_integration_test_write32(device, fstat_bit_band, 1u),
            "k22_integration_test_write32(device, fstat_bit_band, 1u)");
     kinetis_k22_advance(device, 40u);
-    expect(state, k22_integration_test_read32(device, target, &value),
-           "k22_integration_test_read32(device, target, &value)");
-    expect(state, value == 0x12345678u, "value == 0x12345678u");
+    expect(state, k22_integration_test_read32(device, target_address, &read_value),
+           "k22_integration_test_read32(device, target_address, &read_value)");
+    expect(state, read_value == 0x12345678u, "read_value == 0x12345678u");
 }
 
 static void launch_swap_command(TestState* state, KinetisK22* device, uint32_t address,
