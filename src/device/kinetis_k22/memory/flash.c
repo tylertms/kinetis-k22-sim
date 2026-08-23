@@ -131,20 +131,20 @@ static bool flash_memory_range_protected(const K22Data* data, uint32_t address, 
 
 static bool flash_program_words(K22Data* data, uint32_t address, uint8_t words,
                                 bool* verify_failure) {
-    for (uint8_t word = 0; word < words; word++) {
-        const uint8_t offset = (uint8_t)(4u + word * 4u);
-        const uint32_t value = (uint32_t)flash_fccob(data, offset) |
-                               ((uint32_t)flash_fccob(data, offset + 1u) << 8u) |
-                               ((uint32_t)flash_fccob(data, offset + 2u) << 16u) |
-                               ((uint32_t)flash_fccob(data, offset + 3u) << 24u);
-        uint32_t previous = 0;
-        if (!flash_memory_load(data, address + (uint32_t)word * 4u, 4u, &previous))
+    for (uint8_t word_index = 0; word_index < words; word_index++) {
+        const uint8_t offset = (uint8_t)(4u + word_index * 4u);
+        const uint32_t program_word = (uint32_t)flash_fccob(data, offset) |
+                                      ((uint32_t)flash_fccob(data, offset + 1u) << 8u) |
+                                      ((uint32_t)flash_fccob(data, offset + 2u) << 16u) |
+                                      ((uint32_t)flash_fccob(data, offset + 3u) << 24u);
+        uint32_t existing_word = 0;
+        if (!flash_memory_load(data, address + (uint32_t)word_index * 4u, 4u, &existing_word))
             return false;
-        if (previous != UINT32_MAX) {
+        if (existing_word != UINT32_MAX) {
             *verify_failure = true;
             return true;
         }
-        if (!flash_memory_store(data, address + (uint32_t)word * 4u, 4u, value))
+        if (!flash_memory_store(data, address + (uint32_t)word_index * 4u, 4u, program_word))
             return false;
     }
     return true;
@@ -153,15 +153,15 @@ static bool flash_program_words(K22Data* data, uint32_t address, uint8_t words,
 static bool flash_program_buffer(K22Data* data, uint32_t address, uint32_t length,
                                  bool* verify_failure) {
     for (uint32_t offset = 0; offset < length; offset += 4u) {
-        uint32_t previous = 0;
-        if (!flash_memory_load(data, address + offset, 4u, &previous))
+        uint32_t existing_word = 0;
+        if (!flash_memory_load(data, address + offset, 4u, &existing_word))
             return false;
-        if (previous != UINT32_MAX) {
+        if (existing_word != UINT32_MAX) {
             *verify_failure = true;
             return true;
         }
-        const uint32_t value = k22_data_internal_load_bytes(data->flexram, offset, 4u);
-        if (!flash_memory_store(data, address + offset, 4u, value))
+        const uint32_t program_word = k22_data_internal_load_bytes(data->flexram, offset, 4u);
+        if (!flash_memory_store(data, address + offset, 4u, program_word))
             return false;
     }
     return true;
@@ -177,8 +177,8 @@ static bool flash_erase(K22Data* data, uint32_t start, uint32_t length) {
 
 static bool flash_range_erased(K22Data* data, uint32_t start, uint32_t length) {
     for (uint32_t offset = 0; offset < length; offset += 4u) {
-        uint32_t word = 0;
-        if (!flash_memory_load(data, start + offset, 4u, &word) || word != UINT32_MAX)
+        uint32_t stored_word = 0;
+        if (!flash_memory_load(data, start + offset, 4u, &stored_word) || stored_word != UINT32_MAX)
             return false;
     }
     return true;
@@ -303,16 +303,16 @@ static bool flash_verify_key(K22Data* data) {
 }
 
 static bool flash_program_partition(K22Data* data) {
-    static const uint8_t valid_depart[] = {0x00u, 0x03u, 0x04u, 0x05u, 0x08u,
-                                           0x0bu, 0x0cu, 0x0du, 0x0fu};
+    static const uint8_t valid_partition_codes[] = {0x00u, 0x03u, 0x04u, 0x05u, 0x08u,
+                                                    0x0bu, 0x0cu, 0x0du, 0x0fu};
     if (data->profile->flexnvm_size == 0u || data->flash_partitioned)
         return false;
     const uint8_t load_code = flash_fccob(data, 3u);
     const uint8_t eeprom_size_code = flash_fccob(data, 4u);
     const uint8_t partition_code = flash_fccob(data, 5u);
     bool valid_partition_code = false;
-    for (size_t code_index = 0u; code_index < sizeof(valid_depart); code_index++)
-        valid_partition_code |= partition_code == valid_depart[code_index];
+    for (size_t code_index = 0u; code_index < sizeof(valid_partition_codes); code_index++)
+        valid_partition_code |= partition_code == valid_partition_codes[code_index];
     const bool no_eeprom =
         partition_code == 0x00u || partition_code == 0x0du || partition_code == 0x0fu;
     const bool eeprom_disabled = eeprom_size_code == 0x0fu;
