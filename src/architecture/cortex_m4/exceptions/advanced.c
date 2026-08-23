@@ -35,8 +35,8 @@ bool cortex_m4_exception_advanced_active(const CortexM4* cpu, uint16_t exception
     if (cpu == NULL || exception < 2u) {
         return false;
     }
-    for (uint8_t index = 0; index < cpu->exception_depth; index++) {
-        if (cpu->active_exceptions[index] == exception) {
+    for (uint8_t active_index = 0; active_index < cpu->exception_depth; active_index++) {
+        if (cpu->active_exceptions[active_index] == exception) {
             return true;
         }
     }
@@ -175,9 +175,9 @@ bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32
     }
     const bool returns_to_thread = (exception_return & (1u << 3)) != 0u;
     const uint16_t stacked_exception = (uint16_t)(stacked_xpsr & XPSR_EXCEPTION_MASK);
-    const bool ici = (stacked_xpsr & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
-                     ((stacked_xpsr >> 12u) & 15u) != 0u;
-    if (ici) {
+    const bool has_ici_state = (stacked_xpsr & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
+                               ((stacked_xpsr >> 12u) & 15u) != 0u;
+    if (has_ici_state) {
         if (cpu->exception_frame_depth == 0u) {
             return false;
         }
