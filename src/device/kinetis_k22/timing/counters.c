@@ -5,14 +5,16 @@ static uint32_t advance_pit_channel(K22Timing* timing, uint8_t channel, uint64_t
     if ((pit->control & 1u) == 0 || ticks == 0) {
         return 0;
     }
-    const uint64_t first = (uint64_t)pit->current + 1u;
+    const uint64_t first_tick = (uint64_t)pit->current + 1u;
     uint32_t expirations = 0;
-    if (ticks >= first) {
-        ticks -= first;
+    if (ticks >= first_tick) {
+        ticks -= first_tick;
         expirations = 1u;
         const uint64_t period = (uint64_t)pit->load + 1u;
-        const uint64_t additional = ticks / period;
-        expirations = additional >= UINT32_MAX ? UINT32_MAX : expirations + (uint32_t)additional;
+        const uint64_t additional_expirations = ticks / period;
+        expirations = additional_expirations >= UINT32_MAX
+                          ? UINT32_MAX
+                          : expirations + (uint32_t)additional_expirations;
         pit->current = pit->load - (uint32_t)(ticks % period);
         pit->flag = true;
         if ((pit->control & 2u) != 0) {
@@ -34,22 +36,22 @@ void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
     }
     const uint64_t ticks = k22_timing_internal_clock_ticks(
         &timing->pit_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
-    uint64_t source = ticks;
+    uint64_t chained_ticks = ticks;
     for (uint8_t channel = 0; channel < 4; channel++) {
         if ((timing->pit[channel].control & 4u) == 0) {
-            source = ticks;
+            chained_ticks = ticks;
         }
-        source = advance_pit_channel(timing, channel, source);
+        chained_ticks = advance_pit_channel(timing, channel, chained_ticks);
     }
 }
 
 bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* value) {
+                                  uint32_t* output_value) {
     if (size != 4) {
         return false;
     }
     if (address == PIT_BASE) {
-        *value = timing->pit_mcr;
+        *output_value = timing->pit_mcr;
         return true;
     }
     if (address < PIT_CHANNEL_BASE || address >= PIT_CHANNEL_BASE + 0x40u) {
@@ -58,16 +60,16 @@ bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uin
     const uint8_t channel = (uint8_t)((address - PIT_CHANNEL_BASE) / 0x10u);
     switch ((address - PIT_CHANNEL_BASE) & 0x0fu) {
     case 0:
-        *value = timing->pit[channel].load;
+        *output_value = timing->pit[channel].load;
         return true;
     case 4:
-        *value = timing->pit[channel].current;
+        *output_value = timing->pit[channel].current;
         return true;
     case 8:
-        *value = timing->pit[channel].control;
+        *output_value = timing->pit[channel].control;
         return true;
     case 12:
-        *value = timing->pit[channel].flag ? 1u : 0u;
+        *output_value = timing->pit[channel].flag ? 1u : 0u;
         return true;
     default:
         return false;
@@ -75,12 +77,12 @@ bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uin
 }
 
 bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t value) {
+                                   uint32_t write_value) {
     if (size != 4) {
         return false;
     }
     if (address == PIT_BASE) {
-        timing->pit_mcr = value & 3u;
+        timing->pit_mcr = write_value & 3u;
         return true;
     }
     if (address < PIT_CHANNEL_BASE || address >= PIT_CHANNEL_BASE + 0x40u) {
@@ -89,12 +91,12 @@ bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t 
     const uint8_t channel = (uint8_t)((address - PIT_CHANNEL_BASE) / 0x10u);
     switch ((address - PIT_CHANNEL_BASE) & 0x0fu) {
     case 0:
-        timing->pit[channel].load = value;
+        timing->pit[channel].load = write_value;
         return true;
     case 8: {
         K22PitChannel* pit = &timing->pit[channel];
         const bool was_enabled = (pit->control & 1u) != 0u;
-        pit->control = value & (channel == 0u ? 3u : 7u);
+        pit->control = write_value & (channel == 0u ? 3u : 7u);
         if (!was_enabled && (pit->control & 1u) != 0u)
             pit->current = pit->load;
         k22_timing_internal_set_irq(timing, IRQ_PIT0 + channel,
@@ -102,7 +104,7 @@ bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t 
         return true;
     }
     case 12:
-        if ((value & 1u) != 0) {
+        if ((write_value & 1u) != 0) {
             timing->pit[channel].flag = false;
             k22_timing_internal_set_irq(timing, IRQ_PIT0 + channel, false);
         }
@@ -144,14 +146,14 @@ static void increment_lptmr(K22Timing* timing, uint64_t ticks) {
     const uint32_t compare = timing->lptmr_cmr & 0xffffu;
     if ((timing->lptmr_csr & 4u) == 0) {
         const uint64_t period = (uint64_t)compare + 1u;
-        const uint64_t total = (uint64_t)timing->lptmr_counter + ticks;
-        if (total >= period) {
+        const uint64_t accumulated_ticks = (uint64_t)timing->lptmr_counter + ticks;
+        if (accumulated_ticks >= period) {
             timing->lptmr_csr |= 0x80u;
             if ((timing->lptmr_csr & 0x40u) != 0)
                 k22_timing_internal_set_irq(timing, IRQ_LPTMR, true);
             k22_timing_internal_trigger_adc_alternate(timing, 14u);
         }
-        timing->lptmr_counter = (uint16_t)(total % period);
+        timing->lptmr_counter = (uint16_t)(accumulated_ticks % period);
         return;
     }
     const uint32_t distance = ((compare - timing->lptmr_counter) & 0xffffu) + 1u;
@@ -176,9 +178,9 @@ static void sample_lptmr_filter(K22Timing* timing, uint32_t cycles) {
         return;
     }
     const uint32_t threshold = 1u << prescale;
-    const uint64_t total = (uint64_t)timing->lptmr_filter_ticks + samples;
-    if (total < threshold) {
-        timing->lptmr_filter_ticks = (uint32_t)total;
+    const uint64_t accumulated_samples = (uint64_t)timing->lptmr_filter_ticks + samples;
+    if (accumulated_samples < threshold) {
+        timing->lptmr_filter_ticks = (uint32_t)accumulated_samples;
         return;
     }
     timing->lptmr_filter_ticks = 0u;
@@ -276,12 +278,12 @@ void k22_timing_internal_advance_rtc(K22Timing* timing, uint32_t cycles) {
     uint64_t remaining = ticks;
     while (remaining != 0u && (timing->rtc_sr & 2u) == 0u) {
         const uint32_t second_ticks = rtc_second_ticks(timing);
-        const uint32_t needed = second_ticks - timing->rtc_subsecond_ticks;
-        if (remaining < needed) {
+        const uint32_t ticks_to_second = second_ticks - timing->rtc_subsecond_ticks;
+        if (remaining < ticks_to_second) {
             timing->rtc_subsecond_ticks += (uint32_t)remaining;
             remaining = 0u;
         } else {
-            remaining -= needed;
+            remaining -= ticks_to_second;
             timing->rtc_subsecond_ticks = 0u;
             rtc_complete_second(timing);
         }
@@ -302,11 +304,13 @@ bool k22_timing_internal_pdb_auxiliary_offset(uint32_t offset) {
            (offset >= 0x190u && offset <= 0x198u && (offset & 3u) == 0);
 }
 
-static bool counter_reached(uint16_t start, uint64_t ticks, uint32_t period, uint16_t target) {
+static bool counter_reached(uint16_t start_counter, uint64_t ticks, uint32_t period,
+                            uint16_t target_counter) {
     if (ticks >= period)
         return true;
-    const uint32_t distance =
-        target > start ? (uint32_t)target - start : period - ((uint32_t)start - target);
+    const uint32_t distance = target_counter > start_counter
+                                  ? (uint32_t)target_counter - start_counter
+                                  : period - ((uint32_t)start_counter - target_counter);
     return ticks >= distance;
 }
 
@@ -322,20 +326,22 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
         return;
     }
     const uint64_t period = (uint64_t)timing->pdb_mod + 1u;
-    const uint64_t total = (uint64_t)timing->pdb_counter + ticks;
-    const bool delayed =
-        timing->pdb_idly <= timing->pdb_mod &&
-        counter_reached((uint16_t)(total - ticks), ticks, (uint32_t)period, timing->pdb_idly);
-    timing->pdb_counter = (uint16_t)(total % period);
+    const uint64_t accumulated_ticks = (uint64_t)timing->pdb_counter + ticks;
+    const bool delayed = timing->pdb_idly <= timing->pdb_mod &&
+                         counter_reached((uint16_t)(accumulated_ticks - ticks), ticks,
+                                         (uint32_t)period, timing->pdb_idly);
+    timing->pdb_counter = (uint16_t)(accumulated_ticks % period);
     for (uint8_t channel = 0; channel < 2u; channel++) {
-        const uint32_t base = 0x10u + (uint32_t)channel * 0x28u;
-        const uint32_t control = timing->pdb_registers[base >> 2u];
+        const uint32_t channel_base = 0x10u + (uint32_t)channel * 0x28u;
+        const uint32_t control = timing->pdb_registers[channel_base >> 2u];
         for (uint8_t pretrigger = 0; pretrigger < 2u; pretrigger++) {
             const uint16_t delay =
-                (uint16_t)timing->pdb_registers[(base + 8u + (uint32_t)pretrigger * 4u) >> 2u];
+                (uint16_t)
+                    timing->pdb_registers[(channel_base + 8u + (uint32_t)pretrigger * 4u) >> 2u];
             if ((control & (1u << pretrigger)) != 0 &&
-                counter_reached((uint16_t)(total - ticks), ticks, (uint32_t)period, delay)) {
-                timing->pdb_registers[(base + 4u) >> 2u] |= 1u << pretrigger;
+                counter_reached((uint16_t)(accumulated_ticks - ticks), ticks, (uint32_t)period,
+                                delay)) {
+                timing->pdb_registers[(channel_base + 4u) >> 2u] |= 1u << pretrigger;
                 k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_PDB_ADC, channel,
                                             pretrigger);
             }
@@ -347,7 +353,8 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
         const uint16_t interval = (uint16_t)timing->pdb_registers[interval_offset >> 2u];
         const uint32_t control = timing->pdb_registers[control_offset >> 2u];
         if ((control & 1u) != 0 && interval <= timing->pdb_mod &&
-            counter_reached((uint16_t)(total - ticks), ticks, (uint32_t)period, interval)) {
+            counter_reached((uint16_t)(accumulated_ticks - ticks), ticks, (uint32_t)period,
+                            interval)) {
             k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_PDB_DAC, instance, 0);
         }
     }
@@ -357,7 +364,7 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
             k22_timing_internal_set_irq(timing, IRQ_PDB, true);
         }
     }
-    if ((timing->pdb_sc & 2u) == 0 && total >= period) {
+    if ((timing->pdb_sc & 2u) == 0 && accumulated_ticks >= period) {
         timing->pdb_sc &= ~1u;
     }
 }
@@ -366,11 +373,11 @@ bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address,
                                       uint32_t* offset) {
     const K22PeripheralId ids[4] = {K22_PERIPHERAL_FTM0, K22_PERIPHERAL_FTM1, K22_PERIPHERAL_FTM2,
                                     K22_PERIPHERAL_FTM3};
-    for (uint8_t item = 0; item < 4; item++) {
+    for (uint8_t instance_index = 0; instance_index < 4; instance_index++) {
         K22PeripheralBlock block;
-        if (k22_profile_peripheral_block(timing->profile, ids[item], &block) &&
+        if (k22_profile_peripheral_block(timing->profile, ids[instance_index], &block) &&
             address >= block.address && address < block.address + block.size) {
-            *instance = item;
+            *instance = instance_index;
             *offset = address - block.address;
             return true;
         }
