@@ -121,7 +121,8 @@ static void test_files(TestState* state, KinetisK22* device) {
     expect(state, write_file(binary_path, binary, 0u), "write empty binary file");
     expect(state, !cortex_m4_load_binary(device, binary_path, 0u), "empty binary file is rejected");
     expect(state, write_file(elf_path, elf, 16u), "write truncated ELF file");
-    expect(state, !cortex_m4_load_elf(device, elf_path, &entry_address), "truncated file ELF is rejected");
+    expect(state, !cortex_m4_load_elf(device, elf_path, &entry_address),
+           "truncated file ELF is rejected");
     expect(state, !cortex_m4_load_elf(device, missing_path, &entry_address),
            "missing file ELF is rejected");
     expect(state, !cortex_m4_load_binary(device, missing_path, 0u),
