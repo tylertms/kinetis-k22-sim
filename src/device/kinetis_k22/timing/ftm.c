@@ -295,22 +295,25 @@ static bool ftm_pair_mode_disabled(const K22FtmState* ftm, uint8_t channel) {
 static void ftm_combine_pwm_advance(K22FtmState* ftm, uint8_t channel) {
     if ((channel & 1u) != 0u || !is_ftm_combine_mode(ftm, channel))
         return;
-    const uint8_t edges = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
-    if (edges == 0u)
+    const uint8_t edge_mode = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
+    if (edge_mode == 0u)
         return;
-    const uint32_t first_compare = ftm->channel_value[channel];
-    const uint32_t second_compare = ftm->channel_value[channel + 1u];
-    const bool first_valid = first_compare >= ftm->initial && first_compare <= ftm->modulo;
-    const bool second_valid = second_compare >= ftm->initial && second_compare <= ftm->modulo;
-    bool active = false;
-    if (first_valid) {
-        if (second_valid)
-            active = first_compare < second_compare && ftm->counter >= first_compare &&
-                     ftm->counter < second_compare;
+    const uint32_t first_channel_compare = ftm->channel_value[channel];
+    const uint32_t second_channel_compare = ftm->channel_value[channel + 1u];
+    const bool first_compare_valid =
+        first_channel_compare >= ftm->initial && first_channel_compare <= ftm->modulo;
+    const bool second_compare_valid =
+        second_channel_compare >= ftm->initial && second_channel_compare <= ftm->modulo;
+    bool output_active = false;
+    if (first_compare_valid) {
+        if (second_compare_valid)
+            output_active = first_channel_compare < second_channel_compare &&
+                            ftm->counter >= first_channel_compare &&
+                            ftm->counter < second_channel_compare;
         else
-            active = ftm->counter >= first_compare;
+            output_active = ftm->counter >= first_channel_compare;
     }
-    ftm->channel_output[channel] = edges == 2u ? active : !active;
+    ftm->channel_output[channel] = edge_mode == 2u ? output_active : !output_active;
 }
 
 bool k22_timing_internal_ftm_output_compare_mode(const K22FtmState* ftm, uint8_t channel) {
