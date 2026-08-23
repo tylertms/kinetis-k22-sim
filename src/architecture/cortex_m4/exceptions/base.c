@@ -24,8 +24,8 @@ void cortex_m4_raise_fault(CortexM4* cpu, uint8_t exception) {
 
 static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     cortex_m4_timing_begin_exception(cpu);
-    const bool was_thread = (cpu->xpsr & 0x1ffu) == 0;
-    const bool used_psp = was_thread && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0;
+    const bool was_in_thread = (cpu->xpsr & 0x1ffu) == 0;
+    const bool used_psp = was_in_thread && (cpu->control & CORTEX_M4_CONTROL_SPSEL) != 0;
     uint32_t stack_pointer = used_psp ? cpu->psp : cpu->msp;
     uint32_t exception_return = 0;
     if (!cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &exception_return)) {
@@ -40,11 +40,12 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
         cpu->msp = stack_pointer;
     }
     exception = cortex_m4_exception_advanced_late_arrival(cpu, exception);
-    uint32_t vector = 0;
-    if (!cortex_m4_bus_read(cpu, cpu->vtor + exception * 4u, 4, CORTEX_M4_ACCESS_DATA, &vector) ||
-        (vector & 1u) == 0) {
+    uint32_t vector_address = 0;
+    if (!cortex_m4_bus_read(cpu, cpu->vtor + exception * 4u, 4, CORTEX_M4_ACCESS_DATA,
+                            &vector_address) ||
+        (vector_address & 1u) == 0) {
         cortex_m4_exception_advanced_vector_fault(cpu);
-        if (!cortex_m4_exception_advanced_hardfault_vector(cpu, &vector)) {
+        if (!cortex_m4_exception_advanced_hardfault_vector(cpu, &vector_address)) {
             cortex_m4_timing_abort(cpu);
             return false;
         }
@@ -52,7 +53,7 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     }
     cortex_m4_debug_exception(cpu, exception);
     cpu->registers[14] = exception_return;
-    cpu->registers[15] = vector & ~1u;
+    cpu->registers[15] = vector_address & ~1u;
     cpu->it_state = 0;
     cpu->xpsr = (cpu->xpsr & ~0x1ffu) | exception | CORTEX_M4_XPSR_T;
     cpu->control &= ~CORTEX_M4_CONTROL_FPCA;
@@ -106,8 +107,8 @@ bool cortex_m4_take_pending_exception(CortexM4* cpu) {
     return enter_exception(cpu, selected_exception);
 }
 
-bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value) {
-    if (!cortex_m4_exception_advanced_valid_return(cpu, value)) {
+bool cortex_m4_exception_return(CortexM4* cpu, uint32_t exception_return) {
+    if (!cortex_m4_exception_advanced_valid_return(cpu, exception_return)) {
         cpu->cfsr |= 1u << 18;
         cortex_m4_raise_fault(cpu, 6);
         return false;
@@ -115,7 +116,7 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value) {
     cortex_m4_timing_begin_exception(cpu);
     const uint16_t current_exception = (uint16_t)(cpu->xpsr & 0x1ffu);
     const CortexM4ExceptionChain chain =
-        cortex_m4_exception_advanced_tail_chain(cpu, value, current_exception);
+        cortex_m4_exception_advanced_tail_chain(cpu, exception_return, current_exception);
     if (chain == CORTEX_M4_EXCEPTION_CHAIN_TAKEN) {
         return true;
     }
@@ -123,9 +124,10 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value) {
         cortex_m4_timing_abort(cpu);
         return true;
     }
-    const bool use_psp = (value & 4u) != 0;
+    const bool use_psp = (exception_return & 4u) != 0;
     uint32_t stack_pointer = use_psp ? cpu->psp : cpu->msp;
-    if (!cortex_m4_system_unstack_exception_frame(cpu, &stack_pointer, value, current_exception)) {
+    if (!cortex_m4_system_unstack_exception_frame(cpu, &stack_pointer, exception_return,
+                                                  current_exception)) {
         cortex_m4_timing_abort(cpu);
         if (cpu->exception_unstack_memory_fault) {
             cortex_m4_exception_advanced_fault(cpu, CORTEX_M4_FAULT_UNSTACKING,
@@ -140,8 +142,9 @@ bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value) {
     } else {
         cpu->msp = stack_pointer;
     }
-    cortex_m4_exception_advanced_commit_return(cpu, current_exception, (value & (1u << 3)) != 0u);
-    const bool fp_frame = (value & 0x10u) == 0;
+    cortex_m4_exception_advanced_commit_return(cpu, current_exception,
+                                               (exception_return & (1u << 3)) != 0u);
+    const bool fp_frame = (exception_return & 0x10u) == 0;
     cortex_m4_debug_exception_cycles(cpu, fp_frame ? 27u : 10u);
     cortex_m4_timing_exception(cpu, fp_frame ? CORTEX_M4_TIMING_EXCEPTION_FP_RETURN
                                              : CORTEX_M4_TIMING_EXCEPTION_RETURN);

@@ -239,7 +239,7 @@ bool cortex_m4_configure_implementation(CortexM4* cpu, uint16_t external_irq_cou
                                         uint8_t priority_bits, uint8_t mpu_region_count);
 void cortex_m4_advance(CortexM4* cpu, uint32_t cycles);
 bool cortex_m4_take_pending_exception(CortexM4* cpu);
-bool cortex_m4_exception_return(CortexM4* cpu, uint32_t value);
+bool cortex_m4_exception_return(CortexM4* cpu, uint32_t exception_return);
 void cortex_m4_raise_fault(CortexM4* cpu, uint8_t exception);
 void cortex_m4_exception_advanced_reset(CortexM4* cpu);
 uint16_t cortex_m4_exception_advanced_late_arrival(CortexM4* cpu, uint16_t entering_exception);
