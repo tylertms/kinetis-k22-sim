@@ -19,8 +19,8 @@
 
 static bool external_pending(const CortexM4* cpu, uint16_t exception) {
     const uint16_t irq = exception - 16u;
-    const uint32_t mask = 1u << (irq & 31u);
-    return (cpu->irq_pending[irq / 32u] & cpu->irq_enabled[irq / 32u] & mask) != 0;
+    const uint32_t irq_mask = 1u << (irq & 31u);
+    return (cpu->irq_pending[irq / 32u] & cpu->irq_enabled[irq / 32u] & irq_mask) != 0;
 }
 
 static bool system_pending(const CortexM4* cpu, uint16_t exception) {
@@ -81,10 +81,10 @@ static void deactivate_external(CortexM4* cpu, uint16_t exception) {
         return;
     }
     const uint16_t irq = exception - 16u;
-    const uint32_t mask = 1u << (irq & 31u);
-    cpu->irq_active[irq / 32u] &= ~mask;
-    if ((cpu->irq_level[irq / 32u] & mask) != 0u) {
-        cpu->irq_pending[irq / 32u] |= mask;
+    const uint32_t irq_mask = 1u << (irq & 31u);
+    cpu->irq_active[irq / 32u] &= ~irq_mask;
+    if ((cpu->irq_level[irq / 32u] & irq_mask) != 0u) {
+        cpu->irq_pending[irq / 32u] |= irq_mask;
     }
 }
 
@@ -195,31 +195,31 @@ bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32
 }
 
 static bool record_fault_status(CortexM4* cpu, CortexM4ExceptionFaultStage stage,
-                                bool is_memory_management) {
+                                bool memory_management_fault) {
     static const uint32_t memory_bits[] = {CFSR_MSTKERR, CFSR_MUNSTKERR, CFSR_MLSPERR};
     static const uint32_t bus_bits[] = {CFSR_STKERR, CFSR_UNSTKERR, CFSR_LSPERR};
     if (cpu == NULL || stage > CORTEX_M4_FAULT_LAZY_FP) {
         return false;
     }
-    cpu->cfsr |= is_memory_management ? memory_bits[stage] : bus_bits[stage];
+    cpu->cfsr |= memory_management_fault ? memory_bits[stage] : bus_bits[stage];
     return true;
 }
 
 void cortex_m4_exception_advanced_fault(CortexM4* cpu, CortexM4ExceptionFaultStage stage,
-                                        bool is_memory_management) {
-    if (!record_fault_status(cpu, stage, is_memory_management)) {
+                                        bool memory_management_fault) {
+    if (!record_fault_status(cpu, stage, memory_management_fault)) {
         return;
     }
-    cortex_m4_raise_fault(cpu, is_memory_management ? 4u : 5u);
+    cortex_m4_raise_fault(cpu, memory_management_fault ? 4u : 5u);
 }
 
 void cortex_m4_exception_advanced_entry_fault(CortexM4* cpu, uint16_t entering_exception,
                                               CortexM4ExceptionFaultStage stage,
-                                              bool is_memory_management) {
-    if (!record_fault_status(cpu, stage, is_memory_management)) {
+                                              bool memory_management_fault) {
+    if (!record_fault_status(cpu, stage, memory_management_fault)) {
         return;
     }
-    const uint16_t fault_exception = is_memory_management ? 4u : 5u;
+    const uint16_t fault_exception = memory_management_fault ? 4u : 5u;
     if (entering_exception == 2u || entering_exception == 3u) {
         cpu->stop = CORTEX_M4_STOP_LOCKUP;
         return;
@@ -236,9 +236,9 @@ void cortex_m4_exception_advanced_vector_fault(CortexM4* cpu) {
     if (cpu == NULL) {
         return;
     }
-    const uint16_t current = (uint16_t)(cpu->xpsr & XPSR_EXCEPTION_MASK);
+    const uint16_t current_exception = (uint16_t)(cpu->xpsr & XPSR_EXCEPTION_MASK);
     cpu->hfsr |= HFSR_VECTTBL;
-    if (current == 2u || current == 3u) {
+    if (current_exception == 2u || current_exception == 3u) {
         cpu->stop = CORTEX_M4_STOP_LOCKUP;
         return;
     }
@@ -325,8 +325,8 @@ bool cortex_m4_exception_advanced_multiple_suspend(CortexM4* cpu, uint8_t next_r
         (instruction_size != 2u && instruction_size != 4u)) {
         return false;
     }
-    const uint16_t current = (uint16_t)(cpu->xpsr & XPSR_EXCEPTION_MASK);
-    if (selected_pending(cpu, current, 0u) == 0u) {
+    const uint16_t current_exception = (uint16_t)(cpu->xpsr & XPSR_EXCEPTION_MASK);
+    if (selected_pending(cpu, current_exception, 0u) == 0u) {
         return false;
     }
     cpu->ici_address = next_address;

@@ -5,14 +5,14 @@ void cortex_m4_raise_fault(CortexM4* cpu, uint8_t exception) {
         return;
     }
     cpu->instruction_faulted = true;
-    const uint16_t current = (uint16_t)(cpu->xpsr & 0x1ffu);
-    if (current == 2 || current == 3) {
+    const uint16_t current_exception = (uint16_t)(cpu->xpsr & 0x1ffu);
+    if (current_exception == 2 || current_exception == 3) {
         cpu->stop = CORTEX_M4_STOP_LOCKUP;
         return;
     }
-    const uint32_t enable = 1u << (exception + 12u);
-    if ((cpu->shcsr & enable) != 0 &&
-        cortex_m4_system_exception_can_preempt(cpu, exception, current)) {
+    const uint32_t fault_enable_mask = 1u << (exception + 12u);
+    if ((cpu->shcsr & fault_enable_mask) != 0 &&
+        cortex_m4_system_exception_can_preempt(cpu, exception, current_exception)) {
         cortex_m4_system_set_pending(cpu, exception, true);
     } else {
         cpu->hfsr |= 1u << 30;
@@ -68,12 +68,12 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
 }
 
 bool cortex_m4_take_pending_exception(CortexM4* cpu) {
-    const uint16_t current = (uint16_t)(cpu->xpsr & 0x1ffu);
-    if ((cpu->system_pending & (1u << 2)) != 0 && current != 2) {
+    const uint16_t current_exception = (uint16_t)(cpu->xpsr & 0x1ffu);
+    if ((cpu->system_pending & (1u << 2)) != 0 && current_exception != 2) {
         return enter_exception(cpu, 2);
     }
     if ((cpu->system_pending & (1u << 3)) != 0 &&
-        cortex_m4_system_exception_can_preempt(cpu, 3u, current)) {
+        cortex_m4_system_exception_can_preempt(cpu, 3u, current_exception)) {
         return enter_exception(cpu, 3);
     }
     uint16_t selected_exception = 0;
@@ -84,18 +84,18 @@ bool cortex_m4_take_pending_exception(CortexM4* cpu) {
         if ((cpu->system_pending & (1u << exception)) == 0) {
             continue;
         }
-        if (cortex_m4_system_exception_can_preempt(cpu, exception, current) &&
+        if (cortex_m4_system_exception_can_preempt(cpu, exception, current_exception) &&
             (selected_exception == 0 ||
              cortex_m4_system_exception_before(cpu, exception, selected_exception))) {
             selected_exception = exception;
         }
     }
     for (uint16_t irq = 0; irq < cpu->external_irq_count; irq++) {
-        const uint32_t mask = 1u << (irq & 31u);
-        if ((cpu->irq_pending[irq / 32] & cpu->irq_enabled[irq / 32] & mask) == 0) {
+        const uint32_t irq_mask = 1u << (irq & 31u);
+        if ((cpu->irq_pending[irq / 32] & cpu->irq_enabled[irq / 32] & irq_mask) == 0) {
             continue;
         }
-        if (cortex_m4_system_exception_can_preempt(cpu, irq + 16u, current) &&
+        if (cortex_m4_system_exception_can_preempt(cpu, irq + 16u, current_exception) &&
             (selected_exception == 0 ||
              cortex_m4_system_exception_before(cpu, irq + 16u, selected_exception))) {
             selected_exception = irq + 16;
@@ -166,12 +166,12 @@ void cortex_m4_set_irq_level(CortexM4* cpu, uint16_t irq, bool asserted) {
     if (cpu == NULL || irq >= cpu->external_irq_count) {
         return;
     }
-    const uint32_t mask = 1u << (irq & 31u);
+    const uint32_t irq_mask = 1u << (irq & 31u);
     if (asserted) {
-        cpu->irq_level[irq / 32] |= mask;
+        cpu->irq_level[irq / 32] |= irq_mask;
         cortex_m4_set_irq(cpu, irq, true);
     } else {
-        cpu->irq_level[irq / 32] &= ~mask;
+        cpu->irq_level[irq / 32] &= ~irq_mask;
     }
 }
 

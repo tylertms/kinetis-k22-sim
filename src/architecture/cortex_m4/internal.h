@@ -254,10 +254,10 @@ bool cortex_m4_exception_advanced_valid_return(const CortexM4* cpu, uint32_t exc
 bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32_t stacked_xpsr,
                                                      uint32_t exception_return);
 void cortex_m4_exception_advanced_fault(CortexM4* cpu, CortexM4ExceptionFaultStage stage,
-                                        bool is_memory_management);
+                                        bool memory_management_fault);
 void cortex_m4_exception_advanced_entry_fault(CortexM4* cpu, uint16_t entering_exception,
                                               CortexM4ExceptionFaultStage stage,
-                                              bool is_memory_management);
+                                              bool memory_management_fault);
 void cortex_m4_exception_advanced_vector_fault(CortexM4* cpu);
 bool cortex_m4_exception_advanced_hardfault_vector(CortexM4* cpu, uint32_t* vector_address);
 void cortex_m4_exception_advanced_imprecise_fault(CortexM4* cpu);
