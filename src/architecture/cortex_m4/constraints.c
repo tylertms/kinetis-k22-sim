@@ -270,24 +270,24 @@ static bool has_invalid_memory(uint16_t first, uint16_t second) {
     }
     const uint8_t base = (uint8_t)(first & 15u);
     const uint8_t target = (uint8_t)(second >> 12);
-    const bool load = (operation & 0x0010u) != 0;
-    const bool word = (operation & 0x0040u) != 0;
+    const bool is_load = (operation & 0x0010u) != 0;
+    const bool is_word = (operation & 0x0040u) != 0;
     const bool indexed_family = operation == 0xf800u || operation == 0xf810u ||
                                 operation == 0xf820u || operation == 0xf830u ||
                                 operation == 0xf840u || operation == 0xf850u ||
                                 operation == 0xf910u || operation == 0xf930u;
-    if (target == 13u || (!load && target == 15u)) {
+    if (target == 13u || (!is_load && target == 15u)) {
         return true;
     }
     if (!indexed_family) {
-        return base == 15u && !load;
+        return base == 15u && !is_load;
     }
     if (base == 15u) {
         return true;
     }
     if ((second & 0x0fc0u) == 0) {
-        const uint8_t index = (uint8_t)(second & 15u);
-        return is_stack_or_program_counter(index) || (target == 15u && !word);
+        const uint8_t index_register = (uint8_t)(second & 15u);
+        return is_stack_or_program_counter(index_register) || (target == 15u && !is_word);
     }
     if ((second & 0x0f00u) == 0x0e00u) {
         return is_stack_or_program_counter(target);
@@ -298,7 +298,7 @@ static bool has_invalid_memory(uint16_t first, uint16_t second) {
     const bool pre_index = (second & 0x0400u) != 0;
     const bool write_back = (second & 0x0100u) != 0;
     return (!pre_index && !write_back) || (write_back && base == target) ||
-           (target == 15u && !word);
+           (target == 15u && !is_word);
 }
 
 static bool has_invalid_system_encoding(uint16_t first, uint16_t second) {
