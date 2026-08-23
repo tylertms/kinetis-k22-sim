@@ -27,19 +27,21 @@ static bool manifest_write(KinetisK22* device, uint32_t address, uint8_t access_
     if ((descriptor->access & K22_REGISTER_ACCESS_WRITE) == 0) {
         return true;
     }
-    const uint32_t mask = kinetis_k22_internal_manifest_access_mask(descriptor, address,
-                                                                    descriptor->implemented_mask) &
-                          kinetis_k22_internal_width_mask(access_size);
+    const uint32_t implemented_access_mask =
+        kinetis_k22_internal_manifest_access_mask(descriptor, address,
+                                                  descriptor->implemented_mask) &
+        kinetis_k22_internal_width_mask(access_size);
     const uint32_t write_mask =
         kinetis_k22_internal_manifest_access_mask(descriptor, address, descriptor->write_mask);
     const uint32_t w1c_mask =
         kinetis_k22_internal_manifest_access_mask(descriptor, address, descriptor->w1c_mask);
-    const uint32_t writable = write_mask & ~w1c_mask & mask;
-    const uint32_t clear = w1c_mask & write_value & mask;
-    uint32_t current_value = kinetis_k22_internal_raw_load(device, address, access_size);
-    current_value = (current_value & ~writable) | (write_value & writable);
-    current_value &= ~clear;
-    kinetis_k22_internal_raw_store(device, address, access_size, current_value & mask);
+    const uint32_t writable_bits = write_mask & ~w1c_mask & implemented_access_mask;
+    const uint32_t w1c_clear_bits = w1c_mask & write_value & implemented_access_mask;
+    uint32_t register_value = kinetis_k22_internal_raw_load(device, address, access_size);
+    register_value = (register_value & ~writable_bits) | (write_value & writable_bits);
+    register_value &= ~w1c_clear_bits;
+    kinetis_k22_internal_raw_store(device, address, access_size,
+                                   register_value & implemented_access_mask);
     return true;
 }
 
