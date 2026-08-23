@@ -142,10 +142,10 @@ typedef struct {
 } K22PeripheralLocation;
 
 const K22Profile* k22_profile_get(K22ProfileId id);
-const K22Profile* k22_profile_find(const char* name);
+const K22Profile* k22_profile_find(const char* profile_name);
 bool k22_profile_has_peripheral(const K22Profile* profile, K22PeripheralId id);
 bool k22_profile_peripheral_block(const K22Profile* profile, K22PeripheralId id,
-                                  K22PeripheralBlock* block);
+                                  K22PeripheralBlock* block_out);
 bool k22_profile_resolve_peripheral(const K22Profile* profile, uint32_t address,
                                     uint8_t access_size, K22PeripheralLocation* location);
 

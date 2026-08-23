@@ -231,24 +231,24 @@ const K22Profile* k22_profile_get(K22ProfileId id) {
     return &profiles[id];
 }
 
-const K22Profile* k22_profile_find(const char* name) {
-    if (name == NULL)
+const K22Profile* k22_profile_find(const char* profile_name) {
+    if (profile_name == NULL)
         return NULL;
     for (size_t index = 0; index < COUNT(profiles); index++) {
-        if (strcmp(profiles[index].name, name) == 0)
+        if (strcmp(profiles[index].name, profile_name) == 0)
             return &profiles[index];
     }
     return NULL;
 }
 
 bool k22_profile_peripheral_block(const K22Profile* profile, K22PeripheralId id,
-                                  K22PeripheralBlock* block) {
+                                  K22PeripheralBlock* block_out) {
     if (profile == NULL || (unsigned)id >= K22_PERIPHERAL_COUNT)
         return false;
     for (size_t index = 0; index < profile->peripheral_block_count; index++) {
         if (profile->peripheral_blocks[index].id == id) {
-            if (block != NULL)
-                *block = profile->peripheral_blocks[index];
+            if (block_out != NULL)
+                *block_out = profile->peripheral_blocks[index];
             return true;
         }
     }
@@ -267,14 +267,14 @@ bool k22_profile_resolve_peripheral(const K22Profile* profile, uint32_t address,
         const K22PeripheralBlock* block = &profile->peripheral_blocks[index];
         if (address < block->address)
             continue;
-        uint32_t offset = address - block->address;
-        if (offset >= block->size || access_size > block->size - offset)
+        const uint32_t peripheral_offset = address - block->address;
+        if (peripheral_offset >= block->size || access_size > block->size - peripheral_offset)
             continue;
         if (location != NULL) {
             location->id = block->id;
             location->block_address = block->address;
             location->block_size = block->size;
-            location->offset = offset;
+            location->offset = peripheral_offset;
         }
         return true;
     }
