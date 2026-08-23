@@ -5,8 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef bool (*K22SdhcBusRead)(void* context, uint32_t address, uint8_t size, uint32_t* value);
-typedef bool (*K22SdhcBusWrite)(void* context, uint32_t address, uint8_t size, uint32_t value);
+typedef bool (*K22SdhcBusRead)(void* context, uint32_t bus_address, uint8_t access_size,
+                               uint32_t* read_value);
+typedef bool (*K22SdhcBusWrite)(void* context, uint32_t bus_address, uint8_t access_size,
+                                uint32_t write_value);
 
 typedef struct {
     void* context;
@@ -37,11 +39,14 @@ void k22_sdhc_destroy(K22Sdhc* sdhc);
 void k22_sdhc_reset(K22Sdhc* sdhc);
 bool k22_sdhc_copy(K22Sdhc* destination, const K22Sdhc* source, K22SdhcBus bus);
 void k22_sdhc_set_clock(K22Sdhc* sdhc, bool enabled);
-bool k22_sdhc_insert(K22Sdhc* sdhc, const void* data, size_t size, bool write_protected);
+bool k22_sdhc_insert(K22Sdhc* sdhc, const void* card_data, size_t card_size, bool write_protected);
 void k22_sdhc_eject(K22Sdhc* sdhc);
-bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t offset, void* data, size_t size);
-bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t address, uint8_t size, uint32_t value);
+bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t card_offset, void* card_data,
+                        size_t byte_count);
+bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                   uint32_t* read_value);
+bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                    uint32_t write_value);
 bool k22_sdhc_irq(const K22Sdhc* sdhc);
 
 #endif
