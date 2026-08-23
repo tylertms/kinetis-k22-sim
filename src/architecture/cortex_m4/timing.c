@@ -100,54 +100,55 @@ static bool table_branch32(uint16_t first, uint16_t second) {
     return (first & 0xfff0u) == 0xe8d0u && (second & 0xffe0u) == 0xf000u;
 }
 
-static bool memory16(uint16_t opcode, bool* load) {
+static bool memory16(uint16_t opcode, bool* is_load) {
     if ((opcode & 0xf800u) == 0x4800u || (opcode & 0xf000u) == 0x5000u ||
         (opcode & 0xe000u) == 0x6000u || (opcode & 0xf000u) == 0x8000u ||
         (opcode & 0xf000u) == 0x9000u) {
-        *load = (opcode & 0x0800u) != 0;
+        *is_load = (opcode & 0x0800u) != 0;
         if ((opcode & 0xf800u) == 0x4800u) {
-            *load = true;
+            *is_load = true;
         }
         if ((opcode & 0xf000u) == 0x5000u) {
             const uint8_t operation = (uint8_t)((opcode >> 9) & 7u);
-            *load = operation >= 3u;
+            *is_load = operation >= 3u;
         }
         return true;
     }
     return false;
 }
 
-static bool multiple16(uint16_t opcode, uint32_t* transfers, bool* loads_pc) {
+static bool multiple16(uint16_t opcode, uint32_t* transfer_count, bool* loads_program_counter) {
     if ((opcode & 0xf000u) == 0xc000u) {
-        *transfers = count_set_bits(opcode & 0xffu);
-        *loads_pc = false;
+        *transfer_count = count_set_bits(opcode & 0xffu);
+        *loads_program_counter = false;
         return true;
     }
     if ((opcode & 0xfe00u) == 0xb400u) {
-        *transfers = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
-        *loads_pc = false;
+        *transfer_count = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
+        *loads_program_counter = false;
         return true;
     }
     if ((opcode & 0xfe00u) == 0xbc00u) {
-        *transfers = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
-        *loads_pc = (opcode & 0x0100u) != 0;
+        *transfer_count = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
+        *loads_program_counter = (opcode & 0x0100u) != 0;
         return true;
     }
     return false;
 }
 
-static bool multiple32(uint16_t first, uint16_t second, uint32_t* transfers, bool* loads_pc) {
+static bool multiple32(uint16_t first, uint16_t second, uint32_t* transfer_count,
+                       bool* loads_program_counter) {
     if ((((first & 0xffd0u) == 0xe880u || (first & 0xffd0u) == 0xe890u) ||
          (first & 0xffc0u) == 0xe900u) &&
         second != 0) {
-        *transfers = count_set_bits(second);
-        *loads_pc = (first & 0x0010u) != 0 && (second & 0x8000u) != 0;
+        *transfer_count = count_set_bits(second);
+        *loads_program_counter = (first & 0x0010u) != 0 && (second & 0x8000u) != 0;
         return true;
     }
     if ((first & 0xfe40u) == 0xe840u && (first & 0x0040u) != 0 &&
         ((first & 0x0100u) != 0 || (first & 0x0020u) != 0)) {
-        *transfers = 2;
-        *loads_pc = false;
+        *transfer_count = 2;
+        *loads_program_counter = false;
         return true;
     }
     return false;
