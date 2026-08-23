@@ -190,25 +190,28 @@ static bool load32(uint16_t first) {
 }
 
 static uint32_t calculate_instruction_cycles(const CortexM4* cpu, uint16_t first, uint16_t second,
-                                             bool wide, bool executed, uint32_t sequential_pc) {
-    if (!executed) {
+                                             bool is_wide_instruction, bool instruction_executed,
+                                             uint32_t sequential_pc) {
+    if (!instruction_executed) {
         return 1;
     }
     const bool taken = cpu->registers[15] != sequential_pc;
-    if (wide && table_branch32(first, second)) {
+    if (is_wide_instruction && table_branch32(first, second)) {
         return 4;
     }
-    if ((!wide && branch16(first)) || (wide && branch32(first, second))) {
+    if ((!is_wide_instruction && branch16(first)) ||
+        (is_wide_instruction && branch32(first, second))) {
         return taken ? 3u : 1u;
     }
-    uint32_t transfers = 0;
-    bool loads_pc = false;
-    if ((!wide && multiple16(first, &transfers, &loads_pc)) ||
-        (wide && multiple32(first, second, &transfers, &loads_pc))) {
-        const uint32_t base = 1u + transfers;
-        return loads_pc ? base + 2u : base;
+    uint32_t transfer_count = 0;
+    bool loads_program_counter = false;
+    if ((!is_wide_instruction && multiple16(first, &transfer_count, &loads_program_counter)) ||
+        (is_wide_instruction &&
+         multiple32(first, second, &transfer_count, &loads_program_counter))) {
+        const uint32_t base = 1u + transfer_count;
+        return loads_program_counter ? base + 2u : base;
     }
-    if (wide && divide32(first, second)) {
+    if (is_wide_instruction && divide32(first, second)) {
         if (cpu->timing_prepared) {
             return cpu->timing_prepared_cycles;
         }
@@ -218,21 +221,23 @@ static uint32_t calculate_instruction_cycles(const CortexM4* cpu, uint16_t first
             cortex_m4_read_register_internal(cpu, dividend_register),
             cortex_m4_read_register_internal(cpu, divisor_register), (first & 0x0020u) == 0);
     }
-    if (wide && exclusive32(first, second)) {
+    if (is_wide_instruction && exclusive32(first, second)) {
         return 2;
     }
-    if ((!wide && (first & 0xffc0u) == 0x4340u) || (wide && multiply32(first))) {
+    if ((!is_wide_instruction && (first & 0xffc0u) == 0x4340u) ||
+        (is_wide_instruction && multiply32(first))) {
         return 1;
     }
-    bool load = false;
-    if ((!wide && memory16(first, &load)) || (wide && memory32(first))) {
-        if (wide) {
-            load = load32(first);
+    bool is_load = false;
+    if ((!is_wide_instruction && memory16(first, &is_load)) ||
+        (is_wide_instruction && memory32(first))) {
+        if (is_wide_instruction) {
+            is_load = load32(first);
         }
-        if (wide && load && (second >> 12) == 15u) {
+        if (is_wide_instruction && is_load && (second >> 12) == 15u) {
             return 4;
         }
-        return load ? 2u : 1u;
+        return is_load ? 2u : 1u;
     }
     return 1;
 }
