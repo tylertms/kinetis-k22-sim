@@ -520,7 +520,7 @@ const char* kinetis_k22_package_code(KinetisK22Package package) {
     return match == NULL ? NULL : match->code;
 }
 
-static void destroy_partial(KinetisK22* device) {
+static void destroy_partial_device(KinetisK22* device) {
     if (device == NULL) {
         return;
     }
@@ -540,11 +540,11 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
     if (profile == NULL || manifest == NULL) {
         return NULL;
     }
-    const K22PackageSelection* package =
+    const K22PackageSelection* package_selection =
         configuration.package == KINETIS_K22_PACKAGE_DEFAULT
             ? k22_package_default(profile)
             : k22_package_select(profile, (K22PackageId)configuration.package);
-    if (package == NULL || configuration.flash_size == 0 ||
+    if (package_selection == NULL || configuration.flash_size == 0 ||
         configuration.flash_size > profile->program_flash_size || configuration.sram_size == 0 ||
         configuration.sram_size > 0x40000000u) {
         return NULL;
@@ -555,7 +555,7 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
     }
     device->configuration = configuration;
     device->profile = profile;
-    device->package = package;
+    device->package = package_selection;
     device->manifest = manifest;
     const size_t profile_sram_size = (size_t)profile->sram_lower_size + profile->sram_upper_size;
     device->sram_base = configuration.sram_size == profile_sram_size
@@ -565,7 +565,7 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
     device->sram = calloc(1, configuration.sram_size);
     device->peripheral = calloc(1, K22_PERIPHERAL_SIZE);
     if (device->flash == NULL || device->sram == NULL || device->peripheral == NULL) {
-        destroy_partial(device);
+        destroy_partial_device(device);
         return NULL;
     }
     memset(device->flash, 0xff, configuration.flash_size);
@@ -574,12 +574,12 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
         !k22_timing_init(&device->timing, profile, configuration.external_oscillator_hz,
                          configuration.rtc_oscillator_hz, kinetis_k22_timing_signals(device)) ||
         !k22_io_init(&device->io, kinetis_k22_io_configuration(device))) {
-        destroy_partial(device);
+        destroy_partial_device(device);
         return NULL;
     }
     device->data = k22_data_create(profile, kinetis_k22_data_bus(device));
     if (device->data == NULL) {
-        destroy_partial(device);
+        destroy_partial_device(device);
         return NULL;
     }
     kinetis_k22_sync_clock_gates(device);
@@ -589,13 +589,13 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
         !cortex_m4_configure_implementation(device->cpu, profile->cpu.external_irq_count,
                                             profile->cpu.nvic_priority_bits,
                                             profile->cpu.has_mpu ? 8u : 0u)) {
-        destroy_partial(device);
+        destroy_partial_device(device);
         return NULL;
     }
     return device;
 }
 
-void kinetis_k22_destroy(KinetisK22* device) { destroy_partial(device); }
+void kinetis_k22_destroy(KinetisK22* device) { destroy_partial_device(device); }
 
 CortexM4* kinetis_k22_cpu(KinetisK22* device) { return device == NULL ? NULL : device->cpu; }
 
@@ -624,12 +624,13 @@ bool kinetis_k22_reset(KinetisK22* device) {
     kinetis_k22_peripheral_reset(device);
     k22_timing_reset(&device->timing, 0x82u, 0);
     kinetis_k22_sync_clock_gates(device);
-    const bool reset = cortex_m4_reset(device->cpu, device->configuration.vector_table_address);
+    const bool reset_succeeded =
+        cortex_m4_reset(device->cpu, device->configuration.vector_table_address);
     fmc_clear_cache(device);
-    return reset;
+    return reset_succeeded;
 }
 
-void kinetis_k22_warm_reset(KinetisK22* device, uint8_t cause_0, uint8_t cause_1) {
+void kinetis_k22_warm_reset(KinetisK22* device, uint8_t reset_cause_0, uint8_t reset_cause_1) {
     if (device == NULL) {
         return;
     }
@@ -638,74 +639,81 @@ void kinetis_k22_warm_reset(KinetisK22* device, uint8_t cause_0, uint8_t cause_1
     sync_flash_configuration(device);
     kinetis_k22_peripheral_reset(device);
     memcpy(device->peripheral + 0x3e000u, retained_vbat, sizeof(retained_vbat));
-    k22_timing_warm_reset(&device->timing, cause_0, cause_1);
+    k22_timing_warm_reset(&device->timing, reset_cause_0, reset_cause_1);
     kinetis_k22_sync_clock_gates(device);
     (void)cortex_m4_reset(device->cpu, device->configuration.vector_table_address);
     fmc_clear_cache(device);
 }
 
-bool kinetis_k22_load(KinetisK22* device, uint32_t address, const void* data, size_t size) {
-    if (device == NULL || data == NULL) {
+bool kinetis_k22_load(KinetisK22* device, uint32_t address, const void* input_data,
+                      size_t data_size) {
+    if (device == NULL || input_data == NULL) {
         return false;
     }
     if (address < device->configuration.flash_size &&
-        (uint64_t)address + size <= device->configuration.flash_size) {
-        memcpy(device->flash + address, data, size);
+        (uint64_t)address + data_size <= device->configuration.flash_size) {
+        memcpy(device->flash + address, input_data, data_size);
         fmc_clear_cache(device);
         sync_flash_configuration(device);
         return true;
     }
     if (address >= device->sram_base &&
-        (uint64_t)address + size <= (uint64_t)device->sram_base + device->configuration.sram_size) {
-        memcpy(device->sram + address - device->sram_base, data, size);
+        (uint64_t)address + data_size <=
+            (uint64_t)device->sram_base + device->configuration.sram_size) {
+        memcpy(device->sram + address - device->sram_base, input_data, data_size);
         return true;
     }
     return false;
 }
 
-bool kinetis_k22_seed(KinetisK22* device, uint32_t address, const void* data, size_t size) {
-    return kinetis_k22_write(device, address, data, size);
+bool kinetis_k22_seed(KinetisK22* device, uint32_t address, const void* input_data,
+                      size_t data_size) {
+    return kinetis_k22_write(device, address, input_data, data_size);
 }
 
-bool kinetis_k22_read(const KinetisK22* device, uint32_t address, void* data, size_t size) {
-    if (device == NULL || data == NULL) {
+bool kinetis_k22_read(const KinetisK22* device, uint32_t address, void* output_data,
+                      size_t data_size) {
+    if (device == NULL || output_data == NULL) {
         return false;
     }
-    uint8_t* output = data;
-    size_t offset = 0;
-    while (offset < size) {
-        const size_t remaining = size - offset;
-        const uint8_t width = remaining >= 4 && ((address + offset) & 3u) == 0   ? 4
-                              : remaining >= 2 && ((address + offset) & 1u) == 0 ? 2
-                                                                                 : 1;
-        uint32_t value = 0;
-        if (!k22_read_bus((KinetisK22*)device, address + (uint32_t)offset, width,
-                          CORTEX_M4_ACCESS_DEBUG, &value)) {
+    uint8_t* output_bytes = output_data;
+    size_t byte_offset = 0u;
+    while (byte_offset < data_size) {
+        const size_t remaining_bytes = data_size - byte_offset;
+        const uint8_t access_size = remaining_bytes >= 4 && ((address + byte_offset) & 3u) == 0 ? 4
+                                    : remaining_bytes >= 2 && ((address + byte_offset) & 1u) == 0
+                                        ? 2
+                                        : 1;
+        uint32_t transfer_value = 0u;
+        if (!k22_read_bus((KinetisK22*)device, address + (uint32_t)byte_offset, access_size,
+                          CORTEX_M4_ACCESS_DEBUG, &transfer_value)) {
             return false;
         }
-        store_little_endian(output + offset, width, value);
-        offset += width;
+        store_little_endian(output_bytes + byte_offset, access_size, transfer_value);
+        byte_offset += access_size;
     }
     return true;
 }
 
-bool kinetis_k22_write(KinetisK22* device, uint32_t address, const void* data, size_t size) {
-    if (device == NULL || data == NULL) {
+bool kinetis_k22_write(KinetisK22* device, uint32_t address, const void* input_data,
+                       size_t data_size) {
+    if (device == NULL || input_data == NULL) {
         return false;
     }
-    const uint8_t* input = data;
-    size_t offset = 0;
-    while (offset < size) {
-        const size_t remaining = size - offset;
-        const uint8_t width = remaining >= 4 && ((address + offset) & 3u) == 0   ? 4
-                              : remaining >= 2 && ((address + offset) & 1u) == 0 ? 2
-                                                                                 : 1;
-        const uint32_t value = load_little_endian(input + offset, width);
-        if (!k22_write_bus(device, address + (uint32_t)offset, width, CORTEX_M4_ACCESS_DEBUG,
-                           value)) {
+    const uint8_t* input_bytes = input_data;
+    size_t byte_offset = 0u;
+    while (byte_offset < data_size) {
+        const size_t remaining_bytes = data_size - byte_offset;
+        const uint8_t access_size = remaining_bytes >= 4 && ((address + byte_offset) & 3u) == 0 ? 4
+                                    : remaining_bytes >= 2 && ((address + byte_offset) & 1u) == 0
+                                        ? 2
+                                        : 1;
+        const uint32_t transfer_value = load_little_endian(input_bytes + byte_offset, access_size);
+        if (!k22_write_bus(device, address + (uint32_t)byte_offset, access_size,
+                           CORTEX_M4_ACCESS_DEBUG, transfer_value)) {
             return false;
         }
-        offset += width;
+        byte_offset += access_size;
     }
     return true;
 }
@@ -768,20 +776,20 @@ bool kinetis_k22_copy(KinetisK22* destination, const KinetisK22* source) {
     return cortex_m4_copy(destination->cpu, source->cpu);
 }
 
-bool kinetis_k22_flexbus_attach(KinetisK22* device, uint32_t address, const void* data, size_t size,
-                                bool read_only) {
-    if (device == NULL || data == NULL || size == 0u ||
-        (uint64_t)address + size > UINT64_C(0x100000000) ||
+bool kinetis_k22_flexbus_attach(KinetisK22* device, uint32_t address, const void* input_data,
+                                size_t window_size, bool read_only) {
+    if (device == NULL || input_data == NULL || window_size == 0u ||
+        (uint64_t)address + window_size > UINT64_C(0x100000000) ||
         !k22_package_has_peripheral(device->package, K22_PERIPHERAL_FB))
         return false;
-    uint8_t* memory = malloc(size);
-    if (memory == NULL)
+    uint8_t* window_memory = malloc(window_size);
+    if (window_memory == NULL)
         return false;
-    memcpy(memory, data, size);
+    memcpy(window_memory, input_data, window_size);
     free(device->flexbus_memory);
-    device->flexbus_memory = memory;
+    device->flexbus_memory = window_memory;
     device->flexbus_address = address;
-    device->flexbus_size = size;
+    device->flexbus_size = window_size;
     device->flexbus_read_only = read_only;
     return true;
 }
@@ -796,17 +804,18 @@ void kinetis_k22_flexbus_detach(KinetisK22* device) {
     device->flexbus_read_only = false;
 }
 
-bool kinetis_k22_flexbus_read(const KinetisK22* device, size_t offset, void* data, size_t size) {
-    if (device == NULL || data == NULL || device->flexbus_memory == NULL ||
-        offset > device->flexbus_size || size > device->flexbus_size - offset)
+bool kinetis_k22_flexbus_read(const KinetisK22* device, size_t window_offset, void* output_data,
+                              size_t read_size) {
+    if (device == NULL || output_data == NULL || device->flexbus_memory == NULL ||
+        window_offset > device->flexbus_size || read_size > device->flexbus_size - window_offset)
         return false;
-    memcpy(data, device->flexbus_memory + offset, size);
+    memcpy(output_data, device->flexbus_memory + window_offset, read_size);
     return true;
 }
 
-void kinetis_k22_advance(KinetisK22* device, uint32_t cycles) {
-    if (device != NULL && cycles != 0) {
-        k22_advance_bus(device, cycles);
+void kinetis_k22_advance(KinetisK22* device, uint32_t cycle_count) {
+    if (device != NULL && cycle_count != 0u) {
+        k22_advance_bus(device, cycle_count);
     }
 }
 

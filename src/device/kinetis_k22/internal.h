@@ -94,7 +94,7 @@ bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t 
                                   CortexM4Access access, uint32_t write_value);
 void kinetis_k22_peripheral_advance(KinetisK22* device, uint32_t cycles);
 void kinetis_k22_peripheral_reset(KinetisK22* device);
-void kinetis_k22_warm_reset(KinetisK22* device, uint8_t cause_0, uint8_t cause_1);
+void kinetis_k22_warm_reset(KinetisK22* device, uint8_t reset_cause_0, uint8_t reset_cause_1);
 void kinetis_k22_refresh_signals(KinetisK22* device);
 void kinetis_k22_sync_clock_gates(KinetisK22* device);
 K22DataBus kinetis_k22_data_bus(KinetisK22* device);
