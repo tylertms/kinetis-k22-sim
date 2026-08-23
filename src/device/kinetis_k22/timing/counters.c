@@ -1,31 +1,33 @@
 #include "internal.h"
 
-static uint32_t advance_pit_channel_ticks(K22Timing* timing, uint8_t channel, uint64_t ticks) {
-    K22PitChannel* pit = &timing->pit[channel];
-    if ((pit->control & 1u) == 0 || ticks == 0) {
+static uint32_t advance_pit_channel_ticks(K22Timing* timing, uint8_t pit_channel,
+                                          uint64_t elapsed_ticks) {
+    K22PitChannel* pit_channel_state = &timing->pit[pit_channel];
+    if ((pit_channel_state->control & 1u) == 0 || elapsed_ticks == 0) {
         return 0;
     }
-    const uint64_t first_tick = (uint64_t)pit->current + 1u;
-    uint32_t expirations = 0;
-    if (ticks >= first_tick) {
-        ticks -= first_tick;
-        expirations = 1u;
-        const uint64_t period = (uint64_t)pit->load + 1u;
-        const uint64_t additional_expirations = ticks / period;
-        expirations = additional_expirations >= UINT32_MAX
-                          ? UINT32_MAX
-                          : expirations + (uint32_t)additional_expirations;
-        pit->current = pit->load - (uint32_t)(ticks % period);
-        pit->flag = true;
-        if ((pit->control & 2u) != 0) {
-            k22_timing_internal_set_irq(timing, IRQ_PIT0 + channel, true);
+    const uint64_t ticks_to_expiration = (uint64_t)pit_channel_state->current + 1u;
+    uint32_t expiration_count = 0;
+    if (elapsed_ticks >= ticks_to_expiration) {
+        elapsed_ticks -= ticks_to_expiration;
+        expiration_count = 1u;
+        const uint64_t reload_period = (uint64_t)pit_channel_state->load + 1u;
+        const uint64_t repeated_expirations = elapsed_ticks / reload_period;
+        expiration_count = repeated_expirations >= UINT32_MAX
+                               ? UINT32_MAX
+                               : expiration_count + (uint32_t)repeated_expirations;
+        pit_channel_state->current =
+            pit_channel_state->load - (uint32_t)(elapsed_ticks % reload_period);
+        pit_channel_state->flag = true;
+        if ((pit_channel_state->control & 2u) != 0) {
+            k22_timing_internal_set_irq(timing, IRQ_PIT0 + pit_channel, true);
         }
-        k22_timing_internal_trigger_dma(timing, channel);
-        k22_timing_internal_trigger_adc_alternate(timing, (uint8_t)(4u + channel));
+        k22_timing_internal_trigger_dma(timing, pit_channel);
+        k22_timing_internal_trigger_adc_alternate(timing, (uint8_t)(4u + pit_channel));
     } else {
-        pit->current -= (uint32_t)ticks;
+        pit_channel_state->current -= (uint32_t)elapsed_ticks;
     }
-    return expirations;
+    return expiration_count;
 }
 
 void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
@@ -34,14 +36,15 @@ void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
         ((timing->pit_mcr & 1u) != 0u && timing->debug_halted)) {
         return;
     }
-    const uint64_t ticks = k22_timing_internal_clock_ticks(
+    const uint64_t elapsed_ticks = k22_timing_internal_clock_ticks(
         &timing->pit_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
-    uint64_t chained_ticks = ticks;
-    for (uint8_t channel = 0; channel < 4; channel++) {
-        if ((timing->pit[channel].control & 4u) == 0) {
-            chained_ticks = ticks;
+    uint64_t chained_ticks = elapsed_ticks;
+
+    for (uint8_t pit_channel = 0; pit_channel < 4; pit_channel++) {
+        if ((timing->pit[pit_channel].control & 4u) == 0) {
+            chained_ticks = elapsed_ticks;
         }
-        chained_ticks = advance_pit_channel_ticks(timing, channel, chained_ticks);
+        chained_ticks = advance_pit_channel_ticks(timing, pit_channel, chained_ticks);
     }
 }
 
