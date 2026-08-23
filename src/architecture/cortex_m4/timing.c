@@ -4,7 +4,7 @@ enum {
     CORTEX_M4_MAXIMUM_EXCLUSIVE_GRANULE = 2048,
 };
 
-static uint32_t population_count(uint32_t bit_pattern) {
+static uint32_t count_set_bits(uint32_t bit_pattern) {
     uint32_t set_bit_count = 0;
     while (bit_pattern != 0) {
         set_bit_count += bit_pattern & 1u;
@@ -13,7 +13,7 @@ static uint32_t population_count(uint32_t bit_pattern) {
     return set_bit_count;
 }
 
-static uint32_t leading_zero_count(uint32_t bit_pattern) {
+static uint32_t count_leading_zeros(uint32_t bit_pattern) {
     uint32_t leading_zeroes = 0;
     while ((bit_pattern & 0x80000000u) == 0) {
         bit_pattern <<= 1;
@@ -22,7 +22,7 @@ static uint32_t leading_zero_count(uint32_t bit_pattern) {
     return leading_zeroes;
 }
 
-static uint32_t signed_magnitude(uint32_t encoded_value) {
+static uint32_t absolute_value_bits(uint32_t encoded_value) {
     if ((encoded_value & 0x80000000u) == 0) {
         return encoded_value;
     }
@@ -35,25 +35,26 @@ static uint32_t saturating_add(uint32_t left, uint32_t right) {
 
 uint32_t cortex_m4_timing_divide_cycles(uint32_t dividend, uint32_t divisor, bool signed_divide) {
     if (signed_divide) {
-        dividend = signed_magnitude(dividend);
-        divisor = signed_magnitude(divisor);
+        dividend = absolute_value_bits(dividend);
+        divisor = absolute_value_bits(divisor);
     }
     if (divisor == 0 || dividend < divisor) {
         return 2;
     }
-    const uint32_t leading_difference = leading_zero_count(divisor) - leading_zero_count(dividend);
+    const uint32_t leading_difference =
+        count_leading_zeros(divisor) - count_leading_zeros(dividend);
     const uint32_t cycles = 2u + leading_difference / 3u;
     return cycles > 12u ? 12u : cycles;
 }
 
-static bool overlaps(uint32_t left_address, uint32_t left_size, uint32_t right_address,
-                     uint32_t right_size) {
+static bool ranges_overlap(uint32_t left_address, uint32_t left_size, uint32_t right_address,
+                           uint32_t right_size) {
     const uint64_t left_end = (uint64_t)left_address + left_size;
     const uint64_t right_end = (uint64_t)right_address + right_size;
     return left_address < right_end && right_address < left_end;
 }
 
-static void progress_pending_store(CortexM4* cpu, uint32_t cycles) {
+static void reduce_pending_store_cycles(CortexM4* cpu, uint32_t cycles) {
     if (cycles >= cpu->timing_pending_store_cycles) {
         cpu->timing_pending_store_cycles = 0;
     } else {
@@ -61,12 +62,12 @@ static void progress_pending_store(CortexM4* cpu, uint32_t cycles) {
     }
 }
 
-static void advance_timed(CortexM4* cpu, uint32_t cycles) {
-    progress_pending_store(cpu, cycles);
+static void advance_timing(CortexM4* cpu, uint32_t cycles) {
+    reduce_pending_store_cycles(cpu, cycles);
     cortex_m4_advance(cpu, cycles);
 }
 
-static CortexM4TimingBus access_bus(uint32_t address, CortexM4Access access) {
+static CortexM4TimingBus timing_bus_for_access(uint32_t address, CortexM4Access access) {
     if (address >= 0xe0000000u) {
         return CORTEX_M4_TIMING_BUS_PPB;
     }
@@ -118,17 +119,17 @@ static bool memory16(uint16_t opcode, bool* load) {
 
 static bool multiple16(uint16_t opcode, uint32_t* transfers, bool* loads_pc) {
     if ((opcode & 0xf000u) == 0xc000u) {
-        *transfers = population_count(opcode & 0xffu);
+        *transfers = count_set_bits(opcode & 0xffu);
         *loads_pc = false;
         return true;
     }
     if ((opcode & 0xfe00u) == 0xb400u) {
-        *transfers = population_count(opcode & 0xffu) + ((opcode >> 8) & 1u);
+        *transfers = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
         *loads_pc = false;
         return true;
     }
     if ((opcode & 0xfe00u) == 0xbc00u) {
-        *transfers = population_count(opcode & 0xffu) + ((opcode >> 8) & 1u);
+        *transfers = count_set_bits(opcode & 0xffu) + ((opcode >> 8) & 1u);
         *loads_pc = (opcode & 0x0100u) != 0;
         return true;
     }
@@ -139,7 +140,7 @@ static bool multiple32(uint16_t first, uint16_t second, uint32_t* transfers, boo
     if ((((first & 0xffd0u) == 0xe880u || (first & 0xffd0u) == 0xe890u) ||
          (first & 0xffc0u) == 0xe900u) &&
         second != 0) {
-        *transfers = population_count(second);
+        *transfers = count_set_bits(second);
         *loads_pc = (first & 0x0010u) != 0 && (second & 0x8000u) != 0;
         return true;
     }
@@ -187,8 +188,8 @@ static bool load32(uint16_t first) {
     return (first & 0x0010u) != 0;
 }
 
-static uint32_t instruction_cycles(const CortexM4* cpu, uint16_t first, uint16_t second, bool wide,
-                                   bool executed, uint32_t sequential_pc) {
+static uint32_t calculate_instruction_cycles(const CortexM4* cpu, uint16_t first, uint16_t second,
+                                             bool wide, bool executed, uint32_t sequential_pc) {
     if (!executed) {
         return 1;
     }
@@ -326,7 +327,7 @@ void cortex_m4_timing_access(CortexM4* cpu, uint32_t address, uint8_t size, Cort
         cpu->timing_last_access_valid && cpu->timing_last_access_write == write &&
         cpu->timing_last_access_type == access && cpu->timing_last_access_address == address;
     uint32_t wait_cycles = 0;
-    const CortexM4TimingBus bus = access_bus(address, access);
+    const CortexM4TimingBus bus = timing_bus_for_access(address, access);
     if (cpu->wait_states != NULL) {
         wait_cycles =
             cpu->wait_states(cpu->wait_state_context, address, size, access, write, sequential);
@@ -398,9 +399,9 @@ void cortex_m4_timing_complete_instruction(CortexM4* cpu, uint16_t first, uint16
         }
     }
     const uint32_t base_cycles =
-        instruction_cycles(cpu, first, second, wide, executed, sequential_pc);
+        calculate_instruction_cycles(cpu, first, second, wide, executed, sequential_pc);
     const uint32_t elapsed = saturating_add(base_cycles, cpu->timing_instruction_wait_cycles);
-    advance_timed(cpu, elapsed);
+    advance_timing(cpu, elapsed);
     if (cpu->timing_instruction_store_cycles > cpu->timing_pending_store_cycles) {
         cpu->timing_pending_store_cycles = cpu->timing_instruction_store_cycles;
         cpu->timing_pending_store_bus = cpu->timing_instruction_store_bus;
@@ -436,7 +437,7 @@ void cortex_m4_timing_exception(CortexM4* cpu, CortexM4ExceptionTiming transitio
     cpu->exclusive_valid = false;
     cpu->timing_last_access_valid = false;
     cycles = saturating_add(cycles, cpu->timing_instruction_wait_cycles);
-    advance_timed(cpu, cycles);
+    advance_timing(cpu, cycles);
     cortex_m4_timing_abort(cpu);
 }
 
@@ -444,7 +445,7 @@ void cortex_m4_timing_sleep(CortexM4* cpu, uint32_t cycles) {
     if (cpu == NULL || cycles == 0) {
         return;
     }
-    advance_timed(cpu, cycles);
+    advance_timing(cpu, cycles);
 }
 
 void cortex_m4_timing_reserve(CortexM4* cpu, uint32_t address, uint8_t size) {
@@ -473,7 +474,7 @@ void cortex_m4_timing_observe_write(CortexM4* cpu, uint32_t address, uint32_t si
         return;
     }
     if (cpu->exclusive_granule == 0 ||
-        overlaps(cpu->exclusive_reservation_base, cpu->exclusive_granule, address, size)) {
+        ranges_overlap(cpu->exclusive_reservation_base, cpu->exclusive_granule, address, size)) {
         cpu->exclusive_valid = false;
     }
 }
