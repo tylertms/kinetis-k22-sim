@@ -11,25 +11,25 @@ typedef struct {
 } ApiBus;
 
 static bool bus_read(void* context, uint32_t address, uint8_t size, CortexM4Access access,
-                     uint32_t* value) {
+                     uint32_t* output_value) {
     ApiBus* bus = context;
     (void)access;
     if (address == bus->rejected_read || (uint64_t)address + size > sizeof(bus->memory)) {
         return false;
     }
-    *value = 0u;
-    memcpy(value, bus->memory + address, size);
+    *output_value = 0u;
+    memcpy(output_value, bus->memory + address, size);
     return true;
 }
 
 static bool bus_write(void* context, uint32_t address, uint8_t size, CortexM4Access access,
-                      uint32_t value) {
+                      uint32_t write_value) {
     ApiBus* bus = context;
     (void)access;
     if ((uint64_t)address + size > sizeof(bus->memory)) {
         return false;
     }
-    memcpy(bus->memory + address, &value, size);
+    memcpy(bus->memory + address, &write_value, size);
     return true;
 }
 
@@ -48,9 +48,9 @@ static CortexM4* create_cpu(TestState* state, ApiBus* bus) {
     return cpu;
 }
 
-static void load_instruction(ApiBus* bus, uint16_t first, uint16_t second) {
-    memcpy(bus->memory + 0x100u, &first, sizeof(first));
-    memcpy(bus->memory + 0x102u, &second, sizeof(second));
+static void load_instruction(ApiBus* bus, uint16_t first_halfword, uint16_t second_halfword) {
+    memcpy(bus->memory + 0x100u, &first_halfword, sizeof(first_halfword));
+    memcpy(bus->memory + 0x102u, &second_halfword, sizeof(second_halfword));
 }
 
 static void test_creation_and_configuration(TestState* state) {
@@ -198,23 +198,23 @@ static void test_api_boundaries(TestState* state) {
     expect(state, (cpu->xpsr & CORTEX_M4_XPSR_V) != 0u, "(cpu->xpsr & CORTEX_M4_XPSR_V) != 0u");
     expect(state, cortex_m4_condition_passed(cpu, 14u), "cortex_m4_condition_passed(cpu, 14u)");
     expect(state, !cortex_m4_condition_passed(cpu, 15u), "!cortex_m4_condition_passed(cpu, 15u)");
-    bool carry = false;
-    expect(state, cortex_m4_shift(0x80000000u, 2u, 32u, false, &carry) == 0xffffffffu,
-           "cortex_m4_shift(0x80000000u, 2u, 32u, false, &carry) == 0xffffffffu");
-    expect(state, carry, "carry");
-    expect(state, cortex_m4_shift(1u, 3u, 0u, true, &carry) == 0x80000000u,
-           "cortex_m4_shift(1u, 3u, 0u, true, &carry) == 0x80000000u");
-    expect(state, carry, "carry");
+    bool carry_out = false;
+    expect(state, cortex_m4_shift(0x80000000u, 2u, 32u, false, &carry_out) == 0xffffffffu,
+           "cortex_m4_shift(0x80000000u, 2u, 32u, false, &carry_out) == 0xffffffffu");
+    expect(state, carry_out, "carry_out");
+    expect(state, cortex_m4_shift(1u, 3u, 0u, true, &carry_out) == 0x80000000u,
+           "cortex_m4_shift(1u, 3u, 0u, true, &carry_out) == 0x80000000u");
+    expect(state, carry_out, "carry_out");
     expect(state, cortex_m4_bus_write(cpu, 0xe000ed94u, 4u, CORTEX_M4_ACCESS_DEBUG, 1u),
            "cortex_m4_bus_write(cpu, 0xe000ed94u, 4u, CORTEX_M4_ACCESS_DEBUG, 1u)");
-    uint32_t value = 0u;
+    uint32_t output_value = 0u;
     expect(state,
-           !cortex_m4_read_memory(NULL, 0u, 1u, &value) &&
+           !cortex_m4_read_memory(NULL, 0u, 1u, &output_value) &&
                !cortex_m4_read_memory(cpu, 0u, 1u, NULL) &&
                !cortex_m4_write_memory(NULL, 0u, 1u, 0u),
            "null debugger memory accesses are rejected");
     expect(state,
-           !cortex_m4_bus_read(cpu, 0u, 3u, CORTEX_M4_ACCESS_DATA, &value) &&
+           !cortex_m4_bus_read(cpu, 0u, 3u, CORTEX_M4_ACCESS_DATA, &output_value) &&
                !cortex_m4_bus_read(cpu, 0u, 1u, CORTEX_M4_ACCESS_DATA, NULL) &&
                !cortex_m4_bus_write(cpu, 0u, 3u, CORTEX_M4_ACCESS_DATA, 0u),
            "core bus rejects invalid access widths and outputs");
