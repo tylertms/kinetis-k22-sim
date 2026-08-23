@@ -162,12 +162,12 @@ bool kinetis_k22_serial_receive(KinetisK22* device, KinetisK22SerialEndpoint end
     }
     const K22PeripheralId id = kinetis_k22_internal_serial_endpoint_peripheral(endpoint);
     (void)k22_serial_set_clock_gate(&device->serial, id, true);
-    const bool result = k22_serial_push_receive(&device->serial, (K22SerialEndpoint)endpoint,
-                                                received_value, status);
+    const bool receive_accepted = k22_serial_push_receive(
+        &device->serial, (K22SerialEndpoint)endpoint, received_value, status);
     k22_serial_advance_endpoint(&device->serial, (K22SerialEndpoint)endpoint);
     kinetis_k22_internal_refresh_serial_signals(device);
     kinetis_k22_sync_clock_gates(device);
-    return result;
+    return receive_accepted;
 }
 
 bool kinetis_k22_serial_transmit(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
@@ -183,15 +183,16 @@ bool kinetis_k22_spi_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpo
         endpoint < KINETIS_K22_SERIAL_SPI0 || endpoint > KINETIS_K22_SERIAL_SPI2) {
         return false;
     }
-    K22SerialSpiTransfer internal;
-    if (!k22_serial_pop_spi_transfer(&device->serial, (K22SerialEndpoint)endpoint, &internal)) {
+    K22SerialSpiTransfer internal_transfer;
+    if (!k22_serial_pop_spi_transfer(&device->serial, (K22SerialEndpoint)endpoint,
+                                     &internal_transfer)) {
         return false;
     }
-    transfer->data = internal.data;
-    transfer->chip_selects = internal.chip_selects;
-    transfer->clock_and_transfer_attributes = internal.clock_and_transfer_attributes;
-    transfer->continuous_chip_select = internal.continuous_chip_select;
-    transfer->end_of_queue = internal.end_of_queue;
+    transfer->data = internal_transfer.data;
+    transfer->chip_selects = internal_transfer.chip_selects;
+    transfer->clock_and_transfer_attributes = internal_transfer.clock_and_transfer_attributes;
+    transfer->continuous_chip_select = internal_transfer.continuous_chip_select;
+    transfer->end_of_queue = internal_transfer.end_of_queue;
     return true;
 }
 
@@ -224,11 +225,11 @@ bool kinetis_k22_i2c_acknowledge(KinetisK22* device, KinetisK22SerialEndpoint en
         endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
         return false;
     }
-    const bool result =
+    const bool acknowledge_accepted =
         k22_serial_i2c_set_acknowledge(&device->serial, (K22SerialEndpoint)endpoint, acknowledge);
     k22_serial_advance_endpoint(&device->serial, (K22SerialEndpoint)endpoint);
     kinetis_k22_internal_refresh_serial_signals(device);
-    return result;
+    return acknowledge_accepted;
 }
 
 bool kinetis_k22_i2c_lose_arbitration(KinetisK22* device, KinetisK22SerialEndpoint endpoint) {
@@ -236,10 +237,10 @@ bool kinetis_k22_i2c_lose_arbitration(KinetisK22* device, KinetisK22SerialEndpoi
         endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
         return false;
     }
-    const bool result =
+    const bool arbitration_lost =
         k22_serial_i2c_lose_arbitration(&device->serial, (K22SerialEndpoint)endpoint);
     kinetis_k22_internal_refresh_serial_signals(device);
-    return result;
+    return arbitration_lost;
 }
 
 bool kinetis_k22_i2c_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint, uint8_t value) {
@@ -251,49 +252,50 @@ bool kinetis_k22_i2c_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoi
 bool kinetis_k22_usb_token(KinetisK22* device, uint8_t endpoint, uint8_t token, bool transmit) {
     if (device == NULL)
         return false;
-    const bool result = k22_io_usb_token(&device->io, endpoint, token, transmit);
+    const bool token_accepted = k22_io_usb_token(&device->io, endpoint, token, transmit);
     kinetis_k22_refresh_signals(device);
-    return result;
+    return token_accepted;
 }
 
 bool kinetis_k22_can_receive(KinetisK22* device, const KinetisK22CanFrame* frame) {
     if (device == NULL || frame == NULL) {
         return false;
     }
-    K22CanFrame internal;
-    internal.identifier = frame->identifier;
-    internal.length = frame->length;
-    memcpy(internal.data, frame->data, sizeof(internal.data));
-    internal.extended = frame->extended;
-    internal.remote = frame->remote;
-    const bool result = k22_io_can_receive(&device->io, &internal);
+    K22CanFrame can_frame;
+    can_frame.identifier = frame->identifier;
+    can_frame.length = frame->length;
+    memcpy(can_frame.data, frame->data, sizeof(can_frame.data));
+    can_frame.extended = frame->extended;
+    can_frame.remote = frame->remote;
+    const bool frame_accepted = k22_io_can_receive(&device->io, &can_frame);
     kinetis_k22_refresh_signals(device);
-    return result;
+    return frame_accepted;
 }
 
 bool kinetis_k22_i2s_receive(KinetisK22* device, uint32_t sample) {
     if (device == NULL)
         return false;
-    const bool result = k22_io_i2s_receive(&device->io, sample);
+    const bool sample_accepted = k22_io_i2s_receive(&device->io, sample);
     kinetis_k22_refresh_signals(device);
-    return result;
+    return sample_accepted;
 }
 
 bool kinetis_k22_i2s_transmit(KinetisK22* device, uint32_t* sample) {
     if (device == NULL)
         return false;
-    const bool result = k22_io_i2s_transmit(&device->io, sample);
+    const bool sample_transmitted = k22_io_i2s_transmit(&device->io, sample);
     kinetis_k22_refresh_signals(device);
-    return result;
+    return sample_transmitted;
 }
 
 bool kinetis_k22_sdhc_insert(KinetisK22* device, const void* card_data, size_t card_size,
                              bool write_protected) {
     if (device == NULL || !k22_package_has_peripheral(device->package, K22_PERIPHERAL_SDHC))
         return false;
-    const bool result = k22_sdhc_insert(&device->sdhc, card_data, card_size, write_protected);
+    const bool card_inserted =
+        k22_sdhc_insert(&device->sdhc, card_data, card_size, write_protected);
     kinetis_k22_refresh_signals(device);
-    return result;
+    return card_inserted;
 }
 
 void kinetis_k22_sdhc_eject(KinetisK22* device) {
