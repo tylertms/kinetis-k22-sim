@@ -3,8 +3,8 @@
 static bool valid_core_register(uint8_t index) { return index != 13u && index != 15u; }
 
 static uint32_t sign_extend(uint32_t input_value, uint8_t width) {
-    const uint32_t sign = 1u << (width - 1u);
-    return (input_value ^ sign) - sign;
+    const uint32_t sign_bit = 1u << (width - 1u);
+    return (input_value ^ sign_bit) - sign_bit;
 }
 
 static void branch_to(CortexM4* cpu, uint32_t address) {
