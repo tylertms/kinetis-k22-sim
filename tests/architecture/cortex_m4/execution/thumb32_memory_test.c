@@ -6,7 +6,7 @@
 #include "architecture/cortex_m4/internal.h"
 #include "test.h"
 
-enum { SCB_CCR = 0xe000ed14u };
+static const uint32_t SCB_CCR = 0xe000ed14u;
 
 static KinetisK22* create_device(TestState* state) {
     KinetisK22Configuration configuration = kinetis_k22_default_configuration();

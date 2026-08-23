@@ -147,7 +147,7 @@ static void expect_manifest(TestState* state, K22ProfileId profile,
     expect(state, calculate_peripheral_digest(manifest) == expected->peripheral_digest,
            "calculate_peripheral_digest(manifest) == expected->peripheral_digest");
 
-    for (size_t index = 0; index < expected->peripheral_count; index++) {
+    for (uint16_t index = 0u; index < expected->peripheral_count; index++) {
         expect(state, strcmp(manifest->peripheral_names[index], expected->peripherals[index]) == 0,
                "strcmp(manifest->peripheral_names[index], expected->peripherals[index]) == 0");
         expect(state, k22_register_manifest_has_peripheral(profile, expected->peripherals[index]),
@@ -209,7 +209,8 @@ static void expect_manifest(TestState* state, K22ProfileId profile,
            "!k22_register_manifest_reset(profile, first->address, first->width, &value, "
            "NULL)");
     expect(state,
-           k22_register_manifest_peripheral_name(manifest, manifest->peripheral_count) == NULL,
+           k22_register_manifest_peripheral_name(manifest, (uint16_t)manifest->peripheral_count) ==
+               NULL,
            "k22_register_manifest_peripheral_name( manifest, manifest->peripheral_count) "
            "== NULL");
     expect(state, !k22_register_manifest_has_peripheral(profile, "UNKNOWN"),

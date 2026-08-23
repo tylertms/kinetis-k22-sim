@@ -4,22 +4,12 @@
 
 #include "test.h"
 
-enum {
-    NVIC_ENABLE = 0xe000e100u,
-    NVIC_PENDING = 0xe000e200u,
-    NVIC_CLEAR_PENDING = 0xe000e280u,
-    NVIC_PRIORITY = 0xe000e400u,
-    SCB_CPUID = 0xe000ed00u,
-    SCB_ICTR = 0xe000e004u,
-    MPU_TYPE = 0xe000ed90u,
-    SCB_ICSR = 0xe000ed04u,
-    SCB_AIRCR = 0xe000ed0cu,
-    SCB_SHPR = 0xe000ed18u,
-    SCB_SHCSR = 0xe000ed24u,
-    NVIC_SOFTWARE_TRIGGER = 0xe000ef00u,
-    RESET_STATUS_0 = 0x4007f000u,
-    RESET_STATUS_1 = 0x4007f001u,
-};
+static const uint32_t NVIC_ENABLE = 0xe000e100u, NVIC_PENDING = 0xe000e200u,
+                      NVIC_CLEAR_PENDING = 0xe000e280u, NVIC_PRIORITY = 0xe000e400u,
+                      SCB_CPUID = 0xe000ed00u, SCB_ICTR = 0xe000e004u, MPU_TYPE = 0xe000ed90u,
+                      SCB_ICSR = 0xe000ed04u, SCB_AIRCR = 0xe000ed0cu, SCB_SHPR = 0xe000ed18u,
+                      SCB_SHCSR = 0xe000ed24u, NVIC_SOFTWARE_TRIGGER = 0xe000ef00u,
+                      RESET_STATUS_0 = 0x4007f000u, RESET_STATUS_1 = 0x4007f001u;
 
 static uint32_t read_value(TestState* state, CortexM4* cpu, uint32_t address, uint8_t size) {
     uint32_t value = 0;

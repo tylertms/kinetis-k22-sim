@@ -4,7 +4,7 @@
 
 #include "test.h"
 
-enum { SCB_SHCSR = 0xe000ed24u };
+static const uint32_t SCB_SHCSR = 0xe000ed24u;
 
 static KinetisK22* create_device(TestState* state) {
     KinetisK22Configuration configuration = kinetis_k22_default_configuration();

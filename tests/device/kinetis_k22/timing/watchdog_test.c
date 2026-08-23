@@ -5,26 +5,13 @@
 #include "k22_test.h"
 #include "test.h"
 
-enum {
-    WDOG_STCTRLH = 0x40052000u,
-    WDOG_TOVALH = 0x40052004u,
-    WDOG_TOVALL = 0x40052006u,
-    WDOG_REFRESH = 0x4005200cu,
-    WDOG_UNLOCK = 0x4005200eu,
-    RCM_SRS0 = 0x4007f000u,
-    RCM_SRS1 = 0x4007f001u,
-    RTC_TSR = 0x4003d000u,
-    SIM_REGISTER = 0x40047000u,
-    PORTA_PCR0 = 0x40049000u,
-    GPIOA_PDIR = 0x400ff010u,
-    PIT0_LDVAL = 0x40037100u,
-    ADC0_CFG1 = 0x4003b008u,
-    DMA_TCD0_SADDR = 0x40009000u,
-    UART1_C2 = 0x4006b003u,
-    SPI0_MCR = 0x4002c000u,
-    I2C0_C1 = 0x40066002u,
-    SCB_AIRCR = 0xe000ed0cu,
-};
+static const uint32_t WDOG_STCTRLH = 0x40052000u, WDOG_TOVALH = 0x40052004u,
+                      WDOG_TOVALL = 0x40052006u, WDOG_REFRESH = 0x4005200cu,
+                      WDOG_UNLOCK = 0x4005200eu, RCM_SRS0 = 0x4007f000u, RCM_SRS1 = 0x4007f001u,
+                      RTC_TSR = 0x4003d000u, SIM_REGISTER = 0x40047000u, PORTA_PCR0 = 0x40049000u,
+                      GPIOA_PDIR = 0x400ff010u, PIT0_LDVAL = 0x40037100u, ADC0_CFG1 = 0x4003b008u,
+                      DMA_TCD0_SADDR = 0x40009000u, UART1_C2 = 0x4006b003u, SPI0_MCR = 0x4002c000u,
+                      I2C0_C1 = 0x40066002u, SCB_AIRCR = 0xe000ed0cu;
 
 static void write_u16(TestState* state, KinetisK22* device, uint32_t address, uint16_t value) {
     expect(state, kinetis_k22_write(device, address, &value, sizeof(value)),
