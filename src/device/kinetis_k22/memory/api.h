@@ -63,11 +63,12 @@ void k22_data_adc_trigger(K22Data* data, uint8_t instance);
 void k22_data_adc_pretrigger(K22Data* data, uint8_t instance, uint8_t pretrigger);
 bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel,
                             uint16_t sample_value);
-bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t input_level);
+bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input_index,
+                            uint8_t input_level);
 bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* output_high);
 bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* output_value);
 void k22_data_dac_trigger(K22Data* data, uint8_t instance);
-void k22_data_rng_seed(K22Data* data, uint32_t seed);
+void k22_data_rng_seed(K22Data* data, uint32_t seed_value);
 bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t byte_count);
 bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t byte_offset, uint8_t byte_count);
 uint32_t k22_data_program_flash_address(const K22Data* data, uint32_t address);

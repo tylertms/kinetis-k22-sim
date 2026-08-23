@@ -151,26 +151,28 @@ bool kinetis_k22_next_event(KinetisK22* device, KinetisK22Event* event);
 bool kinetis_k22_set_adc_channel(KinetisK22* device, uint8_t instance, uint8_t channel,
                                  uint16_t sample_value);
 void kinetis_k22_set_adc0_channel(KinetisK22* device, uint8_t channel, uint16_t sample_value);
-bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input,
+bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input_index,
                                uint8_t input_level);
-bool kinetis_k22_set_lptmr_input(KinetisK22* device, uint8_t input, bool high);
+bool kinetis_k22_set_lptmr_input(KinetisK22* device, uint8_t input_index, bool input_high);
 bool kinetis_k22_trigger_low_voltage_warning(KinetisK22* device);
 bool kinetis_k22_trigger_low_voltage_detect(KinetisK22* device);
-bool kinetis_k22_set_llwu_pin(KinetisK22* device, uint8_t pin, bool high);
+bool kinetis_k22_set_llwu_pin(KinetisK22* device, uint8_t pin, bool pin_high);
 bool kinetis_k22_trigger_llwu_module(KinetisK22* device, uint8_t module);
-bool kinetis_k22_set_ewm_input(KinetisK22* device, bool high);
+bool kinetis_k22_set_ewm_input(KinetisK22* device, bool input_high);
 bool kinetis_k22_ewm_output(const KinetisK22* device);
 bool kinetis_k22_get_cmt_output(const KinetisK22* device, bool* is_driven, bool* is_high);
-bool kinetis_k22_set_ftm_input(KinetisK22* device, uint8_t instance, uint8_t channel, bool high);
-bool kinetis_k22_set_ftm_fault(KinetisK22* device, uint8_t instance, uint8_t input, bool high);
+bool kinetis_k22_set_ftm_input(KinetisK22* device, uint8_t instance, uint8_t channel,
+                               bool input_high);
+bool kinetis_k22_set_ftm_fault(KinetisK22* device, uint8_t instance, uint8_t input_index,
+                               bool input_high);
 bool kinetis_k22_trigger_ftm_hardware(KinetisK22* device, uint8_t instance, uint8_t trigger);
 bool kinetis_k22_get_ftm_output(const KinetisK22* device, uint8_t instance, uint8_t channel,
-                                bool* high);
+                                bool* output_high);
 bool kinetis_k22_get_dac_output(const KinetisK22* device, uint8_t instance, uint16_t* output_value);
-void kinetis_k22_rng_seed(KinetisK22* device, uint32_t seed);
-bool kinetis_k22_gpio_drive(KinetisK22* device, uint8_t port, uint8_t pin, bool high);
+void kinetis_k22_rng_seed(KinetisK22* device, uint32_t seed_value);
+bool kinetis_k22_gpio_drive(KinetisK22* device, uint8_t port, uint8_t pin, bool pin_high);
 bool kinetis_k22_gpio_release(KinetisK22* device, uint8_t port, uint8_t pin);
-bool kinetis_k22_gpio_pin(const KinetisK22* device, uint8_t port, uint8_t pin, bool* high);
+bool kinetis_k22_gpio_pin(const KinetisK22* device, uint8_t port, uint8_t pin, bool* pin_high);
 bool kinetis_k22_serial_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
                                 uint16_t received_value, uint8_t status);
 bool kinetis_k22_serial_transmit(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
@@ -200,12 +202,12 @@ bool kinetis_k22_flexbus_read(const KinetisK22* device, size_t window_offset, vo
 bool kinetis_k22_set_usb_charger(KinetisK22* device, KinetisK22UsbCharger charger);
 bool kinetis_k22_set_usb_pullup(KinetisK22* device, bool enabled);
 bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status);
-bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* value);
+bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* output_value);
 bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t value);
-bool kinetis_k22_spi0_transmit(KinetisK22* device, uint16_t* value);
+bool kinetis_k22_spi0_transmit(KinetisK22* device, uint16_t* output_value);
 bool kinetis_k22_i2c0_transfer(KinetisK22* device, KinetisK22I2cTransfer* transfer);
 void kinetis_k22_i2c0_acknowledge(KinetisK22* device, bool acknowledge);
 bool kinetis_k22_i2c0_lose_arbitration(KinetisK22* device);
-bool kinetis_k22_i2c0_receive(KinetisK22* device, uint8_t value);
+bool kinetis_k22_i2c0_receive(KinetisK22* device, uint8_t received_value);
 
 #endif

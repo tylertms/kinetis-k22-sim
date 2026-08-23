@@ -199,7 +199,7 @@ bool k22_timing_read(K22Timing* timing, uint32_t address, uint8_t size, uint32_t
 bool k22_timing_write(K22Timing* timing, uint32_t address, uint8_t size, uint32_t value);
 void k22_timing_advance(K22Timing* timing, uint32_t core_cycles);
 void k22_timing_set_debug_halted(K22Timing* timing, bool halted);
-bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input, bool high);
+bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input_index, bool input_high);
 bool k22_timing_trigger_low_voltage_warning(K22Timing* timing);
 bool k22_timing_trigger_low_voltage_detect(K22Timing* timing);
 bool k22_timing_set_llwu_pin(K22Timing* timing, uint8_t pin, bool high);
@@ -208,11 +208,13 @@ void k22_timing_set_cpu_sleeping(K22Timing* timing, bool sleeping, bool deep_sle
 bool k22_timing_set_ewm_input(K22Timing* timing, bool high);
 bool k22_timing_ewm_output(const K22Timing* timing);
 void k22_timing_watchdog_advance(K22Timing* timing, uint32_t ticks);
-bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel, bool high);
-bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input, bool high);
+bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel,
+                              bool input_high);
+bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input_index,
+                              bool input_high);
 bool k22_timing_trigger_ftm_hardware(K22Timing* timing, uint8_t instance, uint8_t trigger);
 bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_t channel,
-                               bool* high);
+                               bool* output_high);
 void k22_timing_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
 void k22_timing_warm_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
 bool k22_timing_copy(K22Timing* destination, const K22Timing* source, K22TimingSignals signals);
