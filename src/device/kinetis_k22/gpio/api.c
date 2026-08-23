@@ -1,7 +1,7 @@
 #include "device/kinetis_k22/gpio/internal.h"
 
-bool k22_io_read(K22Io* io, uint32_t address, uint8_t size, uint32_t* value) {
-    if (io == NULL || value == NULL || !k22_io_internal_valid_size(size))
+bool k22_io_read(K22Io* io, uint32_t address, uint8_t size, uint32_t* output_value) {
+    if (io == NULL || output_value == NULL || !k22_io_internal_valid_size(size))
         return false;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_LIMIT && size == 4) {
         const uint32_t alias = address - K22_BIT_BAND_BASE;
@@ -10,13 +10,13 @@ bool k22_io_read(K22Io* io, uint32_t address, uint8_t size, uint32_t* value) {
         uint32_t byte = 0;
         if (!k22_io_internal_read_direct(io, byte_address, 1, &byte))
             return false;
-        *value = (byte >> bit) & 1u;
+        *output_value = (byte >> bit) & 1u;
         return true;
     }
-    return k22_io_internal_read_direct(io, address, size, value);
+    return k22_io_internal_read_direct(io, address, size, output_value);
 }
 
-bool k22_io_write(K22Io* io, uint32_t address, uint8_t size, uint32_t value) {
+bool k22_io_write(K22Io* io, uint32_t address, uint8_t size, uint32_t write_value) {
     if (io == NULL || !k22_io_internal_valid_size(size))
         return false;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_LIMIT && size == 4) {
@@ -26,31 +26,31 @@ bool k22_io_write(K22Io* io, uint32_t address, uint8_t size, uint32_t value) {
         uint32_t byte = 0;
         if (!k22_io_internal_read_direct(io, byte_address, 1, &byte))
             return false;
-        byte = (value & 1u) != 0 ? byte | (1u << bit) : byte & ~(1u << bit);
+        byte = (write_value & 1u) != 0 ? byte | (1u << bit) : byte & ~(1u << bit);
         return k22_io_internal_write_direct(io, byte_address, 1, byte);
     }
-    return k22_io_internal_write_direct(io, address, size, value);
+    return k22_io_internal_write_direct(io, address, size, write_value);
 }
 
 bool k22_io_drive_pin(K22Io* io, uint8_t port, uint8_t pin, bool high) {
     if (io == NULL || !k22_io_internal_pin_exists(io, port, pin))
         return false;
     const uint32_t bit = 1u << pin;
-    const bool previous = (k22_io_internal_pin_level(io, port) & bit) != 0;
+    const bool previous_level = (k22_io_internal_pin_level(io, port) & bit) != 0;
     io->gpio_external_drive[port] |= bit;
     if (high)
         io->gpio_external[port] |= bit;
     else
         io->gpio_external[port] &= ~bit;
-    const bool target = (k22_io_internal_pin_level_unfiltered(io, port) & bit) != 0;
+    const bool target_level = (k22_io_internal_pin_level_unfiltered(io, port) & bit) != 0;
     if ((io->port_dfer[port] & bit) != 0) {
         io->gpio_filter_age[port][pin] = 0;
-        if (target)
+        if (target_level)
             io->gpio_pending[port] |= bit;
         else
             io->gpio_pending[port] &= ~bit;
     } else
-        k22_io_internal_commit_pin_level(io, port, pin, previous, target);
+        k22_io_internal_commit_pin_level(io, port, pin, previous_level, target_level);
     return true;
 }
 
@@ -58,17 +58,17 @@ bool k22_io_release_pin(K22Io* io, uint8_t port, uint8_t pin) {
     if (io == NULL || !k22_io_internal_pin_exists(io, port, pin))
         return false;
     const uint32_t bit = 1u << pin;
-    const bool previous = (k22_io_internal_pin_level(io, port) & bit) != 0;
+    const bool previous_level = (k22_io_internal_pin_level(io, port) & bit) != 0;
     io->gpio_external_drive[port] &= ~bit;
-    const bool target = (k22_io_internal_pin_level_unfiltered(io, port) & bit) != 0;
+    const bool target_level = (k22_io_internal_pin_level_unfiltered(io, port) & bit) != 0;
     if ((io->port_dfer[port] & bit) != 0) {
         io->gpio_filter_age[port][pin] = 0;
-        if (target)
+        if (target_level)
             io->gpio_pending[port] |= bit;
         else
             io->gpio_pending[port] &= ~bit;
     } else
-        k22_io_internal_commit_pin_level(io, port, pin, previous, target);
+        k22_io_internal_commit_pin_level(io, port, pin, previous_level, target_level);
     return true;
 }
 
@@ -76,13 +76,13 @@ uint32_t k22_io_pin_input(const K22Io* io, uint8_t port) {
     return io == NULL || port >= K22_IO_PORT_COUNT ? 0 : k22_io_internal_pin_level(io, port);
 }
 
-bool k22_io_usb_token(K22Io* io, uint8_t endpoint, uint8_t token, bool transmit) {
+bool k22_io_usb_token(K22Io* io, uint8_t endpoint, uint8_t token, bool is_transmit) {
     if (io == NULL || endpoint >= 16 || !k22_io_clock_enabled(io, K22_PERIPHERAL_USB0) ||
         (io->usb[K22_USB_CTL] & 1u) == 0)
         return false;
-    io->usb[K22_USB_STAT] = (uint8_t)((endpoint << 4) | (transmit ? 8u : 0));
+    io->usb[K22_USB_STAT] = (uint8_t)((endpoint << 4) | (is_transmit ? 8u : 0));
     io->usb[K22_USB_ISTAT] |= 1u << 3;
-    k22_io_internal_emit(io, K22_IO_EVENT_USB_TOKEN, endpoint, token, transmit);
+    k22_io_internal_emit(io, K22_IO_EVENT_USB_TOKEN, endpoint, token, is_transmit);
     if ((io->usb[K22_USB_INTEN] & (1u << 3)) != 0)
         k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 53u, 1u << 3, endpoint);
     return true;
@@ -93,16 +93,17 @@ bool k22_io_can_receive(K22Io* io, const K22CanFrame* frame) {
         !k22_io_clock_enabled(io, K22_PERIPHERAL_CAN0) ||
         (io->can[K22_CAN_MCR / 4] & (1u << 31)) != 0)
         return false;
-    const uint8_t maximum = (uint8_t)(io->can[K22_CAN_MCR / 4] & 0x7fu);
-    for (uint8_t mailbox = 0; mailbox <= maximum && mailbox < 16; mailbox++) {
-        const uint32_t offset = K22_CAN_MB_BASE + (uint32_t)mailbox * 16u;
-        const uint8_t code = (uint8_t)(io->can[offset / 4u] >> 24) & 15u;
-        if (code != 4u)
+    const uint8_t maximum_mailbox = (uint8_t)(io->can[K22_CAN_MCR / 4] & 0x7fu);
+    for (uint8_t mailbox_index = 0u; mailbox_index <= maximum_mailbox && mailbox_index < 16;
+         mailbox_index++) {
+        const uint32_t offset = K22_CAN_MB_BASE + (uint32_t)mailbox_index * 16u;
+        const uint8_t mailbox_code = (uint8_t)(io->can[offset / 4u] >> 24) & 15u;
+        if (mailbox_code != 4u)
             continue;
         const uint32_t configured = io->can[(offset + 4u) / 4u];
-        const uint32_t mask = mailbox == 14   ? io->can[K22_CAN_RX14MASK / 4]
-                              : mailbox == 15 ? io->can[K22_CAN_RX15MASK / 4]
-                                              : io->can[K22_CAN_RXMGMASK / 4];
+        const uint32_t mask = mailbox_index == 14   ? io->can[K22_CAN_RX14MASK / 4]
+                              : mailbox_index == 15 ? io->can[K22_CAN_RX15MASK / 4]
+                                                    : io->can[K22_CAN_RXMGMASK / 4];
         if (((configured ^ frame->identifier) & mask) != 0)
             continue;
         uint32_t cs = (2u << 24) | ((uint32_t)frame->length << 16);
@@ -112,36 +113,36 @@ bool k22_io_can_receive(K22Io* io, const K22CanFrame* frame) {
             cs |= 1u << 20;
         io->can[offset / 4u] = cs | (io->can[K22_CAN_TIMER / 4] & 0xffffu);
         io->can[(offset + 4u) / 4u] = frame->identifier;
-        uint32_t high = 0;
-        uint32_t low = 0;
-        for (uint8_t index = 0; index < 4; index++) {
-            high = (high << 8) | frame->data[index];
-            low = (low << 8) | frame->data[index + 4u];
+        uint32_t upper_word = 0;
+        uint32_t lower_word = 0;
+        for (uint8_t byte_index = 0; byte_index < 4; byte_index++) {
+            upper_word = (upper_word << 8) | frame->data[byte_index];
+            lower_word = (lower_word << 8) | frame->data[byte_index + 4u];
         }
-        io->can[(offset + 8u) / 4u] = high;
-        io->can[(offset + 12u) / 4u] = low;
-        io->can[K22_CAN_IFLAG1 / 4] |= 1u << mailbox;
-        if ((io->can[K22_CAN_IMASK1 / 4] & (1u << mailbox)) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 75u, 1u << mailbox, 0);
+        io->can[(offset + 8u) / 4u] = upper_word;
+        io->can[(offset + 12u) / 4u] = lower_word;
+        io->can[K22_CAN_IFLAG1 / 4] |= 1u << mailbox_index;
+        if ((io->can[K22_CAN_IMASK1 / 4] & (1u << mailbox_index)) != 0)
+            k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 75u, 1u << mailbox_index, 0);
         return true;
     }
     return false;
 }
 
-bool k22_io_i2s_receive(K22Io* io, uint32_t sample) {
+bool k22_io_i2s_receive(K22Io* io, uint32_t sample_value) {
     if (io == NULL || !k22_io_clock_enabled(io, K22_PERIPHERAL_I2S0) ||
         (io->i2s[K22_I2S_RCSR / 4] & K22_I2S_ENABLE) == 0 ||
         !k22_io_internal_fifo_push(io->i2s_receive_fifo, &io->i2s_receive_write,
-                                   &io->i2s_receive_count, sample))
+                                   &io->i2s_receive_count, sample_value))
         return false;
     k22_io_internal_update_i2s_requests(io);
     return true;
 }
 
-bool k22_io_i2s_transmit(K22Io* io, uint32_t* sample) {
-    if (io == NULL || sample == NULL ||
+bool k22_io_i2s_transmit(K22Io* io, uint32_t* output_sample) {
+    if (io == NULL || output_sample == NULL ||
         !k22_io_internal_fifo_pop(io->i2s_transmit_fifo, &io->i2s_transmit_read,
-                                  &io->i2s_transmit_count, sample))
+                                  &io->i2s_transmit_count, output_sample))
         return false;
     k22_io_internal_update_i2s_requests(io);
     return true;

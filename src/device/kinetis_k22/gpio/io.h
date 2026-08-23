@@ -103,10 +103,10 @@ bool k22_io_clock_enabled(const K22Io* io, K22PeripheralId peripheral);
 bool k22_io_drive_pin(K22Io* io, uint8_t port, uint8_t pin, bool high);
 bool k22_io_release_pin(K22Io* io, uint8_t port, uint8_t pin);
 uint32_t k22_io_pin_input(const K22Io* io, uint8_t port);
-bool k22_io_usb_token(K22Io* io, uint8_t endpoint, uint8_t token, bool transmit);
+bool k22_io_usb_token(K22Io* io, uint8_t endpoint, uint8_t token, bool is_transmit);
 bool k22_io_can_receive(K22Io* io, const K22CanFrame* frame);
-bool k22_io_i2s_receive(K22Io* io, uint32_t sample);
-bool k22_io_i2s_transmit(K22Io* io, uint32_t* sample);
+bool k22_io_i2s_receive(K22Io* io, uint32_t sample_value);
+bool k22_io_i2s_transmit(K22Io* io, uint32_t* output_sample);
 bool k22_io_irq_asserted(const K22Io* io, uint8_t irq);
 bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t size, bool is_write,
                              uint32_t write_value);
