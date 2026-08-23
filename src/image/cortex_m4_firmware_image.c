@@ -28,60 +28,63 @@ static bool load_file(const char* path, uint8_t** file_data, size_t* file_size) 
         fclose(file);
         return false;
     }
-    const long length = ftell(file);
-    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+    const long file_length = ftell(file);
+    if (file_length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return false;
     }
-    uint8_t* bytes = malloc((size_t)length);
-    if (bytes == NULL || fread(bytes, 1, (size_t)length, file) != (size_t)length) {
-        free(bytes);
+    uint8_t* file_bytes = malloc((size_t)file_length);
+    if (file_bytes == NULL ||
+        fread(file_bytes, 1u, (size_t)file_length, file) != (size_t)file_length) {
+        free(file_bytes);
         fclose(file);
         return false;
     }
     fclose(file);
-    *file_data = bytes;
-    *file_size = (size_t)length;
+    *file_data = file_bytes;
+    *file_size = (size_t)file_length;
     return true;
 }
 
-bool cortex_m4_load_elf_data(KinetisK22* device, const void* image, size_t image_size,
+bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t image_size,
                              uint32_t* entry_address) {
-    if (device == NULL || image == NULL) {
+    if (device == NULL || image_data == NULL) {
         return false;
     }
-    const uint8_t* image_data = image;
     bool loaded = image_size >= ELF_HEADER_SIZE && image_data[0] == 0x7f && image_data[1] == 'E' &&
                   image_data[2] == 'L' && image_data[3] == 'F' && image_data[4] == 1 &&
                   image_data[5] == 1 && read_u16(image_data + 18) == 40;
     if (!loaded) {
         return false;
     }
-    const uint32_t header_offset = read_u32(image_data + 28);
-    const uint16_t header_size = read_u16(image_data + 42);
-    const uint16_t header_count = read_u16(image_data + 44);
-    loaded = header_size >= ELF_PROGRAM_HEADER_SIZE &&
-             (uint64_t)header_offset + (uint64_t)header_size * header_count <= image_size;
-    for (uint16_t header_index = 0; loaded && header_index < header_count; header_index++) {
-        const uint8_t* header = image_data + header_offset + (size_t)header_index * header_size;
-        if (read_u32(header) != ELF_LOAD_SEGMENT) {
+    const uint32_t program_header_offset = read_u32(image_data + 28);
+    const uint16_t program_header_size = read_u16(image_data + 42);
+    const uint16_t program_header_count = read_u16(image_data + 44);
+    loaded =
+        program_header_size >= ELF_PROGRAM_HEADER_SIZE &&
+        (uint64_t)program_header_offset + (uint64_t)program_header_size * program_header_count <=
+            image_size;
+    for (uint16_t header_index = 0; loaded && header_index < program_header_count; header_index++) {
+        const uint8_t* program_header =
+            image_data + program_header_offset + (size_t)header_index * program_header_size;
+        if (read_u32(program_header) != ELF_LOAD_SEGMENT) {
             continue;
         }
-        const uint32_t file_offset = read_u32(header + 4);
-        const uint32_t virtual_address = read_u32(header + 8);
-        const uint32_t physical_address = read_u32(header + 12);
-        const uint32_t file_size = read_u32(header + 16);
-        const uint32_t memory_size = read_u32(header + 20);
-        const uint32_t address = physical_address != 0 ? physical_address : virtual_address;
+        const uint32_t file_offset = read_u32(program_header + 4);
+        const uint32_t virtual_address = read_u32(program_header + 8);
+        const uint32_t physical_address = read_u32(program_header + 12);
+        const uint32_t file_size = read_u32(program_header + 16);
+        const uint32_t memory_size = read_u32(program_header + 20);
+        const uint32_t load_address = physical_address != 0 ? physical_address : virtual_address;
         if ((uint64_t)file_offset + file_size > image_size || file_size > memory_size ||
-            !kinetis_k22_load(device, address, image_data + file_offset, file_size)) {
+            !kinetis_k22_load(device, load_address, image_data + file_offset, file_size)) {
             loaded = false;
             break;
         }
         if (memory_size > file_size) {
             uint8_t zeros[256] = {0};
             uint32_t remaining = memory_size - file_size;
-            uint32_t zero_address = address + file_size;
+            uint32_t zero_address = load_address + file_size;
             while (loaded && remaining != 0) {
                 const size_t chunk = remaining < sizeof(zeros) ? remaining : sizeof(zeros);
                 loaded = kinetis_k22_load(device, zero_address, zeros, chunk);
@@ -108,58 +111,63 @@ bool cortex_m4_load_binary_data(KinetisK22* device, const void* image_data, size
     return true;
 }
 
-static bool range_valid(size_t image_size, uint32_t offset, uint32_t length) {
-    return offset <= image_size && length <= image_size - offset;
+static bool range_valid(size_t image_size, uint32_t file_offset, uint32_t byte_count) {
+    return file_offset <= image_size && byte_count <= image_size - file_offset;
 }
 
-bool cortex_m4_elf_symbol_data(const void* image, size_t image_size, const char* name,
-                               uint32_t* address) {
-    if (image == NULL || name == NULL || address == NULL || image_size < ELF_HEADER_SIZE) {
+bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
+                               const char* requested_name, uint32_t* symbol_address) {
+    if (image_data == NULL || requested_name == NULL || symbol_address == NULL ||
+        image_size < ELF_HEADER_SIZE) {
         return false;
     }
-    const uint8_t* image_data = image;
     if (image_data[0] != 0x7fu || image_data[1] != 'E' || image_data[2] != 'L' ||
         image_data[3] != 'F' || image_data[4] != 1u || image_data[5] != 1u) {
         return false;
     }
-    const uint32_t section_offset = read_u32(image_data + 32u);
-    const uint16_t section_size = read_u16(image_data + 46u);
+    const uint32_t section_table_offset = read_u32(image_data + 32u);
+    const uint16_t section_entry_size = read_u16(image_data + 46u);
     const uint16_t section_count = read_u16(image_data + 48u);
-    if (section_size < 40u ||
-        (uint64_t)section_offset + (uint64_t)section_size * section_count > image_size) {
+    if (section_entry_size < 40u ||
+        (uint64_t)section_table_offset + (uint64_t)section_entry_size * section_count >
+            image_size) {
         return false;
     }
     for (uint16_t section_index = 0u; section_index < section_count; ++section_index) {
-        const uint8_t* section =
-            image_data + section_offset + (uint32_t)section_index * section_size;
-        const uint32_t type = read_u32(section + 4u);
-        if (type != 2u && type != 11u) {
+        const uint8_t* section_header =
+            image_data + section_table_offset + (uint32_t)section_index * section_entry_size;
+        const uint32_t section_type = read_u32(section_header + 4u);
+        if (section_type != 2u && section_type != 11u) {
             continue;
         }
-        const uint32_t symbols_offset = read_u32(section + 16u);
-        const uint32_t symbols_size = read_u32(section + 20u);
-        const uint32_t strings_index = read_u32(section + 24u);
-        const uint32_t symbol_size = read_u32(section + 36u);
-        if (symbol_size < 16u || symbol_size > symbols_size || strings_index >= section_count ||
-            !range_valid(image_size, symbols_offset, symbols_size)) {
+        const uint32_t symbol_table_offset = read_u32(section_header + 16u);
+        const uint32_t symbol_table_size = read_u32(section_header + 20u);
+        const uint32_t string_table_index = read_u32(section_header + 24u);
+        const uint32_t symbol_entry_size = read_u32(section_header + 36u);
+        if (symbol_entry_size < 16u || symbol_entry_size > symbol_table_size ||
+            string_table_index >= section_count ||
+            !range_valid(image_size, symbol_table_offset, symbol_table_size)) {
             continue;
         }
-        const uint8_t* strings_section = image_data + section_offset + strings_index * section_size;
-        const uint32_t strings_offset = read_u32(strings_section + 16u);
-        const uint32_t strings_size = read_u32(strings_section + 20u);
-        if (!range_valid(image_size, strings_offset, strings_size)) {
+        const uint8_t* string_table_header =
+            image_data + section_table_offset + string_table_index * section_entry_size;
+        const uint32_t string_table_offset = read_u32(string_table_header + 16u);
+        const uint32_t string_table_size = read_u32(string_table_header + 20u);
+        if (!range_valid(image_size, string_table_offset, string_table_size)) {
             continue;
         }
-        for (uint32_t offset = 0u; offset <= symbols_size - symbol_size; offset += symbol_size) {
-            const uint8_t* symbol = image_data + symbols_offset + offset;
-            const uint32_t name_offset = read_u32(symbol);
-            if (name_offset >= strings_size) {
+        for (uint32_t symbol_offset = 0u; symbol_offset <= symbol_table_size - symbol_entry_size;
+             symbol_offset += symbol_entry_size) {
+            const uint8_t* symbol_entry = image_data + symbol_table_offset + symbol_offset;
+            const uint32_t string_offset = read_u32(symbol_entry);
+            if (string_offset >= string_table_size) {
                 continue;
             }
-            const char* symbol_name = (const char*)image_data + strings_offset + name_offset;
-            const size_t available = strings_size - name_offset;
-            if (memchr(symbol_name, '\0', available) != NULL && strcmp(symbol_name, name) == 0) {
-                *address = read_u32(symbol + 4u);
+            const char* symbol_name = (const char*)image_data + string_table_offset + string_offset;
+            const size_t string_bytes_remaining = string_table_size - string_offset;
+            if (memchr(symbol_name, '\0', string_bytes_remaining) != NULL &&
+                strcmp(symbol_name, requested_name) == 0) {
+                *symbol_address = read_u32(symbol_entry + 4u);
                 return true;
             }
         }
