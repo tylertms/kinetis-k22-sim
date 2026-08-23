@@ -311,13 +311,13 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
         const uint8_t most_bit = (uint8_t)(second & 31u);
         if (most_bit >= least_bit) {
             const uint8_t width = (uint8_t)(most_bit - least_bit + 1u);
-            const uint32_t mask = width == 32 ? UINT32_MAX : ((1u << width) - 1u) << least_bit;
+            const uint32_t bit_mask = width == 32 ? UINT32_MAX : ((1u << width) - 1u) << least_bit;
             const uint32_t source_value =
                 source == 15 ? 0 : cortex_m4_read_register_internal(cpu, source);
             const uint32_t destination_value = cortex_m4_read_register_internal(cpu, destination);
             cortex_m4_write_register_internal(cpu, destination,
-                                              (destination_value & ~mask) |
-                                                  ((source_value << least_bit) & mask));
+                                              (destination_value & ~bit_mask) |
+                                                  ((source_value << least_bit) & bit_mask));
         }
         return true;
     }
@@ -487,14 +487,14 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
     }
     if ((first & 0xfff0u) == 0xe8d0u && (second & 0xffe0u) == 0xf000u) {
         const uint8_t base = (uint8_t)(first & 15u);
-        const uint8_t index = (uint8_t)(second & 15u);
-        const bool halfword = (second & 0x10u) != 0;
+        const uint8_t index_register = (uint8_t)(second & 15u);
+        const bool is_halfword = (second & 0x10u) != 0;
         const uint32_t address =
             cortex_m4_read_register_internal(cpu, base) +
-            cortex_m4_read_register_internal(cpu, index) * (halfword ? 2u : 1u);
-        uint32_t value = 0;
-        if (cortex_m4_internal_read_data(cpu, address, halfword ? 2 : 1, &value)) {
-            cpu->registers[15] = cortex_m4_internal_visible_pc32(cpu) + value * 2u;
+            cortex_m4_read_register_internal(cpu, index_register) * (is_halfword ? 2u : 1u);
+        uint32_t loaded_offset = 0;
+        if (cortex_m4_internal_read_data(cpu, address, is_halfword ? 2 : 1, &loaded_offset)) {
+            cpu->registers[15] = cortex_m4_internal_visible_pc32(cpu) + loaded_offset * 2u;
         }
         return true;
     }
