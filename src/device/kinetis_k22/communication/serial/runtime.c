@@ -337,24 +337,24 @@ bool k22_serial_i2c_lose_arbitration(K22Serial* serial, K22SerialEndpoint endpoi
 }
 
 bool k22_serial_i2c_slave_address(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t address,
-                                  bool read) {
+                                  bool is_read) {
     if (serial == NULL)
         return false;
     K22SerialI2c* i2c = endpoint_i2c(serial, endpoint);
     if (i2c == NULL || !i2c->present || !i2c->clock_enabled ||
         (i2c->registers[I2C_C1] & 0x80u) == 0)
         return false;
-    uint16_t own_address = i2c->registers[I2C_A1] >> 1;
-    own_address |= (uint16_t)(i2c->registers[I2C_C2] & 0x07u) << 7;
-    uint16_t second_address = i2c->registers[I2C_A2] >> 1;
-    if (address != own_address && address != second_address)
+    uint16_t primary_slave_address = i2c->registers[I2C_A1] >> 1;
+    primary_slave_address |= (uint16_t)(i2c->registers[I2C_C2] & 0x07u) << 7;
+    uint16_t secondary_slave_address = i2c->registers[I2C_A2] >> 1;
+    if (address != primary_slave_address && address != secondary_slave_address)
         return false;
     i2c->registers[I2C_S] |= 0x42u;
-    if (read)
+    if (is_read)
         i2c->registers[I2C_S] |= 0x04u;
     else
         i2c->registers[I2C_S] &= 0xfbu;
-    i2c->slave_transmit = read;
+    i2c->slave_transmit = is_read;
     return true;
 }
 
@@ -368,19 +368,19 @@ bool k22_serial_pop_event(K22Serial* serial, K22SerialEvent* event) {
     return true;
 }
 
-static bool uart_irq(const K22SerialUart* source, bool lpuart, bool error) {
-    K22SerialUart* uart = (K22SerialUart*)source;
+static bool uart_irq(const K22SerialUart* source_uart, bool is_lpuart, bool is_error_interrupt) {
+    K22SerialUart* uart = (K22SerialUart*)source_uart;
     if (!uart->present || !uart->clock_enabled)
         return false;
-    k22_serial_internal_refresh_uart(uart, lpuart);
-    if (lpuart) {
+    k22_serial_internal_refresh_uart(uart, is_lpuart);
+    if (is_lpuart) {
         uint32_t status = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
         uint32_t control = k22_serial_internal_load32(&uart->registers[LPUART_CTRL]);
         return ((status & control & 0x00e00000u) != 0) ||
                ((((status & 0x000f0000u) << 8) & control) != 0);
     }
     uint8_t status = uart->registers[UART_S1];
-    if (error)
+    if (is_error_interrupt)
         return (status & uart->registers[UART_C3] & 0x0fu) != 0;
     uint8_t control = uart->registers[UART_C2];
     return (((status & 0x20u) != 0 && (control & 0x20u) != 0) ||
@@ -389,8 +389,8 @@ static bool uart_irq(const K22SerialUart* source, bool lpuart, bool error) {
             ((status & 0x10u) != 0 && (control & 0x10u) != 0));
 }
 
-static bool spi_irq(const K22SerialSpi* source) {
-    K22SerialSpi* spi = (K22SerialSpi*)source;
+static bool spi_irq(const K22SerialSpi* source_spi) {
+    K22SerialSpi* spi = (K22SerialSpi*)source_spi;
     if (!spi->present || !spi->clock_enabled)
         return false;
     k22_serial_internal_refresh_spi(spi);
@@ -439,12 +439,12 @@ bool k22_serial_irq(const K22Serial* serial, K22SerialIrq irq) {
     }
 }
 
-static bool legacy_uart_dma(const K22SerialUart* source, bool receive) {
-    K22SerialUart* uart = (K22SerialUart*)source;
+static bool legacy_uart_dma(const K22SerialUart* source_uart, bool is_receive) {
+    K22SerialUart* uart = (K22SerialUart*)source_uart;
     if (!uart->present || !uart->clock_enabled)
         return false;
     k22_serial_internal_refresh_uart(uart, false);
-    if (receive)
+    if (is_receive)
         return (uart->registers[UART_C5] & 0x20u) != 0 && (uart->registers[UART_S1] & 0x20u) != 0;
     return (uart->registers[UART_C5] & 0x80u) != 0 && (uart->registers[UART_S1] & 0x80u) != 0;
 }
@@ -457,30 +457,32 @@ bool k22_serial_dma_request(const K22Serial* serial, K22SerialDmaRequest request
         if (!uart->present || !uart->clock_enabled)
             return false;
         k22_serial_internal_refresh_uart(uart, true);
-        uint32_t baud = k22_serial_internal_load32(&uart->registers[LPUART_BAUD]);
-        uint32_t status = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
+        uint32_t baud_register = k22_serial_internal_load32(&uart->registers[LPUART_BAUD]);
+        uint32_t status_register = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
         return request == K22_SERIAL_DMA_LPUART0_RECEIVE
-                   ? (baud & (1u << 21)) != 0 && (status & (1u << 21)) != 0
-                   : (baud & (1u << 23)) != 0 && (status & (1u << 23)) != 0;
+                   ? (baud_register & (1u << 21)) != 0 && (status_register & (1u << 21)) != 0
+                   : (baud_register & (1u << 23)) != 0 && (status_register & (1u << 23)) != 0;
     }
     if (request >= K22_SERIAL_DMA_SPI0_RECEIVE && request <= K22_SERIAL_DMA_SPI2_TRANSMIT) {
-        size_t index = (request - K22_SERIAL_DMA_SPI0_RECEIVE) / 2;
-        bool receive = ((request - K22_SERIAL_DMA_SPI0_RECEIVE) & 1u) == 0;
-        K22SerialSpi* spi = (K22SerialSpi*)&serial->spi[index];
+        size_t spi_index = (request - K22_SERIAL_DMA_SPI0_RECEIVE) / 2;
+        bool is_receive = ((request - K22_SERIAL_DMA_SPI0_RECEIVE) & 1u) == 0;
+        K22SerialSpi* spi = (K22SerialSpi*)&serial->spi[spi_index];
         if (!spi->present || !spi->clock_enabled)
             return false;
         k22_serial_internal_refresh_spi(spi);
-        uint32_t status = spi->registers[SPI_SR / 4];
-        uint32_t enable = spi->registers[SPI_RSER / 4];
-        return receive ? (status & (1u << 17)) != 0 && (enable & (3u << 16)) == (3u << 16)
-                       : (status & (1u << 25)) != 0 && (enable & (3u << 24)) == (3u << 24);
+        uint32_t status_register = spi->registers[SPI_SR / 4];
+        uint32_t enable_register = spi->registers[SPI_RSER / 4];
+        return is_receive ? (status_register & (1u << 17)) != 0 &&
+                                (enable_register & (3u << 16)) == (3u << 16)
+                          : (status_register & (1u << 25)) != 0 &&
+                                (enable_register & (3u << 24)) == (3u << 24);
     }
     if (request >= K22_SERIAL_DMA_I2C0 && request <= K22_SERIAL_DMA_I2C2) {
         const K22SerialI2c* i2c = &serial->i2c[request - K22_SERIAL_DMA_I2C0];
         return i2c->present && i2c->clock_enabled && (i2c->registers[I2C_C1] & 0x01u) != 0 &&
                (i2c->registers[I2C_S] & 0x02u) != 0;
     }
-    size_t index = (request - K22_SERIAL_DMA_UART0_RECEIVE) / 2;
-    bool receive = ((request - K22_SERIAL_DMA_UART0_RECEIVE) & 1u) == 0;
-    return legacy_uart_dma(&serial->uart[index], receive);
+    size_t uart_index = (request - K22_SERIAL_DMA_UART0_RECEIVE) / 2;
+    bool is_receive = ((request - K22_SERIAL_DMA_UART0_RECEIVE) & 1u) == 0;
+    return legacy_uart_dma(&serial->uart[uart_index], is_receive);
 }
