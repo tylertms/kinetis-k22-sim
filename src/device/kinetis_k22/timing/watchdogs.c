@@ -89,8 +89,8 @@ static bool process_watchdog_bus_time(K22Timing* timing) {
     return false;
 }
 
-static bool advance_watchdog_bus_time(K22Timing* timing, uint64_t ticks) {
-    timing->wdog_bus_cycles += ticks;
+static bool advance_watchdog_bus_time(K22Timing* timing, uint64_t elapsed_bus_ticks) {
+    timing->wdog_bus_cycles += elapsed_bus_ticks;
     return process_watchdog_bus_time(timing);
 }
 
@@ -114,36 +114,39 @@ static uint32_t effective_watchdog_timeout(const K22Timing* timing) {
     return (configured_timeout >> (timeout_byte_index * 8u)) & 0xffu;
 }
 
-void k22_timing_watchdog_advance(K22Timing* timing, uint32_t ticks) {
-    if (timing == NULL || timing->profile == NULL || ticks == 0u ||
+void k22_timing_watchdog_advance(K22Timing* timing, uint32_t elapsed_watchdog_ticks) {
+    if (timing == NULL || timing->profile == NULL || elapsed_watchdog_ticks == 0u ||
         !k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG) || !is_watchdog_running(timing))
         return;
-    const uint32_t timeout = effective_watchdog_timeout(timing);
-    if (timeout == 0u || timing->wdog_counter >= timeout ||
-        ticks >= timeout - timing->wdog_counter) {
+
+    const uint32_t timeout_ticks = effective_watchdog_timeout(timing);
+    if (timeout_ticks == 0u || timing->wdog_counter >= timeout_ticks ||
+        elapsed_watchdog_ticks >= timeout_ticks - timing->wdog_counter) {
         (void)handle_watchdog_expiration(timing);
     } else {
-        timing->wdog_counter += ticks;
+        timing->wdog_counter += elapsed_watchdog_ticks;
     }
 }
 
 void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles) {
     if (!k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG))
         return;
-    const bool update_open = timing->wdog_update_open;
-    const uint64_t bus_ticks = k22_timing_internal_clock_ticks(
+    const bool update_was_open = timing->wdog_update_open;
+    const uint64_t elapsed_bus_ticks = k22_timing_internal_clock_ticks(
         &timing->wdog_bus_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
-    if (advance_watchdog_bus_time(timing, bus_ticks) ||
-        (update_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
+    if (advance_watchdog_bus_time(timing, elapsed_bus_ticks) ||
+        (update_was_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
         return;
     const bool is_test_mode = (timing->wdog[0] & 0x4400u) == 0x0400u;
     const uint32_t source_hz = is_test_mode || (timing->wdog[0] & (1u << 13u)) != 0u
                                    ? timing->bus_clock_hz
                                    : timing->lpo_hz;
     const uint32_t divider = ((timing->wdog[11] & 0x700u) >> 8u) + 1u;
-    const uint64_t ticks = k22_timing_internal_clock_ticks(
+    const uint64_t elapsed_watchdog_ticks = k22_timing_internal_clock_ticks(
         &timing->wdog_remainder, cycles, source_hz / divider, timing->core_clock_hz);
-    k22_timing_watchdog_advance(timing, ticks > UINT32_MAX ? UINT32_MAX : (uint32_t)ticks);
+    k22_timing_watchdog_advance(timing, elapsed_watchdog_ticks > UINT32_MAX
+                                            ? UINT32_MAX
+                                            : (uint32_t)elapsed_watchdog_ticks);
 }
 
 static void trigger_ewm_output(K22Timing* timing) {

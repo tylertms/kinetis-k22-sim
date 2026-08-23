@@ -207,7 +207,7 @@ bool k22_timing_trigger_llwu_module(K22Timing* timing, uint8_t module);
 void k22_timing_set_cpu_sleeping(K22Timing* timing, bool sleeping, bool deep_sleep);
 bool k22_timing_set_ewm_input(K22Timing* timing, bool high);
 bool k22_timing_ewm_output(const K22Timing* timing);
-void k22_timing_watchdog_advance(K22Timing* timing, uint32_t ticks);
+void k22_timing_watchdog_advance(K22Timing* timing, uint32_t elapsed_watchdog_ticks);
 bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel,
                               bool input_high);
 bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input_index,
