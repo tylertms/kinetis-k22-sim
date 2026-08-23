@@ -81,21 +81,21 @@ bool cortex_m4_configure_implementation(CortexM4* cpu, uint16_t external_irq_cou
         }
     }
     const uint8_t word_count = (uint8_t)((external_irq_count + 31u) / 32u);
-    for (uint8_t word = 0u; word < CORTEX_M4_IRQ_WORD_COUNT; word++) {
-        if (word >= word_count) {
-            cpu->irq_enabled[word] = 0u;
-            cpu->irq_pending[word] = 0u;
-            cpu->irq_active[word] = 0u;
-            cpu->irq_level[word] = 0u;
+    for (uint8_t irq_word_index = 0u; irq_word_index < CORTEX_M4_IRQ_WORD_COUNT; irq_word_index++) {
+        if (irq_word_index >= word_count) {
+            cpu->irq_enabled[irq_word_index] = 0u;
+            cpu->irq_pending[irq_word_index] = 0u;
+            cpu->irq_active[irq_word_index] = 0u;
+            cpu->irq_level[irq_word_index] = 0u;
         }
     }
-    const uint8_t remaining = (uint8_t)(external_irq_count & 31u);
-    if (remaining != 0u) {
-        const uint32_t mask = (1u << remaining) - 1u;
-        cpu->irq_enabled[word_count - 1u] &= mask;
-        cpu->irq_pending[word_count - 1u] &= mask;
-        cpu->irq_active[word_count - 1u] &= mask;
-        cpu->irq_level[word_count - 1u] &= mask;
+    const uint8_t remaining_irq_bits = (uint8_t)(external_irq_count & 31u);
+    if (remaining_irq_bits != 0u) {
+        const uint32_t remaining_irq_mask = (1u << remaining_irq_bits) - 1u;
+        cpu->irq_enabled[word_count - 1u] &= remaining_irq_mask;
+        cpu->irq_pending[word_count - 1u] &= remaining_irq_mask;
+        cpu->irq_active[word_count - 1u] &= remaining_irq_mask;
+        cpu->irq_level[word_count - 1u] &= remaining_irq_mask;
     }
     for (uint8_t region = mpu_region_count; region < CORTEX_M4_MPU_REGION_COUNT; region++) {
         cpu->mpu_region_base[region] = 0u;
