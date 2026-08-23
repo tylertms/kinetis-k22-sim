@@ -56,9 +56,9 @@ static uint32_t write_partial(uint32_t previous, uint32_t address, uint8_t size,
     return (previous & ~mask) | ((value << shift) & mask);
 }
 
-static CortexM4SystemAccess accepted_read(uint32_t data, uint32_t address, uint8_t size,
+static CortexM4SystemAccess accepted_read(uint32_t register_value, uint32_t address, uint8_t size,
                                           uint32_t* value) {
-    *value = read_partial(data, address, size);
+    *value = read_partial(register_value, address, size);
     return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
 }
 
@@ -205,10 +205,10 @@ static CortexM4SystemAccess debug_register_read(CortexM4* cpu, uint32_t address,
         return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     }
     if (address == DHCSR) {
-        const uint32_t data = dhcsr_value(cpu);
+        const uint32_t dhcsr_register_value = dhcsr_value(cpu);
         cpu->debug.retire_sticky = false;
         cpu->debug.reset_sticky = false;
-        return accepted_read(data, address, size, value);
+        return accepted_read(dhcsr_register_value, address, size, value);
     }
     if (address == DCRSR) {
         return accepted_read(cpu->debug.dcrsr, address, size, value);
