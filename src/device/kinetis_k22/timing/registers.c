@@ -105,15 +105,17 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
         const uint8_t register_index = (uint8_t)((offset - 0x54u) / 4u);
         write_value &= ftm_register_write_mask(instance, register_index);
         if (offset == 0x54u) {
-            const uint32_t current = ftm->registers[register_index];
+            const uint32_t current_register_value = ftm->registers[register_index];
             const uint32_t protected_mask = ftm_write_protection_mask(register_index);
             uint32_t next_value =
-                (current & protected_mask) | (write_value & ~protected_mask & ~6u);
-            if ((current & 4u) != 0u)
+                (current_register_value & protected_mask) | (write_value & ~protected_mask & ~6u);
+            if ((current_register_value & 4u) != 0u)
                 next_value = (next_value & ~protected_mask) | (write_value & protected_mask);
-            if ((current & 4u) != 0u || ((write_value & 4u) != 0u && ftm->write_protection_read))
+            if ((current_register_value & 4u) != 0u ||
+                ((write_value & 4u) != 0u && ftm->write_protection_read))
                 next_value |= 4u;
-            if ((current & 4u) == 0u && (write_value & 4u) != 0u && ftm->write_protection_read) {
+            if ((current_register_value & 4u) == 0u && (write_value & 4u) != 0u &&
+                ftm->write_protection_read) {
                 ftm->registers[8] &= ~0x40u;
                 ftm->write_protection_read = false;
             }
@@ -163,10 +165,10 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
             ftm->write_protection_read = false;
             k22_timing_internal_update_ftm_irq(timing, instance);
         } else if (offset == 0x80u) {
-            const uint32_t current = ftm->registers[register_index];
+            const uint32_t current_register_value = ftm->registers[register_index];
             if ((ftm->registers[0] & 4u) == 0u)
-                write_value = (write_value & ~1u) | (current & 1u);
-            ftm->registers[register_index] = (write_value & ~6u) | (current & 6u);
+                write_value = (write_value & ~1u) | (current_register_value & 1u);
+            ftm->registers[register_index] = (write_value & ~6u) | (current_register_value & 6u);
         } else if (offset == 0x6cu) {
             const uint32_t mask = instance == 0u || instance == 3u ? 0xffu : 0xf0u;
             uint32_t next_value =
