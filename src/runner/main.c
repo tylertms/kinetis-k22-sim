@@ -9,7 +9,7 @@
 
 #include "cortex_m4_firmware_image.h"
 
-static bool parse_u64(const char* text, uint64_t* parsed_value) {
+static bool parse_uint64(const char* text, uint64_t* parsed_value) {
     char* end = NULL;
     errno = 0;
     const unsigned long long parsed = strtoull(text, &end, 0);
@@ -34,10 +34,10 @@ int main(int argc, char** argv) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
-    uint64_t vector_address = 0;
-    bool vector_address_set = false;
+    uint64_t reset_address = 0;
+    bool reset_address_set = false;
     uint64_t binary_address = 0;
-    bool binary_image = false;
+    bool binary_image_loaded = false;
     uint64_t stop_address = 0;
     bool stop_address_set = false;
     KinetisK22Profile profile = KINETIS_K22_PROFILE_MK22FN51212;
@@ -65,16 +65,16 @@ int main(int argc, char** argv) {
         }
 
         uint64_t parsed_value = 0;
-        if (!parse_u64(argv[argument_index + 1], &parsed_value)) {
+        if (!parse_uint64(argv[argument_index + 1], &parsed_value)) {
             fprintf(stderr, "invalid value: %s\n", argv[argument_index + 1]);
             return EXIT_FAILURE;
         }
         if (strcmp(argv[argument_index], "--reset-address") == 0) {
-            vector_address = parsed_value;
-            vector_address_set = true;
+            reset_address = parsed_value;
+            reset_address_set = true;
         } else if (strcmp(argv[argument_index], "--binary-address") == 0) {
             binary_address = parsed_value;
-            binary_image = true;
+            binary_image_loaded = true;
         } else if (strcmp(argv[argument_index], "--max-instructions") == 0) {
             limits.instruction_limit = parsed_value;
         } else if (strcmp(argv[argument_index], "--max-cycles") == 0) {
@@ -87,26 +87,26 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
-    if (!vector_address_set) {
+    if (!reset_address_set) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }
-    if (vector_address > UINT32_MAX || binary_address > UINT32_MAX || stop_address > UINT32_MAX) {
+    if (reset_address > UINT32_MAX || binary_address > UINT32_MAX || stop_address > UINT32_MAX) {
         fprintf(stderr, "an address is too large\n");
         return EXIT_FAILURE;
     }
     KinetisK22Configuration configuration = kinetis_k22_configuration(profile);
     configuration.package = package;
-    configuration.vector_table_address = (uint32_t)vector_address;
+    configuration.vector_table_address = (uint32_t)reset_address;
     KinetisK22* device = kinetis_k22_create(configuration);
     if (device == NULL) {
         fprintf(stderr, "failed to create the device\n");
         return EXIT_FAILURE;
     }
-    uint32_t entry = 0;
-    const bool loaded = binary_image
+    uint32_t entry_address = 0;
+    const bool loaded = binary_image_loaded
                             ? cortex_m4_load_binary(device, argv[1], (uint32_t)binary_address)
-                            : cortex_m4_load_elf(device, argv[1], &entry);
+                            : cortex_m4_load_elf(device, argv[1], &entry_address);
     if (!loaded) {
         fprintf(stderr, "failed to load the firmware image\n");
         kinetis_k22_destroy(device);
@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
     const CortexM4Result result = cortex_m4_run(kinetis_k22_cpu(device), limits);
     printf("stop=%u pc=0x%08" PRIx32 " opcode=0x%08" PRIx32 " instructions=%" PRIu64
            " cycles=%" PRIu64 " entry=0x%08" PRIx32 " cfsr=0x%08" PRIx32 " bfar=0x%08" PRIx32 "\n",
-           result.stop, result.pc, result.opcode, result.instructions, result.cycles, entry,
+           result.stop, result.pc, result.opcode, result.instructions, result.cycles, entry_address,
            cortex_m4_get_fault_status(kinetis_k22_cpu(device)),
            cortex_m4_get_fault_address(kinetis_k22_cpu(device)));
     for (uint8_t register_index = 0; register_index < 16; register_index++) {
