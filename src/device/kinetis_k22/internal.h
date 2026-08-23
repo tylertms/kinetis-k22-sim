@@ -109,37 +109,38 @@ bool kinetis_k22_internal_peripheral_clock_enabled(const KinetisK22* device, K22
 bool kinetis_k22_internal_pop_serial_event(K22Serial* serial, K22SerialEndpoint endpoint,
                                            K22SerialEvent* event);
 bool kinetis_k22_internal_semantic_read(KinetisK22* device, K22PeripheralId id, uint32_t address,
-                                        uint8_t size, uint32_t* value);
+                                        uint8_t byte_count, uint32_t* output_value);
 bool kinetis_k22_internal_semantic_write(KinetisK22* device, K22PeripheralId id, uint32_t address,
-                                         uint8_t size, uint32_t value);
+                                         uint8_t byte_count, uint32_t write_value);
 bool kinetis_k22_internal_serial_endpoint_available(const KinetisK22* device,
                                                     KinetisK22SerialEndpoint endpoint);
 const K22RegisterDescriptor*
 kinetis_k22_internal_manifest_descriptor_for_access(const KinetisK22* device, uint32_t address,
-                                                    uint8_t size);
+                                                    uint8_t byte_count);
 K22PeripheralId kinetis_k22_internal_serial_endpoint_peripheral(KinetisK22SerialEndpoint endpoint);
-bool kinetis_k22_internal_data_bus_read(void* context, uint32_t address, uint8_t size,
-                                        uint32_t* value);
-bool kinetis_k22_internal_data_bus_write(void* context, uint32_t address, uint8_t size,
-                                         uint32_t value);
-bool kinetis_k22_internal_flash_bus_write(void* context, uint32_t address, uint8_t size,
-                                          uint32_t value);
-void kinetis_k22_internal_data_dma_complete(void* context, uint8_t source);
+bool kinetis_k22_internal_data_bus_read(void* context, uint32_t address, uint8_t byte_count,
+                                        uint32_t* output_value);
+bool kinetis_k22_internal_data_bus_write(void* context, uint32_t address, uint8_t byte_count,
+                                         uint32_t write_value);
+bool kinetis_k22_internal_flash_bus_write(void* context, uint32_t address, uint8_t byte_count,
+                                          uint32_t write_value);
+void kinetis_k22_internal_data_dma_complete(void* context, uint8_t request_source);
 void kinetis_k22_internal_data_interrupt(void* context, K22DataInterrupt interrupt, bool asserted);
 void kinetis_k22_internal_io_event(void* context, const K22IoEvent* event);
 void kinetis_k22_internal_timing_dma_trigger(void* context, uint8_t channel);
-void kinetis_k22_internal_timing_dma(void* context, uint8_t source);
+void kinetis_k22_internal_timing_dma(void* context, uint8_t request_source);
 void kinetis_k22_internal_timing_irq(void* context, uint8_t irq, bool asserted);
 void kinetis_k22_internal_timing_reset(void* context, uint8_t cause_0, uint8_t cause_1);
 void kinetis_k22_internal_timing_trigger(void* context, K22TimingTrigger type, uint8_t instance,
                                          uint8_t channel);
 uint32_t kinetis_k22_internal_manifest_access_mask(const K22RegisterDescriptor* descriptor,
                                                    uint32_t address, uint32_t mask);
-uint32_t kinetis_k22_internal_raw_load(const KinetisK22* device, uint32_t address, uint8_t size);
-uint32_t kinetis_k22_internal_width_mask(uint8_t size);
-void kinetis_k22_internal_cmt_advance(KinetisK22* device, uint32_t cycles);
-void kinetis_k22_internal_raw_store(KinetisK22* device, uint32_t address, uint8_t size,
-                                    uint32_t value);
+uint32_t kinetis_k22_internal_raw_load(const KinetisK22* device, uint32_t address,
+                                       uint8_t byte_count);
+uint32_t kinetis_k22_internal_width_mask(uint8_t byte_count);
+void kinetis_k22_internal_cmt_advance(KinetisK22* device, uint32_t cycle_count);
+void kinetis_k22_internal_raw_store(KinetisK22* device, uint32_t address, uint8_t byte_count,
+                                    uint32_t write_value);
 void kinetis_k22_internal_refresh_serial_signals(KinetisK22* device);
 
 #endif
