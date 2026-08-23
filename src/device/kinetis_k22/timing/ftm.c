@@ -1,6 +1,6 @@
 #include "internal.h"
 
-static uint8_t ftm_irq(uint8_t index) { return index == 3u ? IRQ_FTM3 : IRQ_FTM0 + index; }
+static uint8_t ftm_irq(uint8_t instance) { return instance == 3u ? IRQ_FTM3 : IRQ_FTM0 + instance; }
 
 static uint8_t ftm_dma_source(uint8_t module, uint8_t channel) {
     static const uint8_t bases[4] = {20u, 28u, 30u, 32u};
@@ -12,8 +12,8 @@ static uint8_t ftm_trigger_bit(uint8_t channel) {
     return channel < 6u ? bits[channel] : UINT8_MAX;
 }
 
-uint8_t k22_timing_internal_ftm_channel_count(uint8_t index) {
-    return index == 0u || index == 3u ? 8u : 2u;
+uint8_t k22_timing_internal_ftm_channel_count(uint8_t instance) {
+    return instance == 0u || instance == 3u ? 8u : 2u;
 }
 
 static bool ftm_quadrature_enabled(const K22FtmState* ftm) {
@@ -145,31 +145,31 @@ bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_
     return true;
 }
 
-void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t index) {
-    const K22FtmState* ftm = &timing->ftm[index];
+void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instance) {
+    const K22FtmState* ftm = &timing->ftm[instance];
     bool asserted = (ftm->sc & 0xc0u) == 0xc0u;
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
     for (uint8_t channel = 0u; channel < channels; channel++)
         asserted = asserted || (ftm->channel_sc[channel] & 0xc0u) == 0xc0u;
     asserted = asserted || ((ftm->registers[0] & 0x80u) != 0u && (ftm->registers[8] & 0x80u) != 0u);
-    k22_timing_internal_set_irq(timing, ftm_irq(index), asserted);
+    k22_timing_internal_set_irq(timing, ftm_irq(instance), asserted);
 }
 
-void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t index) {
-    K22FtmState* ftm = &timing->ftm[index];
+void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t instance) {
+    K22FtmState* ftm = &timing->ftm[instance];
     ftm->registers[6] |= 0x80u;
     ftm->trigger_flag_read = false;
-    k22_timing_internal_trigger_adc_alternate(timing, (uint8_t)(8u + index));
+    k22_timing_internal_trigger_adc_alternate(timing, (uint8_t)(8u + instance));
 }
 
-static bool ftm_gate(const K22Timing* timing, uint8_t index) {
-    if (index == 3u) {
+static bool ftm_gate(const K22Timing* timing, uint8_t instance) {
+    if (instance == 3u) {
         if (timing->profile->id == K22_PROFILE_MK22FN1M012 ||
             timing->profile->id == K22_PROFILE_MK22FX51212)
             return (timing->sim_scgc3 & (1u << 25u)) != 0;
         return (timing->sim_scgc6 & (1u << 6u)) != 0;
     }
-    return (timing->sim_scgc6 & (1u << (24u + index))) != 0;
+    return (timing->sim_scgc6 & (1u << (24u + instance))) != 0;
 }
 
 uint8_t k22_timing_internal_ftm_active_fault_mask(const K22FtmState* ftm) {
@@ -193,8 +193,8 @@ void k22_timing_internal_ftm_update_fault_status(K22FtmState* ftm) {
         ftm->registers[8] |= 0x80u;
 }
 
-static void ftm_detect_fault(K22Timing* timing, uint8_t index, uint8_t input) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void ftm_detect_fault(K22Timing* timing, uint8_t instance, uint8_t input) {
+    K22FtmState* ftm = &timing->ftm[instance];
     const uint8_t bit = (uint8_t)(1u << input);
     ftm->registers[8] |= bit;
     ftm->fault_flags_read_mask &= (uint8_t)~bit;
@@ -202,7 +202,7 @@ static void ftm_detect_fault(K22Timing* timing, uint8_t index, uint8_t input) {
     ftm->fault_output_active = true;
     ftm->fault_release_pending = false;
     k22_timing_internal_ftm_update_fault_status(ftm);
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
 static bool ftm_fault_processing_active(const K22FtmState* ftm) {
@@ -210,9 +210,9 @@ static bool ftm_fault_processing_active(const K22FtmState* ftm) {
            ftm->fault_output_active;
 }
 
-static void ftm_advance_fault_inputs(K22Timing* timing, uint8_t index, uint32_t cycles) {
-    K22FtmState* ftm = &timing->ftm[index];
-    if (!ftm_gate(timing, index))
+static void ftm_advance_fault_inputs(K22Timing* timing, uint8_t instance, uint32_t cycles) {
+    K22FtmState* ftm = &timing->ftm[instance];
+    if (!ftm_gate(timing, instance))
         return;
     const uint64_t ticks = k22_timing_internal_clock_ticks(
         &ftm->fault_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
@@ -241,17 +241,17 @@ static void ftm_advance_fault_inputs(K22Timing* timing, uint8_t index, uint32_t 
         ftm->fault_filtered_input[input] = active;
         ftm->fault_input_age[input] = 0u;
         if (active)
-            ftm_detect_fault(timing, index, input);
+            ftm_detect_fault(timing, instance, input);
     }
     k22_timing_internal_ftm_update_fault_status(ftm);
     if (ftm->fault_output_active && k22_timing_internal_ftm_fault_mode(ftm) == 3u &&
         k22_timing_internal_ftm_active_fault_mask(ftm) == 0u)
         ftm->fault_release_pending = true;
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
-static void ftm_fault_cycle_boundary(K22Timing* timing, uint8_t index, bool new_cycle) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void ftm_fault_cycle_boundary(K22Timing* timing, uint8_t instance, bool new_cycle) {
+    K22FtmState* ftm = &timing->ftm[instance];
     if (!new_cycle || !ftm->fault_release_pending)
         return;
     if (k22_timing_internal_ftm_fault_mode(ftm) == 3u)
@@ -261,7 +261,7 @@ static void ftm_fault_cycle_boundary(K22Timing* timing, uint8_t index, bool new_
     ftm->fault_flags_read_mask = 0u;
     ftm->fault_aggregate_read = false;
     k22_timing_internal_ftm_update_fault_status(ftm);
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
 static uint64_t ftm_phase_crossing_count(uint32_t phase, uint64_t ticks, uint32_t period,
@@ -270,15 +270,15 @@ static uint64_t ftm_phase_crossing_count(uint32_t phase, uint64_t ticks, uint32_
     return ticks < distance ? 0u : 1u + (ticks - distance) / period;
 }
 
-static void ftm_channel_event(K22Timing* timing, uint8_t index, uint8_t channel) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void ftm_channel_event(K22Timing* timing, uint8_t instance, uint8_t channel) {
+    K22FtmState* ftm = &timing->ftm[instance];
     ftm->channel_sc[channel] |= 1u << 7u;
     ftm->channel_flag_read[channel] = false;
     if ((ftm->channel_sc[channel] & 1u) != 0)
-        k22_timing_internal_request_dma(timing, ftm_dma_source(index, channel));
+        k22_timing_internal_request_dma(timing, ftm_dma_source(instance, channel));
     const uint8_t trigger_bit = ftm_trigger_bit(channel);
     if (trigger_bit != UINT8_MAX && (ftm->registers[6] & (1u << trigger_bit)) != 0u)
-        k22_timing_internal_ftm_trigger(timing, index);
+        k22_timing_internal_ftm_trigger(timing, instance);
 }
 
 static bool ftm_pair_mode_disabled(const K22FtmState* ftm, uint8_t channel) {
@@ -322,12 +322,12 @@ static bool ftm_center_aligned_pwm_mode(const K22FtmState* ftm, uint8_t channel)
            ftm_pair_mode_disabled(ftm, channel);
 }
 
-static void ftm_output_compare_match(K22FtmState* ftm, uint8_t channel, uint64_t count) {
-    if (count == 0u || !k22_timing_internal_ftm_output_compare_mode(ftm, channel))
+static void ftm_output_compare_match(K22FtmState* ftm, uint8_t channel, uint64_t match_count) {
+    if (match_count == 0u || !k22_timing_internal_ftm_output_compare_mode(ftm, channel))
         return;
     switch ((ftm->channel_sc[channel] >> 2u) & 3u) {
     case 1u:
-        if ((count & 1u) != 0u)
+        if ((match_count & 1u) != 0u)
             ftm->channel_output[channel] = !ftm->channel_output[channel];
         break;
     case 2u:
@@ -382,18 +382,18 @@ static void ftm_center_aligned_pwm_advance(K22FtmState* ftm, uint8_t channel, ui
     ftm->channel_output[channel] = high_true ? active : !active;
 }
 
-static void ftm_overflow(K22Timing* timing, uint8_t index, uint64_t count) {
-    if (count == 0u)
+static void ftm_overflow(K22Timing* timing, uint8_t instance, uint64_t overflow_count) {
+    if (overflow_count == 0u)
         return;
-    K22FtmState* ftm = &timing->ftm[index];
+    K22FtmState* ftm = &timing->ftm[instance];
     const uint8_t cycle = (uint8_t)((ftm->registers[12] & 0x1fu) + 1u);
     const uint8_t first_set =
         ftm->overflow_count == 0u ? 1u : (uint8_t)(cycle - ftm->overflow_count + 1u);
-    if (count >= first_set) {
+    if (overflow_count >= first_set) {
         ftm->sc |= 1u << 7u;
         ftm->overflow_flag_read = false;
     }
-    ftm->overflow_count = (uint8_t)((ftm->overflow_count + count % cycle) % cycle);
+    ftm->overflow_count = (uint8_t)((ftm->overflow_count + overflow_count % cycle) % cycle);
 }
 
 static void ftm_apply_modulo(K22FtmState* ftm);
@@ -423,22 +423,22 @@ static void ftm_apply_legacy_boundary_values(K22FtmState* ftm, uint8_t channels)
     }
 }
 
-static void advance_ftm_up_down(K22Timing* timing, uint8_t index, uint64_t ticks) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void advance_ftm_up_down(K22Timing* timing, uint8_t instance, uint64_t ticks) {
+    K22FtmState* ftm = &timing->ftm[instance];
     const uint32_t first = ftm->initial;
     const uint32_t last = ftm->modulo;
     if (last <= first) {
         ftm->counter = (uint16_t)first;
         ftm->counting_down = false;
-        ftm_overflow(timing, index, ticks);
+        ftm_overflow(timing, instance, ticks);
         if ((ftm->registers[6] & (1u << 6u)) != 0u)
-            k22_timing_internal_ftm_trigger(timing, index);
-        k22_timing_internal_update_ftm_irq(timing, index);
+            k22_timing_internal_ftm_trigger(timing, instance);
+        k22_timing_internal_update_ftm_irq(timing, instance);
         return;
     }
     const uint32_t span = last - first;
     const uint32_t period = span * 2u;
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
     ftm_apply_counter_change_values(ftm, channels);
     uint32_t phase;
     if (ftm->counter < first || ftm->counter > last) {
@@ -460,15 +460,15 @@ static void advance_ftm_up_down(K22Timing* timing, uint8_t index, uint64_t ticks
                            ftm_phase_crossing_count(phase, ticks, period, down_phase);
         if (matches[channel] != 0u) {
             match_mask |= (uint8_t)(1u << channel);
-            ftm_channel_event(timing, index, channel);
+            ftm_channel_event(timing, instance, channel);
         }
     }
     const uint64_t maximum_points = ftm_phase_crossing_count(phase, ticks, period, span + 1u);
     const uint64_t minimum_points = ftm_phase_crossing_count(phase, ticks, period, 0u);
-    ftm_overflow(timing, index, maximum_points);
-    ftm_fault_cycle_boundary(timing, index, minimum_points != 0u);
+    ftm_overflow(timing, instance, maximum_points);
+    ftm_fault_cycle_boundary(timing, instance, minimum_points != 0u);
     if (minimum_points != 0u && (ftm->registers[6] & (1u << 6u)) != 0u)
-        k22_timing_internal_ftm_trigger(timing, index);
+        k22_timing_internal_ftm_trigger(timing, instance);
     phase = (uint32_t)(((uint64_t)phase + ticks) % period);
     if (phase <= span) {
         ftm->counter = (uint16_t)(first + phase);
@@ -482,15 +482,15 @@ static void advance_ftm_up_down(K22Timing* timing, uint8_t index, uint64_t ticks
     for (uint8_t channel = 0u; channel < channels; channel++)
         ftm_center_aligned_pwm_advance(ftm, channel, matches[channel], ticks);
     ftm_loading_point(ftm, minimum_points != 0u, maximum_points != 0u, match_mask);
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
-static void advance_ftm_counter(K22Timing* timing, uint8_t index, uint32_t cycles) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void advance_ftm_counter(K22Timing* timing, uint8_t instance, uint32_t cycles) {
+    K22FtmState* ftm = &timing->ftm[instance];
     if (ftm_quadrature_enabled(ftm))
         return;
     const uint8_t clock_select = (uint8_t)((ftm->sc >> 3u) & 3u);
-    if (!ftm_gate(timing, index) || clock_select == 0 || timing->debug_halted) {
+    if (!ftm_gate(timing, instance) || clock_select == 0 || timing->debug_halted) {
         return;
     }
     uint32_t source_hz = timing->bus_clock_hz;
@@ -506,10 +506,10 @@ static void advance_ftm_counter(K22Timing* timing, uint8_t index, uint32_t cycle
         return;
     }
     if ((ftm->sc & (1u << 5u)) != 0u) {
-        advance_ftm_up_down(timing, index, ticks);
+        advance_ftm_up_down(timing, instance, ticks);
         return;
     }
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
     ftm_apply_counter_change_values(ftm, channels);
     const uint32_t first = ftm->initial;
     const uint32_t last = ftm->modulo >= first ? ftm->modulo : 0xffffu;
@@ -532,14 +532,14 @@ static void advance_ftm_counter(K22Timing* timing, uint8_t index, uint32_t cycle
             (valid_compare || combine_compare) && ticks >= distance) {
             matches[channel] = 1u + (ticks - distance) / period;
             match_mask |= (uint8_t)(1u << channel);
-            ftm_channel_event(timing, index, channel);
+            ftm_channel_event(timing, instance, channel);
         }
     }
     ftm->counter = (uint16_t)(first + relative % period);
-    ftm_overflow(timing, index, overflows);
-    ftm_fault_cycle_boundary(timing, index, overflows != 0u);
+    ftm_overflow(timing, instance, overflows);
+    ftm_fault_cycle_boundary(timing, instance, overflows != 0u);
     if (overflows != 0u && (ftm->registers[6] & (1u << 6u)) != 0u)
-        k22_timing_internal_ftm_trigger(timing, index);
+        k22_timing_internal_ftm_trigger(timing, instance);
     if (overflows != 0u)
         ftm_apply_legacy_boundary_values(ftm, channels);
     for (uint8_t channel = 0u; channel < channels; channel++) {
@@ -548,7 +548,7 @@ static void advance_ftm_counter(K22Timing* timing, uint8_t index, uint32_t cycle
         ftm_combine_pwm_advance(ftm, channel);
     }
     ftm_loading_point(ftm, overflows != 0u, overflows != 0u, match_mask);
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
 static uint32_t ftm_input_threshold(const K22FtmState* ftm, uint8_t channel) {
@@ -569,8 +569,8 @@ bool k22_timing_internal_ftm_input_capture_mode(const K22FtmState* ftm, uint8_t 
            (pair & 5u) == 0u;
 }
 
-static void ftm_quadrature_step(K22Timing* timing, uint8_t index, bool increment) {
-    K22FtmState* ftm = &timing->ftm[index];
+static void ftm_quadrature_step(K22Timing* timing, uint8_t instance, bool increment) {
+    K22FtmState* ftm = &timing->ftm[instance];
     if ((ftm->sc & 0x18u) == 0u || timing->debug_halted)
         return;
     const uint16_t first = ftm->initial;
@@ -597,17 +597,17 @@ static void ftm_quadrature_step(K22Timing* timing, uint8_t index, bool increment
         }
     }
     if (overflow) {
-        ftm_overflow(timing, index, 1u);
-        ftm_fault_cycle_boundary(timing, index, true);
+        ftm_overflow(timing, instance, 1u);
+        ftm_fault_cycle_boundary(timing, instance, true);
         if ((ftm->registers[6] & (1u << 6u)) != 0u)
-            k22_timing_internal_ftm_trigger(timing, index);
+            k22_timing_internal_ftm_trigger(timing, instance);
     }
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
-static void ftm_quadrature_transition(K22Timing* timing, uint8_t index, uint8_t channel,
+static void ftm_quadrature_transition(K22Timing* timing, uint8_t instance, uint8_t channel,
                                       bool previous, bool current) {
-    K22FtmState* ftm = &timing->ftm[index];
+    K22FtmState* ftm = &timing->ftm[instance];
     const bool polarity = (ftm->registers[11] & (1u << (5u - channel))) != 0u;
     const bool before = previous != polarity;
     const bool after = current != polarity;
@@ -617,36 +617,36 @@ static void ftm_quadrature_transition(K22Timing* timing, uint8_t index, uint8_t 
     const bool phase_b = ftm->channel_filtered_input[1] != ((ftm->registers[11] & 0x10u) != 0u);
     if ((ftm->registers[11] & 8u) != 0u) {
         if (channel == 0u && !before && after)
-            ftm_quadrature_step(timing, index, phase_b);
+            ftm_quadrature_step(timing, instance, phase_b);
         return;
     }
     const bool increment = channel == 0u ? after != phase_b : phase_a == after;
-    ftm_quadrature_step(timing, index, increment);
+    ftm_quadrature_step(timing, instance, increment);
 }
 
-static void ftm_capture_input(K22Timing* timing, uint8_t index, uint8_t channel, bool previous,
+static void ftm_capture_input(K22Timing* timing, uint8_t instance, uint8_t channel, bool previous,
                               bool current) {
-    K22FtmState* ftm = &timing->ftm[index];
+    K22FtmState* ftm = &timing->ftm[instance];
     if (ftm_quadrature_enabled(ftm) && channel < 2u) {
-        ftm_quadrature_transition(timing, index, channel, previous, current);
+        ftm_quadrature_transition(timing, instance, channel, previous, current);
         return;
     }
     const uint8_t edges = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
-    const bool selected = current ? (edges & 1u) != 0u : (edges & 2u) != 0u;
-    if (previous == current || !selected ||
+    const bool edge_selected = current ? (edges & 1u) != 0u : (edges & 2u) != 0u;
+    if (previous == current || !edge_selected ||
         !k22_timing_internal_ftm_input_capture_mode(ftm, channel))
         return;
     ftm->channel_value[channel] = ftm->counter;
-    ftm_channel_event(timing, index, channel);
+    ftm_channel_event(timing, instance, channel);
     if ((ftm->channel_sc[channel] & 2u) != 0u) {
         ftm->counter = ftm->initial;
         ftm->counting_down = false;
         ftm->overflow_count = 0u;
         ftm->remainder = 0u;
         if ((ftm->registers[6] & (1u << 6u)) != 0u)
-            k22_timing_internal_ftm_trigger(timing, index);
+            k22_timing_internal_ftm_trigger(timing, instance);
     }
-    k22_timing_internal_update_ftm_irq(timing, index);
+    k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
 static void ftm_apply_outmask(K22FtmState* ftm) {
@@ -820,9 +820,9 @@ static void ftm_apply_hardware_sync(K22FtmState* ftm) {
     }
 }
 
-static void ftm_process_hardware_triggers(K22Timing* timing, uint8_t index) {
-    K22FtmState* ftm = &timing->ftm[index];
-    if (ftm->hardware_trigger_pending_mask == 0u || !ftm_gate(timing, index))
+static void ftm_process_hardware_triggers(K22Timing* timing, uint8_t instance) {
+    K22FtmState* ftm = &timing->ftm[instance];
+    if (ftm->hardware_trigger_pending_mask == 0u || !ftm_gate(timing, instance))
         return;
     const uint8_t pending = ftm->hardware_trigger_pending_mask;
     ftm->hardware_trigger_pending_mask = 0u;
@@ -843,10 +843,10 @@ static bool ftm_has_deadtime(const K22FtmState* ftm, uint8_t channels) {
     return false;
 }
 
-static void ftm_advance_deadtime(K22Timing* timing, uint8_t index, uint32_t cycles) {
-    K22FtmState* ftm = &timing->ftm[index];
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
-    if (!ftm_gate(timing, index))
+static void ftm_advance_deadtime(K22Timing* timing, uint8_t instance, uint32_t cycles) {
+    K22FtmState* ftm = &timing->ftm[instance];
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    if (!ftm_gate(timing, instance))
         return;
     const uint8_t divider = (uint8_t)(ftm->registers[5] >> 6u);
     const uint8_t shift = divider < 2u ? 0u : divider == 2u ? 2u : 4u;
@@ -875,11 +875,11 @@ static void ftm_advance_deadtime(K22Timing* timing, uint8_t index, uint32_t cycl
     }
 }
 
-void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t index, uint32_t cycles) {
-    K22FtmState* ftm = &timing->ftm[index];
+void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t instance, uint32_t cycles) {
+    K22FtmState* ftm = &timing->ftm[instance];
     ftm_apply_system_clock_updates(ftm);
-    ftm_process_hardware_triggers(timing, index);
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(index);
+    ftm_process_hardware_triggers(timing, instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
     uint32_t remaining = cycles;
     while (remaining != 0u) {
         uint32_t segment =
@@ -894,9 +894,9 @@ void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t index, uint32_t 
             if (until_event < segment)
                 segment = until_event;
         }
-        ftm_advance_fault_inputs(timing, index, segment);
-        advance_ftm_counter(timing, index, segment);
-        ftm_advance_deadtime(timing, index, segment);
+        ftm_advance_fault_inputs(timing, instance, segment);
+        advance_ftm_counter(timing, instance, segment);
+        ftm_advance_deadtime(timing, instance, segment);
         remaining -= segment;
         for (uint8_t channel = 0u; channel < channels; channel++) {
             if (ftm->channel_input[channel] == ftm->channel_filtered_input[channel])
@@ -907,7 +907,7 @@ void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t index, uint32_t 
             const bool previous = ftm->channel_filtered_input[channel];
             ftm->channel_filtered_input[channel] = ftm->channel_input[channel];
             ftm->channel_input_age[channel] = 0u;
-            ftm_capture_input(timing, index, channel, previous,
+            ftm_capture_input(timing, instance, channel, previous,
                               ftm->channel_filtered_input[channel]);
         }
     }
