@@ -16,30 +16,31 @@ enum {
     UART0 = 0x4006a000u,
 };
 
-static KinetisK22* create_device(TestState* state) {
+static KinetisK22* create_device(TestState* test_state) {
     KinetisK22Configuration configuration = kinetis_k22_default_configuration();
     configuration.profile = KINETIS_K22_PROFILE_MK22FN1M012;
     configuration.package = KINETIS_K22_PACKAGE_LQ_144_LQFP;
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
     KinetisK22* device = kinetis_k22_create(configuration);
-    expect(state, device != NULL, "device != NULL");
+    expect(test_state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x101u};
-    expect(state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
+    expect(test_state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
            "kinetis_k22_load(device, 0u, vectors, sizeof(vectors))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
+    expect(test_state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
     return device;
 }
 
-static void io_write(TestState* state, KinetisK22* device, uint32_t register_address,
+static void io_write(TestState* test_state, KinetisK22* device, uint32_t register_address,
                      uint8_t access_size, uint32_t write_value) {
-    expect(state, k22_io_write(&device->io, register_address, access_size, write_value),
+    expect(test_state, k22_io_write(&device->io, register_address, access_size, write_value),
            "k22_io_write(&device->io, register_address, access_size, write_value)");
 }
 
-static void serial_write(TestState* state, KinetisK22* device, uint32_t register_address,
+static void serial_write(TestState* test_state, KinetisK22* device, uint32_t register_address,
                          uint8_t access_size, uint32_t write_value) {
-    expect(state, k22_serial_write(&device->serial, register_address, access_size, write_value),
+    expect(test_state,
+           k22_serial_write(&device->serial, register_address, access_size, write_value),
            "k22_serial_write(&device->serial, register_address, access_size, write_value)");
 }
 
@@ -133,13 +134,14 @@ static void test_data_api(TestState* state, KinetisK22* device) {
            "!kinetis_k22_get_ftm_output(device, 4u, 0u, &ftm_output)");
     expect(state, !kinetis_k22_get_ftm_output(NULL, 0u, 0u, &ftm_output),
            "!kinetis_k22_get_ftm_output(NULL, 0u, 0u, &ftm_output)");
-    uint16_t output = 0u;
-    expect(state, kinetis_k22_get_dac_output(device, 0u, &output),
-           "kinetis_k22_get_dac_output(device, 0u, &output)");
-    expect(state, !kinetis_k22_get_dac_output(device, 2u, &output),
-           "!kinetis_k22_get_dac_output(device, 2u, &output)");
-    expect(state, !kinetis_k22_get_dac_output(NULL, 0u, &output),
-           "!kinetis_k22_get_dac_output(NULL, 0u, &output)");
+
+    uint16_t dac_output = 0u;
+    expect(state, kinetis_k22_get_dac_output(device, 0u, &dac_output),
+           "kinetis_k22_get_dac_output(device, 0u, &dac_output)");
+    expect(state, !kinetis_k22_get_dac_output(device, 2u, &dac_output),
+           "!kinetis_k22_get_dac_output(device, 2u, &dac_output)");
+    expect(state, !kinetis_k22_get_dac_output(NULL, 0u, &dac_output),
+           "!kinetis_k22_get_dac_output(NULL, 0u, &dac_output)");
     kinetis_k22_rng_seed(device, 0x12345678u);
     kinetis_k22_rng_seed(NULL, 0u);
 }
