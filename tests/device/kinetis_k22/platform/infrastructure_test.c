@@ -58,40 +58,43 @@ static KinetisK22* create_device(TestState* state) {
     return device;
 }
 
-static uint32_t read32(TestState* state, KinetisK22* device, uint32_t address) {
-    uint32_t value = UINT32_MAX;
-    expect(state, kinetis_k22_read(device, address, &value, sizeof(value)),
-           "kinetis_k22_read(device, address, &value, sizeof(value))");
-    return value;
+static uint32_t read32(TestState* state, KinetisK22* device, uint32_t register_address) {
+    uint32_t read_value = UINT32_MAX;
+    expect(state, kinetis_k22_read(device, register_address, &read_value, sizeof(read_value)),
+           "kinetis_k22_read(device, register_address, &read_value, sizeof(read_value))");
+    return read_value;
 }
 
-static void write32(TestState* state, KinetisK22* device, uint32_t address, uint32_t value) {
-    expect(state, kinetis_k22_write(device, address, &value, sizeof(value)),
-           "kinetis_k22_write(device, address, &value, sizeof(value))");
+static void write32(TestState* state, KinetisK22* device, uint32_t register_address,
+                    uint32_t write_value) {
+    expect(state, kinetis_k22_write(device, register_address, &write_value, sizeof(write_value)),
+           "kinetis_k22_write(device, register_address, &write_value, sizeof(write_value))");
 }
 
-static uint8_t read8(TestState* state, KinetisK22* device, uint32_t address) {
-    uint8_t value = UINT8_MAX;
-    expect(state, kinetis_k22_read(device, address, &value, sizeof(value)),
-           "kinetis_k22_read(device, address, &value, sizeof(value))");
-    return value;
+static uint8_t read8(TestState* state, KinetisK22* device, uint32_t register_address) {
+    uint8_t read_value = UINT8_MAX;
+    expect(state, kinetis_k22_read(device, register_address, &read_value, sizeof(read_value)),
+           "kinetis_k22_read(device, register_address, &read_value, sizeof(read_value))");
+    return read_value;
 }
 
-static uint16_t read16(TestState* state, KinetisK22* device, uint32_t address) {
-    uint16_t value = UINT16_MAX;
-    expect(state, kinetis_k22_read(device, address, &value, sizeof(value)),
-           "kinetis_k22_read(device, address, &value, sizeof(value))");
-    return value;
+static uint16_t read16(TestState* state, KinetisK22* device, uint32_t register_address) {
+    uint16_t read_value = UINT16_MAX;
+    expect(state, kinetis_k22_read(device, register_address, &read_value, sizeof(read_value)),
+           "kinetis_k22_read(device, register_address, &read_value, sizeof(read_value))");
+    return read_value;
 }
 
-static void write8(TestState* state, KinetisK22* device, uint32_t address, uint8_t value) {
-    expect(state, kinetis_k22_write(device, address, &value, sizeof(value)),
-           "kinetis_k22_write(device, address, &value, sizeof(value))");
+static void write8(TestState* state, KinetisK22* device, uint32_t register_address,
+                   uint8_t write_value) {
+    expect(state, kinetis_k22_write(device, register_address, &write_value, sizeof(write_value)),
+           "kinetis_k22_write(device, register_address, &write_value, sizeof(write_value))");
 }
 
-static void write16(TestState* state, KinetisK22* device, uint32_t address, uint16_t value) {
-    expect(state, kinetis_k22_write(device, address, &value, sizeof(value)),
-           "kinetis_k22_write(device, address, &value, sizeof(value))");
+static void write16(TestState* state, KinetisK22* device, uint32_t register_address,
+                    uint16_t write_value) {
+    expect(state, kinetis_k22_write(device, register_address, &write_value, sizeof(write_value)),
+           "kinetis_k22_write(device, register_address, &write_value, sizeof(write_value))");
 }
 
 static void configure_cmt_dma(TestState* state, KinetisK22* device) {
