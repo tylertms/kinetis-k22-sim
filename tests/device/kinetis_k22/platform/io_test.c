@@ -21,42 +21,48 @@ void k22_io_test_peripheral_boundaries(TestState* state);
 
 typedef struct {
     K22IoEvent events[128];
-    size_t count;
+    size_t event_count;
 } EventLog;
 
 static void record_event(void* context, const K22IoEvent* event) {
     EventLog* log = context;
-    if (log->count < sizeof(log->events) / sizeof(log->events[0]))
-        log->events[log->count++] = *event;
+    if (log->event_count < sizeof(log->events) / sizeof(log->events[0])) {
+        log->events[log->event_count++] = *event;
+    }
 }
 
-static uint32_t read_value(TestState* state, K22Io* io, uint32_t address, uint8_t size) {
-    uint32_t value = 0;
-    expect(state, k22_io_read(io, address, size, &value), "k22_io_read(io, address, size, &value)");
-    return value;
+static uint32_t read_value(TestState* state, K22Io* io, uint32_t address, uint8_t access_size) {
+    uint32_t read_data = 0u;
+    expect(state, k22_io_read(io, address, access_size, &read_data),
+           "k22_io_read(io, address, access_size, &read_data)");
+    return read_data;
 }
 
-static void write_value(TestState* state, K22Io* io, uint32_t address, uint8_t size,
-                        uint32_t value) {
-    expect(state, k22_io_write(io, address, size, value), "k22_io_write(io, address, size, value)");
+static void write_value(TestState* state, K22Io* io, uint32_t address, uint8_t access_size,
+                        uint32_t write_data) {
+    expect(state, k22_io_write(io, address, access_size, write_data),
+           "k22_io_write(io, address, access_size, write_data)");
 }
 
-static uint32_t bit_alias(uint32_t address, uint8_t bit) {
-    return 0x42000000u + (address - 0x40000000u) * 32u + (uint32_t)bit * 4u;
+static uint32_t bit_band_address(uint32_t address, uint8_t bit_index) {
+    return 0x42000000u + (address - 0x40000000u) * 32u + (uint32_t)bit_index * 4u;
 }
 
 static bool has_event(const EventLog* log, K22IoEventType type, uint32_t source) {
-    for (size_t index = 0; index < log->count; index++) {
-        if (log->events[index].type == type && log->events[index].source == source)
+    for (size_t event_index = 0u; event_index < log->event_count; event_index++) {
+        if (log->events[event_index].type == type && log->events[event_index].source == source) {
             return true;
+        }
     }
     return false;
 }
 
 static const K22IoEvent* find_event(const EventLog* log, K22IoEventType type, uint32_t source) {
-    for (size_t index = log->count; index > 0; index--) {
-        if (log->events[index - 1u].type == type && log->events[index - 1u].source == source)
-            return &log->events[index - 1u];
+    for (size_t event_index = log->event_count; event_index > 0u; event_index--) {
+        if (log->events[event_index - 1u].type == type &&
+            log->events[event_index - 1u].source == source) {
+            return &log->events[event_index - 1u];
+        }
     }
     return NULL;
 }
@@ -76,8 +82,9 @@ static void test_reset_clock_and_configuration(TestState* state) {
     expect(state, read_value(state, &io, 0x400u, 2) == 0x3412u,
            "read_value(state, &io, 0x400u, 2) == 0x3412u");
     expect(state, !k22_io_write(&io, 0x400u, 1, 0), "!k22_io_write(&io, 0x400u, 1, 0)");
-    uint32_t value = 0;
-    expect(state, !k22_io_read(&io, PORTA, 4, &value), "!k22_io_read(&io, PORTA, 4, &value)");
+    uint32_t read_data = 0u;
+    expect(state, !k22_io_read(&io, PORTA, 4, &read_data),
+           "!k22_io_read(&io, PORTA, 4, &read_data)");
     expect(state, has_event(&log, K22_IO_EVENT_ACCESS_ERROR, PORTA),
            "has_event(&log, K22_IO_EVENT_ACCESS_ERROR, PORTA)");
     k22_io_set_clock(&io, K22_PERIPHERAL_PORTA, true);
@@ -87,8 +94,8 @@ static void test_reset_clock_and_configuration(TestState* state) {
            "k22_io_clock_enabled(&io, K22_PERIPHERAL_GPIOA)");
     expect(state, read_value(state, &io, PORTA, 4) == 0x702u,
            "read_value(state, &io, PORTA, 4) == 0x702u");
-    expect(state, !k22_io_read(&io, PORTA + 16u, 4, &value),
-           "!k22_io_read(&io, PORTA + 16u, 4, &value)");
+    expect(state, !k22_io_read(&io, PORTA + 16u, 4, &read_data),
+           "!k22_io_read(&io, PORTA + 16u, 4, &read_data)");
     expect(state, read_value(state, &io, MCM, 2) == 0x1fu,
            "read_value(state, &io, MCM, 2) == 0x1fu");
     expect(state, read_value(state, &io, MCM + 2u, 2) == 0x17u,
@@ -97,8 +104,8 @@ static void test_reset_clock_and_configuration(TestState* state) {
     write_value(state, &io, MCM + 4u, 4, 1u);
     expect(state, read_value(state, &io, MCM + 4u, 4) == 1u,
            "read_value(state, &io, MCM + 4u, 4) == 1u");
-    expect(state, !k22_io_read(&io, 0x40012340u, 4, &value),
-           "!k22_io_read(&io, 0x40012340u, 4, &value)");
+    expect(state, !k22_io_read(&io, 0x40012340u, 4, &read_data),
+           "!k22_io_read(&io, 0x40012340u, 4, &read_data)");
 }
 
 static void test_gpio_mux_pull_open_drain_and_lock(TestState* state) {
@@ -135,10 +142,10 @@ static void test_gpio_mux_pull_open_drain_and_lock(TestState* state) {
     write_value(state, &io, PORTA + 0x80u, 4, (4u << 16) | (1u << 8));
     expect(state, (read_value(state, &io, PORTA + 8u, 4) & (7u << 8)) == (1u << 8),
            "(read_value(state, &io, PORTA + 8u, 4) & (7u << 8)) == (1u << 8)");
-    write_value(state, &io, bit_alias(GPIOA + 0x14u, 2), 4, 1u);
-    write_value(state, &io, bit_alias(GPIOA, 2), 4, 1u);
-    expect(state, read_value(state, &io, bit_alias(GPIOA, 2), 4) == 1u,
-           "read_value(state, &io, bit_alias(GPIOA, 2), 4) == 1u");
+    write_value(state, &io, bit_band_address(GPIOA + 0x14u, 2), 4, 1u);
+    write_value(state, &io, bit_band_address(GPIOA, 2), 4, 1u);
+    expect(state, read_value(state, &io, bit_band_address(GPIOA, 2), 4) == 1u,
+           "read_value(state, &io, bit_band_address(GPIOA, 2), 4) == 1u");
     expect(state, (read_value(state, &io, GPIOA, 4) & 4u) != 0,
            "(read_value(state, &io, GPIOA, 4) & 4u) != 0");
     expect(state, !k22_io_drive_pin(&io, 0, 7, true), "!k22_io_drive_pin(&io, 0, 7, true)");
@@ -189,11 +196,11 @@ static void test_gpio_interrupt_dma_filter_and_bit_band(TestState* state) {
     expect(state, k22_io_drive_pin(&io, 3, 1, true), "k22_io_drive_pin(&io, 3, 1, true)");
     expect(state, k22_io_release_pin(&io, 3, 1), "k22_io_release_pin(&io, 3, 1)");
     k22_io_set_clock(&io, K22_PERIPHERAL_USB0, true);
-    write_value(state, &io, bit_alias(USB0 + 0x84u, 3), 4, 1u);
+    write_value(state, &io, bit_band_address(USB0 + 0x84u, 3), 4, 1u);
     expect(state, read_value(state, &io, USB0 + 0x84u, 1) == 8u,
            "read_value(state, &io, USB0 + 0x84u, 1) == 8u");
-    expect(state, read_value(state, &io, bit_alias(USB0 + 0x84u, 3), 4) == 1u,
-           "read_value(state, &io, bit_alias(USB0 + 0x84u, 3), 4) == 1u");
+    expect(state, read_value(state, &io, bit_band_address(USB0 + 0x84u, 3), 4) == 1u,
+           "read_value(state, &io, bit_band_address(USB0 + 0x84u, 3), 4) == 1u");
 }
 
 static void test_usb(TestState* state) {
