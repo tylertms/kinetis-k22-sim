@@ -95,15 +95,15 @@ uint32_t k22_io_internal_pin_level_unfiltered(const K22Io* io, uint8_t port) {
         const uint32_t pcr = io->port_pcr[port][pin];
         const bool is_output = (io->gpio_pddr[port] & bit) != 0 && ((pcr >> 8) & 7u) == 1u;
         const bool externally_driven = (io->gpio_external_drive[port] & bit) != 0;
-        bool high = false;
+        bool pin_high = false;
         if (is_output && ((pcr & K22_PORT_PCR_ODE) == 0 || (io->gpio_pdor[port] & bit) == 0)) {
-            high = (io->gpio_pdor[port] & bit) != 0;
+            pin_high = (io->gpio_pdor[port] & bit) != 0;
         } else if (externally_driven) {
-            high = (io->gpio_external[port] & bit) != 0;
+            pin_high = (io->gpio_external[port] & bit) != 0;
         } else if ((pcr & K22_PORT_PCR_PE) != 0) {
-            high = (pcr & K22_PORT_PCR_PS) != 0;
+            pin_high = (pcr & K22_PORT_PCR_PS) != 0;
         }
-        if (high)
+        if (pin_high)
             pin_levels |= bit;
     }
     return pin_levels;
@@ -119,27 +119,28 @@ uint32_t k22_io_internal_pin_level(const K22Io* io, uint8_t port) {
 static void update_pin_event(K22Io* io, uint8_t port, uint8_t pin, bool previous, bool current) {
     if (previous == current)
         return;
-    const uint32_t irqc = (io->port_pcr[port][pin] >> 16) & 15u;
-    bool triggered = false;
-    if (irqc == 1u || irqc == 9u)
-        triggered = !previous && current;
-    else if (irqc == 2u || irqc == 10u)
-        triggered = previous && !current;
-    else if (irqc == 3u || irqc == 11u)
-        triggered = true;
-    else if (irqc == 8u)
-        triggered = !current;
-    else if (irqc == 12u)
-        triggered = current;
-    if (!triggered)
+    const uint32_t interrupt_config = (io->port_pcr[port][pin] >> 16) & 15u;
+    bool event_triggered = false;
+    if (interrupt_config == 1u || interrupt_config == 9u)
+        event_triggered = !previous && current;
+    else if (interrupt_config == 2u || interrupt_config == 10u)
+        event_triggered = previous && !current;
+    else if (interrupt_config == 3u || interrupt_config == 11u)
+        event_triggered = true;
+    else if (interrupt_config == 8u)
+        event_triggered = !current;
+    else if (interrupt_config == 12u)
+        event_triggered = current;
+    if (!event_triggered)
         return;
     const uint32_t bit = 1u << pin;
     io->port_isfr[port] |= bit;
     io->port_pcr[port][pin] |= K22_PORT_PCR_ISF;
-    if (irqc <= 3u)
-        k22_io_internal_emit(io, K22_IO_EVENT_DMA, (uint32_t)port * 32u + pin, current, irqc);
+    if (interrupt_config <= 3u)
+        k22_io_internal_emit(io, K22_IO_EVENT_DMA, (uint32_t)port * 32u + pin, current,
+                             interrupt_config);
     else
-        k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 59u + port, bit, irqc);
+        k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 59u + port, bit, interrupt_config);
 }
 
 static void update_output_events(K22Io* io, uint8_t port, uint32_t previous) {
@@ -156,13 +157,13 @@ static void update_output_events(K22Io* io, uint8_t port, uint32_t previous) {
 }
 
 void k22_io_internal_commit_pin_level(K22Io* io, uint8_t port, uint8_t pin, bool previous,
-                                      bool high) {
+                                      bool pin_high) {
     const uint32_t bit = 1u << pin;
-    if (high)
+    if (pin_high)
         io->gpio_filtered[port] |= bit;
     else
         io->gpio_filtered[port] &= ~bit;
-    update_pin_event(io, port, pin, previous, high);
+    update_pin_event(io, port, pin, previous, pin_high);
 }
 
 bool k22_io_internal_module_clocked(const K22Io* io, K22PeripheralId id) {
@@ -208,9 +209,9 @@ static void reset_peripheral_registers(const K22IoConfiguration* configuration,
             continue;
         }
         const uint32_t offset = descriptor->address - block.address;
-        const uint32_t value = descriptor->reset_value & descriptor->reset_mask;
-        for (uint8_t byte = 0u; byte < size; byte++) {
-            registers[offset + byte] = (uint8_t)(value >> (byte * 8u));
+        const uint32_t reset_value = descriptor->reset_value & descriptor->reset_mask;
+        for (uint8_t byte_index = 0u; byte_index < size; byte_index++) {
+            registers[offset + byte_index] = (uint8_t)(reset_value >> (byte_index * 8u));
         }
     }
 }
@@ -242,12 +243,12 @@ void k22_io_reset(K22Io* io) {
                                sizeof(io->flexbus));
     reset_peripheral_registers(&configuration, K22_PERIPHERAL_SYSMPU, (uint8_t*)io->sysmpu,
                                sizeof(io->sysmpu));
-    const bool large_profile = configuration.profile->id == K22_PROFILE_MK22FN1M012 ||
-                               configuration.profile->id == K22_PROFILE_MK22FX51212;
-    const uint32_t crossbar_ports =
+    const bool has_large_memory_profile = configuration.profile->id == K22_PROFILE_MK22FN1M012 ||
+                                          configuration.profile->id == K22_PROFILE_MK22FX51212;
+    const uint32_t crossbar_port_mask =
         configuration.profile->id >= K22_PROFILE_MK22FN51212 ? 0x1fu : 0x0fu;
-    io->mcm[0] = (large_profile ? 0x00370000u : 0x00170000u) | crossbar_ports;
-    if (!large_profile)
+    io->mcm[0] = (has_large_memory_profile ? 0x00370000u : 0x00170000u) | crossbar_port_mask;
+    if (!has_large_memory_profile)
         io->mcm[8u / 4u] = 0x00020000u;
     for (uint8_t port = 0; port < K22_IO_PORT_COUNT; port++) {
         io->gpio_filtered[port] = k22_io_internal_pin_level_unfiltered(io, port);
