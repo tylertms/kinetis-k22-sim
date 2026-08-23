@@ -79,13 +79,15 @@ struct KinetisK22 {
 };
 
 bool kinetis_k22_memory_read(KinetisK22* device, uint32_t address, uint8_t size,
-                             CortexM4Access access, uint32_t* value);
+                             CortexM4Access access, uint32_t* output_value);
 bool kinetis_k22_memory_write(KinetisK22* device, uint32_t address, uint8_t size,
-                              CortexM4Access access, uint32_t value);
-bool kinetis_k22_dma_read(KinetisK22* device, uint32_t address, uint8_t size, uint32_t* value);
-bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t size, uint32_t value);
+                              CortexM4Access access, uint32_t write_value);
+bool kinetis_k22_dma_read(KinetisK22* device, uint32_t address, uint8_t size,
+                          uint32_t* output_value);
+bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t size,
+                           uint32_t write_value);
 bool kinetis_k22_flash_controller_write(KinetisK22* device, uint32_t address, uint8_t size,
-                                        uint32_t value);
+                                        uint32_t write_value);
 bool kinetis_k22_peripheral_read(KinetisK22* device, uint32_t address, uint8_t size,
                                  CortexM4Access access, uint32_t* output_value);
 bool kinetis_k22_peripheral_write(KinetisK22* device, uint32_t address, uint8_t size,
