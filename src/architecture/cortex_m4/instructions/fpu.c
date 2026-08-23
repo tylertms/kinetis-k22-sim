@@ -492,7 +492,7 @@ static bool execute_scalar_memory(CortexM4* cpu, uint16_t first, uint16_t second
         (second & 0x0e00u) != 0x0a00u) {
         return false;
     }
-    const bool load = (first & 0x0010u) != 0;
+    const bool is_load = (first & 0x0010u) != 0;
     const bool add = (first & 0x0080u) != 0;
     const bool double_register = (second & 0x0100u) != 0;
     const uint8_t base = (uint8_t)(first & 15u);
@@ -508,13 +508,13 @@ static bool execute_scalar_memory(CortexM4* cpu, uint16_t first, uint16_t second
         uint32_t value = 0;
         const uint32_t word_address = address + index * 4u;
         const bool success =
-            load ? cortex_m4_data_read(cpu, word_address, 4, CORTEX_M4_ACCESS_DATA, &value)
-                 : cortex_m4_data_write(cpu, word_address, 4, CORTEX_M4_ACCESS_DATA,
-                                        cpu->fp_registers[target + index]);
+            is_load ? cortex_m4_data_read(cpu, word_address, 4, CORTEX_M4_ACCESS_DATA, &value)
+                    : cortex_m4_data_write(cpu, word_address, 4, CORTEX_M4_ACCESS_DATA,
+                                           cpu->fp_registers[target + index]);
         if (!success) {
             return true;
         }
-        if (load) {
+        if (is_load) {
             cpu->fp_registers[target + index] = value;
         }
     }
@@ -527,7 +527,7 @@ static bool execute_multiple_memory(CortexM4* cpu, uint16_t first, uint16_t seco
     }
     const bool add = (first & 0x0080u) != 0;
     const bool write_back = (first & 0x0020u) != 0;
-    const bool load = (first & 0x0010u) != 0;
+    const bool is_load = (first & 0x0010u) != 0;
     const uint8_t base = (uint8_t)(first & 15u);
     const bool double_registers = (second & 0x0100u) != 0;
     const uint8_t start = double_registers
@@ -539,13 +539,13 @@ static bool execute_multiple_memory(CortexM4* cpu, uint16_t first, uint16_t seco
     for (uint8_t index = 0; index < count; index++, address += 4u) {
         uint32_t value = 0;
         const bool success =
-            load ? cortex_m4_data_read(cpu, address, 4, CORTEX_M4_ACCESS_DATA, &value)
-                 : cortex_m4_data_write(cpu, address, 4, CORTEX_M4_ACCESS_DATA,
-                                        cpu->fp_registers[start + index]);
+            is_load ? cortex_m4_data_read(cpu, address, 4, CORTEX_M4_ACCESS_DATA, &value)
+                    : cortex_m4_data_write(cpu, address, 4, CORTEX_M4_ACCESS_DATA,
+                                           cpu->fp_registers[start + index]);
         if (!success) {
             return true;
         }
-        if (load) {
+        if (is_load) {
             cpu->fp_registers[start + index] = value;
         }
     }

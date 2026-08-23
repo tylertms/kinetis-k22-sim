@@ -24,7 +24,7 @@ static bool execute_decrement_before_multiple(CortexM4* cpu, uint16_t first, uin
     if ((first & 0xffc0u) != 0xe900u || second == 0) {
         return false;
     }
-    const bool load = (first & 0x0010u) != 0;
+    const bool is_load = (first & 0x0010u) != 0;
     const bool write_back = (first & 0x0020u) != 0;
     const uint8_t base = (uint8_t)(first & 15u);
     uint32_t count = 0;
@@ -44,7 +44,7 @@ static bool execute_decrement_before_multiple(CortexM4* cpu, uint16_t first, uin
         if ((second & (1u << index)) == 0) {
             continue;
         }
-        if (load) {
+        if (is_load) {
             uint32_t value = 0;
             if (!cortex_m4_data_read(cpu, address, 4, CORTEX_M4_ACCESS_DATA, &value)) {
                 return true;
@@ -81,7 +81,7 @@ static bool execute_doubleword(CortexM4* cpu, uint16_t first, uint16_t second) {
     const bool pre_index = (first & 0x0100u) != 0;
     const bool add = (first & 0x0080u) != 0;
     const bool write_back = (first & 0x0020u) != 0;
-    const bool load = (first & 0x0010u) != 0;
+    const bool is_load = (first & 0x0010u) != 0;
     const uint8_t base = (uint8_t)(first & 15u);
     const uint8_t first_target = (uint8_t)(second >> 12);
     const uint8_t second_target = (uint8_t)((second >> 8) & 15u);
@@ -92,7 +92,7 @@ static bool execute_doubleword(CortexM4* cpu, uint16_t first, uint16_t second) {
     if (!cortex_m4_require_alignment(cpu, address, 4)) {
         return true;
     }
-    if (load) {
+    if (is_load) {
         uint32_t first_value = 0;
         uint32_t second_value = 0;
         if (!cortex_m4_data_read(cpu, address, 4, CORTEX_M4_ACCESS_DATA, &first_value) ||
