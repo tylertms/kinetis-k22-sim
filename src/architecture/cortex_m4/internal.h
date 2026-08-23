@@ -226,14 +226,14 @@ struct CortexM4 {
 
 uint32_t cortex_m4_read_register_internal(const CortexM4* cpu, uint8_t index);
 void cortex_m4_write_register_internal(CortexM4* cpu, uint8_t index, uint32_t value);
-bool cortex_m4_bus_read(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                        uint32_t* value);
-bool cortex_m4_bus_write(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                         uint32_t value);
-bool cortex_m4_data_read(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                         uint32_t* value);
-bool cortex_m4_data_write(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                          uint32_t value);
+bool cortex_m4_bus_read(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
+                        uint32_t* output_value);
+bool cortex_m4_bus_write(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
+                         uint32_t write_value);
+bool cortex_m4_data_read(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
+                         uint32_t* output_value);
+bool cortex_m4_data_write(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                          CortexM4Access access, uint32_t write_value);
 bool cortex_m4_require_alignment(CortexM4* cpu, uint32_t address, uint8_t alignment);
 bool cortex_m4_configure_implementation(CortexM4* cpu, uint16_t external_irq_count,
                                         uint8_t priority_bits, uint8_t mpu_region_count);
@@ -330,14 +330,14 @@ bool cortex_m4_timing_consume_reservation(CortexM4* cpu, uint32_t address, uint8
 void cortex_m4_timing_observe_write(CortexM4* cpu, uint32_t address, uint32_t size);
 uint32_t cortex_m4_timing_divide_cycles(uint32_t dividend, uint32_t divisor, bool signed_divide);
 void cortex_m4_mpu_reset(CortexM4* cpu);
-CortexM4SystemAccess cortex_m4_mpu_read(CortexM4* cpu, uint32_t address, uint8_t size,
-                                        CortexM4Access access, uint32_t* value);
-CortexM4SystemAccess cortex_m4_mpu_write(CortexM4* cpu, uint32_t address, uint8_t size,
-                                         CortexM4Access access, uint32_t value);
-bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8_t size,
-                                    CortexM4Access access, bool write);
-bool cortex_m4_mpu_check(CortexM4* cpu, uint32_t address, uint8_t size, CortexM4Access access,
-                         bool write);
+CortexM4SystemAccess cortex_m4_mpu_read(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                                        CortexM4Access access, uint32_t* output_value);
+CortexM4SystemAccess cortex_m4_mpu_write(CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                                         CortexM4Access access, uint32_t write_value);
+bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8_t byte_count,
+                                    CortexM4Access access, bool is_write);
+bool cortex_m4_mpu_check(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
+                         bool is_write);
 void cortex_m4_debug_reset(CortexM4* cpu);
 bool cortex_m4_debug_address(uint32_t address);
 CortexM4SystemAccess cortex_m4_debug_read(CortexM4* cpu, uint32_t address, uint8_t size,
