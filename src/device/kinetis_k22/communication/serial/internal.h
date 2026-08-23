@@ -44,18 +44,18 @@ enum {
 bool k22_serial_internal_fifo_pop(K22SerialFifo* fifo, uint16_t* value, uint16_t* metadata);
 bool k22_serial_internal_fifo_push(K22SerialFifo* fifo, uint16_t capacity, uint16_t value,
                                    uint16_t metadata);
-bool k22_serial_internal_read_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t offset,
-                                  uint8_t size, uint32_t* value);
-bool k22_serial_internal_read_spi(K22SerialSpi* spi, uint32_t offset, uint8_t size,
-                                  uint32_t* value);
-bool k22_serial_internal_read_uart(K22SerialUart* uart, bool lpuart, uint32_t offset, uint8_t size,
-                                   uint32_t* value);
-bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t offset,
-                                   uint8_t size, uint32_t value);
-bool k22_serial_internal_write_spi(K22SerialSpi* spi, uint32_t offset, uint8_t size,
-                                   uint32_t value);
-bool k22_serial_internal_write_uart(K22SerialUart* uart, bool lpuart, uint32_t offset, uint8_t size,
-                                    uint32_t value);
+bool k22_serial_internal_read_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t register_offset,
+                                  uint8_t byte_count, uint32_t* output_value);
+bool k22_serial_internal_read_spi(K22SerialSpi* spi, uint32_t register_offset, uint8_t byte_count,
+                                  uint32_t* output_value);
+bool k22_serial_internal_read_uart(K22SerialUart* uart, bool lpuart, uint32_t register_offset,
+                                   uint8_t byte_count, uint32_t* output_value);
+bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t register_offset,
+                                   uint8_t byte_count, uint32_t write_value);
+bool k22_serial_internal_write_spi(K22SerialSpi* spi, uint32_t register_offset, uint8_t byte_count,
+                                   uint32_t write_value);
+bool k22_serial_internal_write_uart(K22SerialUart* uart, bool lpuart, uint32_t register_offset,
+                                    uint8_t byte_count, uint32_t write_value);
 K22SerialI2c* k22_serial_internal_i2c_at(K22Serial* serial, uint32_t address, uint32_t* offset);
 K22SerialSpi* k22_serial_internal_spi_at(K22Serial* serial, uint32_t address, uint32_t* offset);
 K22SerialUart* k22_serial_internal_uart_at(K22Serial* serial, uint32_t address, bool* lpuart,

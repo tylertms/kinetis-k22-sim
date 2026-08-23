@@ -1,36 +1,40 @@
 #include "device/kinetis_k22/communication/serial/internal.h"
 
-bool k22_serial_read(K22Serial* serial, uint32_t address, uint8_t size, uint32_t* value) {
-    if (serial == NULL || value == NULL)
+bool k22_serial_read(K22Serial* serial, uint32_t address, uint8_t byte_count,
+                     uint32_t* output_value) {
+    if (serial == NULL || output_value == NULL)
         return false;
     bool lpuart = false;
-    uint32_t offset = 0;
-    K22SerialUart* uart = k22_serial_internal_uart_at(serial, address, &lpuart, &offset);
+    uint32_t register_offset = 0;
+    K22SerialUart* uart = k22_serial_internal_uart_at(serial, address, &lpuart, &register_offset);
     if (uart != NULL)
-        return k22_serial_internal_read_uart(uart, lpuart, offset, size, value);
-    K22SerialSpi* spi = k22_serial_internal_spi_at(serial, address, &offset);
+        return k22_serial_internal_read_uart(uart, lpuart, register_offset, byte_count,
+                                             output_value);
+    K22SerialSpi* spi = k22_serial_internal_spi_at(serial, address, &register_offset);
     if (spi != NULL)
-        return k22_serial_internal_read_spi(spi, offset, size, value);
-    K22SerialI2c* i2c = k22_serial_internal_i2c_at(serial, address, &offset);
+        return k22_serial_internal_read_spi(spi, register_offset, byte_count, output_value);
+    K22SerialI2c* i2c = k22_serial_internal_i2c_at(serial, address, &register_offset);
     if (i2c != NULL)
-        return k22_serial_internal_read_i2c(serial, i2c, offset, size, value);
+        return k22_serial_internal_read_i2c(serial, i2c, register_offset, byte_count, output_value);
     return false;
 }
 
-bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t size, uint32_t value) {
+bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t byte_count,
+                      uint32_t write_value) {
     if (serial == NULL)
         return false;
     bool lpuart = false;
-    uint32_t offset = 0;
-    K22SerialUart* uart = k22_serial_internal_uart_at(serial, address, &lpuart, &offset);
+    uint32_t register_offset = 0;
+    K22SerialUart* uart = k22_serial_internal_uart_at(serial, address, &lpuart, &register_offset);
     if (uart != NULL)
-        return k22_serial_internal_write_uart(uart, lpuart, offset, size, value);
-    K22SerialSpi* spi = k22_serial_internal_spi_at(serial, address, &offset);
+        return k22_serial_internal_write_uart(uart, lpuart, register_offset, byte_count,
+                                              write_value);
+    K22SerialSpi* spi = k22_serial_internal_spi_at(serial, address, &register_offset);
     if (spi != NULL)
-        return k22_serial_internal_write_spi(spi, offset, size, value);
-    K22SerialI2c* i2c = k22_serial_internal_i2c_at(serial, address, &offset);
+        return k22_serial_internal_write_spi(spi, register_offset, byte_count, write_value);
+    K22SerialI2c* i2c = k22_serial_internal_i2c_at(serial, address, &register_offset);
     if (i2c != NULL)
-        return k22_serial_internal_write_i2c(serial, i2c, offset, size, value);
+        return k22_serial_internal_write_i2c(serial, i2c, register_offset, byte_count, write_value);
     return false;
 }
 

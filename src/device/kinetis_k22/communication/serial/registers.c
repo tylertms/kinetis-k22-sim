@@ -346,35 +346,36 @@ void k22_serial_internal_refresh_spi(K22SerialSpi* spi) {
     spi->registers[SPI_SR / 4] = status;
 }
 
-bool k22_serial_internal_read_uart(K22SerialUart* uart, bool lpuart, uint32_t offset, uint8_t size,
-                                   uint32_t* value) {
-    if (!uart->clock_enabled || (lpuart ? size != 4 || (offset & 3u) != 0 : size != 1))
+bool k22_serial_internal_read_uart(K22SerialUart* uart, bool lpuart, uint32_t register_offset,
+                                   uint8_t byte_count, uint32_t* output_value) {
+    if (!uart->clock_enabled ||
+        (lpuart ? byte_count != 4 || (register_offset & 3u) != 0 : byte_count != 1))
         return false;
     k22_serial_internal_refresh_uart(uart, lpuart);
     if (lpuart) {
-        if (offset == LPUART_DATA) {
+        if (register_offset == LPUART_DATA) {
             uint16_t received = 0;
             uint16_t errors = 0;
             if (k22_serial_internal_fifo_pop(&uart->receive, &received, &errors))
-                *value = received | (uint32_t)errors << 16;
+                *output_value = received | (uint32_t)errors << 16;
             else
-                *value = k22_serial_internal_load32(&uart->registers[offset]);
+                *output_value = k22_serial_internal_load32(&uart->registers[register_offset]);
             k22_serial_internal_refresh_uart(uart, true);
             return true;
         }
-        *value = k22_serial_internal_load32(&uart->registers[offset]);
+        *output_value = k22_serial_internal_load32(&uart->registers[register_offset]);
         return true;
     }
-    if (offset == UART_S1)
+    if (register_offset == UART_S1)
         uart->status_read = true;
-    if (offset == UART_D) {
+    if (register_offset == UART_D) {
         uint16_t received = 0;
         uint16_t errors = 0;
         if (k22_serial_internal_fifo_pop(&uart->receive, &received, &errors)) {
-            *value = received & 0xffu;
+            *output_value = received & 0xffu;
             uart->registers[UART_ED] = (uint8_t)errors;
         } else {
-            *value = uart->registers[UART_D];
+            *output_value = uart->registers[UART_D];
         }
         if (uart->status_read)
             uart->registers[UART_S1] &= 0xf0u;
@@ -382,108 +383,111 @@ bool k22_serial_internal_read_uart(K22SerialUart* uart, bool lpuart, uint32_t of
         k22_serial_internal_refresh_uart(uart, false);
         return true;
     }
-    *value = uart->registers[offset];
+    *output_value = uart->registers[register_offset];
     return true;
 }
 
-static bool write_lpuart(K22SerialUart* uart, uint32_t offset, uint32_t value) {
-    if (offset == LPUART_STAT) {
-        uint32_t current = k22_serial_internal_load32(&uart->registers[offset]);
-        current &= ~(value & 0xc01f0000u);
-        k22_serial_internal_store32(&uart->registers[offset], current);
+static bool write_lpuart(K22SerialUart* uart, uint32_t register_offset, uint32_t write_value) {
+    if (register_offset == LPUART_STAT) {
+        uint32_t current = k22_serial_internal_load32(&uart->registers[register_offset]);
+        current &= ~(write_value & 0xc01f0000u);
+        k22_serial_internal_store32(&uart->registers[register_offset], current);
         return true;
     }
-    if (offset == LPUART_DATA) {
-        if (!k22_serial_internal_fifo_push(&uart->transmit, 1, (uint16_t)(value & 0x3ffu), 0)) {
+    if (register_offset == LPUART_DATA) {
+        if (!k22_serial_internal_fifo_push(&uart->transmit, 1, (uint16_t)(write_value & 0x3ffu),
+                                           0)) {
             uint32_t status = k22_serial_internal_load32(&uart->registers[LPUART_STAT]);
             k22_serial_internal_store32(&uart->registers[LPUART_STAT], status | (1u << 19));
         }
         return true;
     }
-    if (offset == LPUART_BAUD)
-        value &= 0xffe73fffu;
-    if (offset == LPUART_CTRL)
-        value &= 0xfffdfefdu;
-    k22_serial_internal_store32(&uart->registers[offset], value);
+    if (register_offset == LPUART_BAUD)
+        write_value &= 0xffe73fffu;
+    if (register_offset == LPUART_CTRL)
+        write_value &= 0xfffdfefdu;
+    k22_serial_internal_store32(&uart->registers[register_offset], write_value);
     return true;
 }
 
-bool k22_serial_internal_write_uart(K22SerialUart* uart, bool lpuart, uint32_t offset, uint8_t size,
-                                    uint32_t value) {
-    if (!uart->clock_enabled || (lpuart ? size != 4 || (offset & 3u) != 0 : size != 1))
+bool k22_serial_internal_write_uart(K22SerialUart* uart, bool lpuart, uint32_t register_offset,
+                                    uint8_t byte_count, uint32_t write_value) {
+    if (!uart->clock_enabled ||
+        (lpuart ? byte_count != 4 || (register_offset & 3u) != 0 : byte_count != 1))
         return false;
     if (lpuart) {
-        bool result = write_lpuart(uart, offset, value);
+        bool result = write_lpuart(uart, register_offset, write_value);
         k22_serial_internal_refresh_uart(uart, true);
         return result;
     }
-    uint8_t byte = (uint8_t)value;
-    if (offset == UART_S1) {
+    uint8_t byte = (uint8_t)write_value;
+    if (register_offset == UART_S1) {
         uart->registers[UART_S1] &= (uint8_t)~(byte & 0x1fu);
-    } else if (offset == UART_S2) {
+    } else if (register_offset == UART_S2) {
         uart->registers[UART_S2] &= (uint8_t)~(byte & 0xc0u);
         uart->registers[UART_S2] = (uart->registers[UART_S2] & 0xc0u) | (byte & 0x3fu);
-    } else if (offset == UART_D) {
+    } else if (register_offset == UART_D) {
         if (!k22_serial_internal_fifo_push(&uart->transmit, uart_transmit_capacity(uart), byte, 0))
             uart->registers[UART_SFIFO] |= 0x02u;
-    } else if (offset == UART_CFIFO) {
+    } else if (register_offset == UART_CFIFO) {
         if ((byte & 0x40u) != 0)
             fifo_clear(&uart->receive);
         if ((byte & 0x80u) != 0)
             fifo_clear(&uart->transmit);
         uart->registers[UART_CFIFO] = byte & 0x0cu;
-    } else if (offset == UART_SFIFO) {
+    } else if (register_offset == UART_SFIFO) {
         uart->registers[UART_SFIFO] &= (uint8_t)~(byte & 0xc3u);
-    } else if (offset == UART_PFIFO) {
+    } else if (register_offset == UART_PFIFO) {
         uart->registers[UART_PFIFO] = (uart->registers[UART_PFIFO] & 0x77u) | (byte & 0x88u);
-    } else if (offset == UART_ED || offset == UART_TCFIFO || offset == UART_RCFIFO) {
+    } else if (register_offset == UART_ED || register_offset == UART_TCFIFO ||
+               register_offset == UART_RCFIFO) {
     } else {
-        uart->registers[offset] = byte;
+        uart->registers[register_offset] = byte;
     }
     k22_serial_internal_refresh_uart(uart, false);
     return true;
 }
 
-bool k22_serial_internal_read_spi(K22SerialSpi* spi, uint32_t offset, uint8_t size,
-                                  uint32_t* value) {
-    if (!spi->clock_enabled || size != 4 || (offset & 3u) != 0)
+bool k22_serial_internal_read_spi(K22SerialSpi* spi, uint32_t register_offset, uint8_t byte_count,
+                                  uint32_t* output_value) {
+    if (!spi->clock_enabled || byte_count != 4 || (register_offset & 3u) != 0)
         return false;
     k22_serial_internal_refresh_spi(spi);
-    if (offset == SPI_POPR) {
+    if (register_offset == SPI_POPR) {
         uint16_t received = 0;
         if (k22_serial_internal_fifo_pop(&spi->receive, &received, NULL))
-            *value = received;
+            *output_value = received;
         else {
             spi->registers[SPI_SR / 4] |= 1u << 19;
-            *value = spi->registers[SPI_POPR / 4];
+            *output_value = spi->registers[SPI_POPR / 4];
         }
         k22_serial_internal_refresh_spi(spi);
         return true;
     }
-    *value = spi->registers[offset / 4];
+    *output_value = spi->registers[register_offset / 4];
     return true;
 }
 
-bool k22_serial_internal_write_spi(K22SerialSpi* spi, uint32_t offset, uint8_t size,
-                                   uint32_t value) {
-    if (!spi->clock_enabled || size != 4 || (offset & 3u) != 0)
+bool k22_serial_internal_write_spi(K22SerialSpi* spi, uint32_t register_offset, uint8_t byte_count,
+                                   uint32_t write_value) {
+    if (!spi->clock_enabled || byte_count != 4 || (register_offset & 3u) != 0)
         return false;
-    if (offset == SPI_MCR) {
-        if ((value & (1u << 10)) != 0)
+    if (register_offset == SPI_MCR) {
+        if ((write_value & (1u << 10)) != 0)
             fifo_clear(&spi->receive);
-        if ((value & (1u << 11)) != 0)
+        if ((write_value & (1u << 11)) != 0)
             fifo_clear(&spi->transmit);
-        spi->registers[offset / 4] = value & ~0x00000c00u;
-    } else if (offset == SPI_SR) {
-        spi->registers[offset / 4] &= ~(value & 0xba0a0000u);
-    } else if (offset == SPI_PUSHR) {
-        uint16_t command = (uint16_t)(value >> 16);
-        if (!k22_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth, (uint16_t)value,
+        spi->registers[register_offset / 4] = write_value & ~0x00000c00u;
+    } else if (register_offset == SPI_SR) {
+        spi->registers[register_offset / 4] &= ~(write_value & 0xba0a0000u);
+    } else if (register_offset == SPI_PUSHR) {
+        uint16_t command = (uint16_t)(write_value >> 16);
+        if (!k22_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth, (uint16_t)write_value,
                                            command))
             spi->registers[SPI_SR / 4] |= 1u << 27;
-    } else if (offset == SPI_POPR) {
+    } else if (register_offset == SPI_POPR) {
     } else {
-        spi->registers[offset / 4] = value;
+        spi->registers[register_offset / 4] = write_value;
     }
     k22_serial_internal_refresh_spi(spi);
     return true;
@@ -493,12 +497,12 @@ static K22SerialEndpoint i2c_endpoint(const K22Serial* serial, const K22SerialI2
     return (K22SerialEndpoint)(K22_SERIAL_I2C0 + (i2c - serial->i2c));
 }
 
-bool k22_serial_internal_read_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t offset,
-                                  uint8_t size, uint32_t* value) {
-    if (!i2c->clock_enabled || size != 1)
+bool k22_serial_internal_read_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t register_offset,
+                                  uint8_t byte_count, uint32_t* output_value) {
+    if (!i2c->clock_enabled || byte_count != 1)
         return false;
-    if (offset == I2C_D) {
-        *value = i2c->registers[I2C_D];
+    if (register_offset == I2C_D) {
+        *output_value = i2c->registers[I2C_D];
         if ((i2c->registers[I2C_C1] & 0x30u) == 0) {
             if (i2c->slave_receive.count != 0)
                 k22_serial_internal_fifo_pop(&i2c->slave_receive, NULL, NULL);
@@ -510,7 +514,7 @@ bool k22_serial_internal_read_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t
         }
         return true;
     }
-    *value = i2c->registers[offset];
+    *output_value = i2c->registers[register_offset];
     return true;
 }
 
@@ -521,12 +525,12 @@ static void i2c_stop(K22Serial* serial, K22SerialI2c* i2c) {
     push_event(serial, i2c_endpoint(serial, i2c), K22_SERIAL_EVENT_I2C_STOP, 0);
 }
 
-bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t offset,
-                                   uint8_t size, uint32_t value) {
-    if (!i2c->clock_enabled || size != 1)
+bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_t register_offset,
+                                   uint8_t byte_count, uint32_t write_value) {
+    if (!i2c->clock_enabled || byte_count != 1)
         return false;
-    uint8_t byte = (uint8_t)value;
-    if (offset == I2C_C1) {
+    uint8_t byte = (uint8_t)write_value;
+    if (register_offset == I2C_C1) {
         uint8_t previous = i2c->registers[I2C_C1];
         i2c->registers[I2C_C1] = byte & 0xfbu;
         if ((byte & 0x80u) == 0) {
@@ -545,12 +549,12 @@ bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_
         } else if ((byte & 0x20u) == 0 && (previous & 0x20u) != 0) {
             i2c_stop(serial, i2c);
         }
-    } else if (offset == I2C_S) {
+    } else if (register_offset == I2C_S) {
         i2c->registers[I2C_S] &= (uint8_t)~(byte & 0x12u);
-    } else if (offset == I2C_FLT) {
+    } else if (register_offset == I2C_FLT) {
         i2c->registers[I2C_FLT] =
             (byte & 0x1fu) | (i2c->registers[I2C_FLT] & (uint8_t)~(byte & 0xe0u));
-    } else if (offset == I2C_D) {
+    } else if (register_offset == I2C_D) {
         i2c->registers[I2C_D] = byte;
         if ((i2c->registers[I2C_C1] & 0x30u) == 0x30u) {
             i2c->pending_value = byte;
@@ -564,7 +568,7 @@ bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_
                                           0);
         }
     } else {
-        i2c->registers[offset] = byte;
+        i2c->registers[register_offset] = byte;
     }
     return true;
 }

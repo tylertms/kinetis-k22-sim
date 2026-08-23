@@ -179,8 +179,10 @@ void k22_serial_reset(K22Serial* serial);
 bool k22_serial_copy(K22Serial* destination, const K22Serial* source);
 void k22_serial_set_clocks(K22Serial* serial, uint32_t core_clock_hz, uint32_t bus_clock_hz);
 bool k22_serial_set_clock_gate(K22Serial* serial, K22PeripheralId peripheral, bool enabled);
-bool k22_serial_read(K22Serial* serial, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t size, uint32_t value);
+bool k22_serial_read(K22Serial* serial, uint32_t address, uint8_t byte_count,
+                     uint32_t* output_value);
+bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t byte_count,
+                      uint32_t write_value);
 void k22_serial_advance(K22Serial* serial, uint32_t bus_cycles);
 void k22_serial_advance_endpoint(K22Serial* serial, K22SerialEndpoint endpoint);
 bool k22_serial_push_receive(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t value,
