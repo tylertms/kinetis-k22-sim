@@ -304,19 +304,19 @@ static uint32_t shcsr_value(const CortexM4* cpu) {
 
 static uint32_t read_priority_bytes(const uint8_t* priorities, uint32_t byte_offset,
                                     uint8_t byte_count) {
-    uint32_t value = 0;
+    uint32_t priority_value = 0;
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
-        value |= (uint32_t)priorities[byte_offset + byte_index] << (byte_index * 8u);
+        priority_value |= (uint32_t)priorities[byte_offset + byte_index] << (byte_index * 8u);
     }
-    return value;
+    return priority_value;
 }
 
 static void write_priority_bytes(uint8_t* priorities, uint32_t byte_offset, uint8_t byte_count,
-                                 uint32_t value, uint8_t priority_bits) {
+                                 uint32_t priority_value, uint8_t priority_bits) {
     const uint8_t priority_mask = (uint8_t)(0xffu << (8u - priority_bits));
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
         priorities[byte_offset + byte_index] =
-            (uint8_t)(value >> (byte_index * 8u)) & priority_mask;
+            (uint8_t)(priority_value >> (byte_index * 8u)) & priority_mask;
     }
 }
 
@@ -327,24 +327,25 @@ static bool configurable_system_exception(uint8_t exception) {
 
 static uint32_t read_system_priority(const CortexM4* cpu, uint32_t byte_offset,
                                      uint8_t byte_count) {
-    uint32_t value = 0;
+    uint32_t priority_value = 0;
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
         const uint8_t exception = (uint8_t)(byte_offset + byte_index + 4u);
         if (configurable_system_exception(exception)) {
-            value |= (uint32_t)cpu->system_priority[byte_offset + byte_index] << (byte_index * 8u);
+            priority_value |= (uint32_t)cpu->system_priority[byte_offset + byte_index]
+                              << (byte_index * 8u);
         }
     }
-    return value;
+    return priority_value;
 }
 
 static void write_system_priority(CortexM4* cpu, uint32_t byte_offset, uint8_t byte_count,
-                                  uint32_t value) {
+                                  uint32_t priority_value) {
     const uint8_t priority_mask = (uint8_t)(0xffu << (8u - cpu->priority_bits));
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
         const uint8_t exception = (uint8_t)(byte_offset + byte_index + 4u);
         if (configurable_system_exception(exception)) {
             cpu->system_priority[byte_offset + byte_index] =
-                (uint8_t)(value >> (byte_index * 8u)) & priority_mask;
+                (uint8_t)(priority_value >> (byte_index * 8u)) & priority_mask;
         }
     }
 }
