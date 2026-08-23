@@ -287,11 +287,11 @@ bool kinetis_k22_i2s_transmit(KinetisK22* device, uint32_t* sample) {
     return result;
 }
 
-bool kinetis_k22_sdhc_insert(KinetisK22* device, const void* data, size_t size,
+bool kinetis_k22_sdhc_insert(KinetisK22* device, const void* card_data, size_t card_size,
                              bool write_protected) {
     if (device == NULL || !k22_package_has_peripheral(device->package, K22_PERIPHERAL_SDHC))
         return false;
-    const bool result = k22_sdhc_insert(&device->sdhc, data, size, write_protected);
+    const bool result = k22_sdhc_insert(&device->sdhc, card_data, card_size, write_protected);
     kinetis_k22_refresh_signals(device);
     return result;
 }
@@ -303,10 +303,11 @@ void kinetis_k22_sdhc_eject(KinetisK22* device) {
     }
 }
 
-bool kinetis_k22_sdhc_read_card(const KinetisK22* device, size_t offset, void* data, size_t size) {
+bool kinetis_k22_sdhc_read_card(const KinetisK22* device, size_t card_offset, void* card_data,
+                                size_t byte_count) {
     if (device == NULL)
         return false;
-    return k22_sdhc_read_card(&device->sdhc, offset, data, size);
+    return k22_sdhc_read_card(&device->sdhc, card_offset, card_data, byte_count);
 }
 
 bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status) {

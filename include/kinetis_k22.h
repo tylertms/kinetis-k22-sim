@@ -183,10 +183,11 @@ bool kinetis_k22_usb_token(KinetisK22* device, uint8_t endpoint, uint8_t token, 
 bool kinetis_k22_can_receive(KinetisK22* device, const KinetisK22CanFrame* frame);
 bool kinetis_k22_i2s_receive(KinetisK22* device, uint32_t sample);
 bool kinetis_k22_i2s_transmit(KinetisK22* device, uint32_t* sample);
-bool kinetis_k22_sdhc_insert(KinetisK22* device, const void* data, size_t size,
+bool kinetis_k22_sdhc_insert(KinetisK22* device, const void* card_data, size_t card_size,
                              bool write_protected);
 void kinetis_k22_sdhc_eject(KinetisK22* device);
-bool kinetis_k22_sdhc_read_card(const KinetisK22* device, size_t offset, void* data, size_t size);
+bool kinetis_k22_sdhc_read_card(const KinetisK22* device, size_t card_offset, void* card_data,
+                                size_t byte_count);
 bool kinetis_k22_flexbus_attach(KinetisK22* device, uint32_t address, const void* data, size_t size,
                                 bool read_only);
 void kinetis_k22_flexbus_detach(KinetisK22* device);
