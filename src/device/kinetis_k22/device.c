@@ -396,8 +396,8 @@ static bool bit_band_read(KinetisK22* device, uint32_t address, CortexM4Access a
     }
     const uint8_t register_bit =
         (uint8_t)((register_byte_address - descriptor->address) * 8u + bit_index);
-    const uint32_t mask = 1u << register_bit;
-    if ((descriptor->implemented_mask & descriptor->read_mask & mask) == 0) {
+    const uint32_t bit_mask = 1u << register_bit;
+    if ((descriptor->implemented_mask & descriptor->read_mask & bit_mask) == 0) {
         return false;
     }
     uint32_t register_value = 0u;
@@ -405,7 +405,7 @@ static bool bit_band_read(KinetisK22* device, uint32_t address, CortexM4Access a
                                      access, &register_value)) {
         return false;
     }
-    *output_value = (register_value & mask) != 0;
+    *output_value = (register_value & bit_mask) != 0;
     return true;
 }
 
@@ -423,8 +423,8 @@ static bool bit_band_write(KinetisK22* device, uint32_t address, CortexM4Access 
     }
     const uint8_t register_bit =
         (uint8_t)((register_byte_address - descriptor->address) * 8u + bit_index);
-    const uint32_t mask = 1u << register_bit;
-    if ((descriptor->implemented_mask & descriptor->write_mask & mask) == 0) {
+    const uint32_t bit_mask = 1u << register_bit;
+    if ((descriptor->implemented_mask & descriptor->write_mask & bit_mask) == 0) {
         return false;
     }
     uint32_t register_value = 0u;
@@ -433,12 +433,13 @@ static bool bit_band_write(KinetisK22* device, uint32_t address, CortexM4Access 
         return false;
     }
     register_value &= ~descriptor->w1c_mask;
-    if ((descriptor->w1c_mask & mask) != 0) {
+    if ((descriptor->w1c_mask & bit_mask) != 0) {
         if ((write_value & 1u) != 0) {
-            register_value |= mask;
+            register_value |= bit_mask;
         }
     } else {
-        register_value = (write_value & 1u) != 0 ? register_value | mask : register_value & ~mask;
+        register_value =
+            (write_value & 1u) != 0 ? register_value | bit_mask : register_value & ~bit_mask;
     }
     return kinetis_k22_peripheral_write(device, descriptor->address,
                                         (uint8_t)(descriptor->width / 8u), access, register_value);
