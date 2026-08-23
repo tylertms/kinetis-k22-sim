@@ -97,10 +97,10 @@ struct K22Data {
     uint8_t* flexram;
 };
 
-bool k22_data_internal_adc_read(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                uint32_t* value);
-bool k22_data_internal_adc_write(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                 uint32_t value);
+bool k22_data_internal_adc_read(K22Data* data, uint8_t instance, uint32_t address,
+                                uint8_t byte_count, uint32_t* output_value);
+bool k22_data_internal_adc_write(K22Data* data, uint8_t instance, uint32_t address,
+                                 uint8_t byte_count, uint32_t write_value);
 bool k22_data_internal_cmp_read(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
                                 uint32_t* value);
 bool k22_data_internal_cmp_write(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
