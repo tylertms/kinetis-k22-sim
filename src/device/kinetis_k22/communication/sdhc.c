@@ -38,10 +38,12 @@ enum {
     SDHC_IRQ_DATA_CRC = 1u << 21,
 };
 
-static uint32_t* reg(K22Sdhc* sdhc, uint32_t offset) { return &sdhc->registers[offset / 4u]; }
+static uint32_t* reg(K22Sdhc* sdhc, uint32_t register_offset) {
+    return &sdhc->registers[register_offset / 4u];
+}
 
-static const uint32_t* const_reg(const K22Sdhc* sdhc, uint32_t offset) {
-    return &sdhc->registers[offset / 4u];
+static const uint32_t* const_reg(const K22Sdhc* sdhc, uint32_t register_offset) {
+    return &sdhc->registers[register_offset / 4u];
 }
 
 static void set_status(K22Sdhc* sdhc, uint32_t status) {
@@ -169,17 +171,17 @@ bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t offset, void* data, size_t s
 }
 
 static uint32_t transfer_block_count(const K22Sdhc* sdhc) {
-    const uint32_t count = *const_reg(sdhc, SDHC_BLKATTR) >> 16;
-    return count == 0u ? 1u : count;
+    const uint32_t block_count = *const_reg(sdhc, SDHC_BLKATTR) >> 16;
+    return block_count == 0u ? 1u : block_count;
 }
 
 static uint32_t transfer_block_size(const K22Sdhc* sdhc) {
-    const uint32_t size = *const_reg(sdhc, SDHC_BLKATTR) & 0x1fffu;
-    return size == 0u ? sdhc->block_length : size;
+    const uint32_t block_size = *const_reg(sdhc, SDHC_BLKATTR) & 0x1fffu;
+    return block_size == 0u ? sdhc->block_length : block_size;
 }
 
-static bool transfer_bounds(const K22Sdhc* sdhc, size_t address, size_t size) {
-    return address <= sdhc->card_size && size <= sdhc->card_size - address;
+static bool transfer_bounds(const K22Sdhc* sdhc, size_t card_offset, size_t byte_count) {
+    return card_offset <= sdhc->card_size && byte_count <= sdhc->card_size - card_offset;
 }
 
 static void complete_transfer(K22Sdhc* sdhc) {
@@ -191,20 +193,20 @@ static void complete_transfer(K22Sdhc* sdhc) {
 static bool dma_transfer(K22Sdhc* sdhc) {
     uint32_t address = *reg(sdhc, SDHC_DSADDR) & 0xfffffffcu;
     while (sdhc->transfer_remaining != 0u) {
-        const uint8_t size = sdhc->transfer_remaining >= 4u ? 4u : 1u;
-        uint32_t value = 0u;
+        const uint8_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : 1u;
+        uint32_t transfer_value = 0u;
         if (sdhc->transfer_read) {
-            memcpy(&value, sdhc->card + sdhc->transfer_address, size);
-            if (!sdhc->bus.write(sdhc->bus.context, address, size, value))
+            memcpy(&transfer_value, sdhc->card + sdhc->transfer_address, byte_count);
+            if (!sdhc->bus.write(sdhc->bus.context, address, byte_count, transfer_value))
                 return false;
         } else {
-            if (!sdhc->bus.read(sdhc->bus.context, address, size, &value))
+            if (!sdhc->bus.read(sdhc->bus.context, address, byte_count, &transfer_value))
                 return false;
-            memcpy(sdhc->card + sdhc->transfer_address, &value, size);
+            memcpy(sdhc->card + sdhc->transfer_address, &transfer_value, byte_count);
         }
-        address += size;
-        sdhc->transfer_address += size;
-        sdhc->transfer_remaining -= size;
+        address += byte_count;
+        sdhc->transfer_address += byte_count;
+        sdhc->transfer_remaining -= byte_count;
     }
     *reg(sdhc, SDHC_DSADDR) = address;
     set_status(sdhc, SDHC_IRQ_DMA | SDHC_IRQ_TRANSFER_COMPLETE);
@@ -213,12 +215,12 @@ static bool dma_transfer(K22Sdhc* sdhc) {
 }
 
 static bool begin_transfer(K22Sdhc* sdhc, bool read, bool multiple) {
-    const size_t block_size = transfer_block_size(sdhc);
+    const size_t transfer_size = transfer_block_size(sdhc);
     const size_t block_count = multiple ? transfer_block_count(sdhc) : 1u;
-    const size_t address = (size_t)*reg(sdhc, SDHC_CMDARG) * 512u;
-    if (!sdhc->selected || block_size == 0u || block_size > 4096u ||
-        block_count > SIZE_MAX / block_size ||
-        !transfer_bounds(sdhc, address, block_size * block_count)) {
+    const size_t card_offset = (size_t)*reg(sdhc, SDHC_CMDARG) * 512u;
+    if (!sdhc->selected || transfer_size == 0u || transfer_size > 4096u ||
+        block_count > SIZE_MAX / transfer_size ||
+        !transfer_bounds(sdhc, card_offset, transfer_size * block_count)) {
         set_status(sdhc, SDHC_IRQ_DATA_TIMEOUT);
         return false;
     }
@@ -226,8 +228,8 @@ static bool begin_transfer(K22Sdhc* sdhc, bool read, bool multiple) {
         set_status(sdhc, SDHC_IRQ_DATA_CRC);
         return false;
     }
-    sdhc->transfer_address = address;
-    sdhc->transfer_remaining = block_size * block_count;
+    sdhc->transfer_address = card_offset;
+    sdhc->transfer_remaining = transfer_size * block_count;
     sdhc->transfer_read = read;
     sdhc->transfer_multiple = multiple;
     refresh_present_state(sdhc);
@@ -314,85 +316,88 @@ static void issue_command(K22Sdhc* sdhc) {
     set_status(sdhc, SDHC_IRQ_COMMAND_COMPLETE);
 }
 
-static bool read_data(K22Sdhc* sdhc, uint32_t* value) {
+static bool read_data(K22Sdhc* sdhc, uint32_t* output_value) {
     if (!sdhc->transfer_read || sdhc->transfer_remaining == 0u)
         return false;
-    const size_t size = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
-    *value = 0u;
-    memcpy(value, sdhc->card + sdhc->transfer_address, size);
-    sdhc->transfer_address += size;
-    sdhc->transfer_remaining -= size;
+    const size_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
+    *output_value = 0u;
+    memcpy(output_value, sdhc->card + sdhc->transfer_address, byte_count);
+    sdhc->transfer_address += byte_count;
+    sdhc->transfer_remaining -= byte_count;
     if (sdhc->transfer_remaining == 0u)
         complete_transfer(sdhc);
     return true;
 }
 
-static bool write_data(K22Sdhc* sdhc, uint32_t value) {
+static bool write_data(K22Sdhc* sdhc, uint32_t write_value) {
     if (sdhc->transfer_read || sdhc->transfer_remaining == 0u)
         return false;
-    const size_t size = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
-    memcpy(sdhc->card + sdhc->transfer_address, &value, size);
-    sdhc->transfer_address += size;
-    sdhc->transfer_remaining -= size;
+    const size_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
+    memcpy(sdhc->card + sdhc->transfer_address, &write_value, byte_count);
+    sdhc->transfer_address += byte_count;
+    sdhc->transfer_remaining -= byte_count;
     if (sdhc->transfer_remaining == 0u)
         complete_transfer(sdhc);
     return true;
 }
 
-static bool readable(uint32_t offset) {
-    return offset <= SDHC_WML || offset == SDHC_ADMAES || offset == SDHC_ADSADDR ||
-           offset == SDHC_VENDOR || offset == SDHC_MMCBOOT || offset == SDHC_HOSTVER;
+static bool readable(uint32_t register_offset) {
+    return register_offset <= SDHC_WML || register_offset == SDHC_ADMAES ||
+           register_offset == SDHC_ADSADDR || register_offset == SDHC_VENDOR ||
+           register_offset == SDHC_MMCBOOT || register_offset == SDHC_HOSTVER;
 }
 
-static bool writable(uint32_t offset) {
-    return offset == SDHC_DSADDR || offset == SDHC_BLKATTR || offset == SDHC_CMDARG ||
-           offset == SDHC_XFERTYP || offset == SDHC_DATPORT || offset == SDHC_PROCTL ||
-           offset == SDHC_SYSCTL || offset == SDHC_IRQSTAT || offset == SDHC_IRQSTATEN ||
-           offset == SDHC_IRQSIGEN || offset == SDHC_FEVT || offset == SDHC_ADSADDR ||
-           offset == SDHC_VENDOR || offset == SDHC_MMCBOOT;
+static bool writable(uint32_t register_offset) {
+    return register_offset == SDHC_DSADDR || register_offset == SDHC_BLKATTR ||
+           register_offset == SDHC_CMDARG || register_offset == SDHC_XFERTYP ||
+           register_offset == SDHC_DATPORT || register_offset == SDHC_PROCTL ||
+           register_offset == SDHC_SYSCTL || register_offset == SDHC_IRQSTAT ||
+           register_offset == SDHC_IRQSTATEN || register_offset == SDHC_IRQSIGEN ||
+           register_offset == SDHC_FEVT || register_offset == SDHC_ADSADDR ||
+           register_offset == SDHC_VENDOR || register_offset == SDHC_MMCBOOT;
 }
 
-bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t address, uint8_t size, uint32_t* value) {
-    if (sdhc == NULL || value == NULL || !sdhc->clock_enabled || size != 4u ||
+bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t address, uint8_t byte_count, uint32_t* output_value) {
+    if (sdhc == NULL || output_value == NULL || !sdhc->clock_enabled || byte_count != 4u ||
         address < SDHC_BASE || address - SDHC_BASE > SDHC_HOSTVER ||
         ((address - SDHC_BASE) & 3u) != 0u)
         return false;
-    const uint32_t offset = address - SDHC_BASE;
-    if (offset == SDHC_DATPORT)
-        return read_data(sdhc, value);
-    if (!readable(offset))
+    const uint32_t register_offset = address - SDHC_BASE;
+    if (register_offset == SDHC_DATPORT)
+        return read_data(sdhc, output_value);
+    if (!readable(register_offset))
         return false;
     refresh_present_state(sdhc);
-    *value = *reg(sdhc, offset);
+    *output_value = *reg(sdhc, register_offset);
     return true;
 }
 
-bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t address, uint8_t size, uint32_t value) {
-    if (sdhc == NULL || !sdhc->clock_enabled || size != 4u || address < SDHC_BASE ||
+bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t address, uint8_t byte_count, uint32_t write_value) {
+    if (sdhc == NULL || !sdhc->clock_enabled || byte_count != 4u || address < SDHC_BASE ||
         address - SDHC_BASE > SDHC_HOSTVER || ((address - SDHC_BASE) & 3u) != 0u)
         return false;
-    const uint32_t offset = address - SDHC_BASE;
-    if (!writable(offset))
+    const uint32_t register_offset = address - SDHC_BASE;
+    if (!writable(register_offset))
         return false;
-    if (offset == SDHC_DATPORT)
-        return write_data(sdhc, value);
-    if (offset == SDHC_IRQSTAT) {
-        *reg(sdhc, offset) &= ~value;
+    if (register_offset == SDHC_DATPORT)
+        return write_data(sdhc, write_value);
+    if (register_offset == SDHC_IRQSTAT) {
+        *reg(sdhc, register_offset) &= ~write_value;
         return true;
     }
-    if (offset == SDHC_FEVT) {
-        set_status(sdhc, value);
+    if (register_offset == SDHC_FEVT) {
+        set_status(sdhc, write_value);
         return true;
     }
-    if (offset == SDHC_SYSCTL && (value & 0x07000000u) != 0u) {
+    if (register_offset == SDHC_SYSCTL && (write_value & 0x07000000u) != 0u) {
         const bool clock = sdhc->clock_enabled;
         k22_sdhc_reset(sdhc);
         sdhc->clock_enabled = clock;
-        *reg(sdhc, offset) = value & 0x000fffffu;
+        *reg(sdhc, register_offset) = write_value & 0x000fffffu;
         return true;
     }
-    *reg(sdhc, offset) = value;
-    if (offset == SDHC_XFERTYP)
+    *reg(sdhc, register_offset) = write_value;
+    if (register_offset == SDHC_XFERTYP)
         issue_command(sdhc);
     return true;
 }
