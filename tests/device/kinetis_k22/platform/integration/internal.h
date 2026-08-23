@@ -93,15 +93,15 @@ enum {
 static const uint32_t MCM_PLASC = 0xe0080008u;
 
 typedef struct {
-    uint32_t calls;
+    uint32_t call_count;
 } WaitFixture;
 
-bool k22_integration_test_cpu_write8(KinetisK22* device, uint32_t address, uint8_t value);
-bool k22_integration_test_read16(KinetisK22* device, uint32_t address, uint16_t* value);
-bool k22_integration_test_read32(KinetisK22* device, uint32_t address, uint32_t* value);
-bool k22_integration_test_read8(KinetisK22* device, uint32_t address, uint8_t* value);
-bool k22_integration_test_write16(KinetisK22* device, uint32_t address, uint16_t value);
-bool k22_integration_test_write32(KinetisK22* device, uint32_t address, uint32_t value);
+bool k22_integration_test_cpu_write8(KinetisK22* device, uint32_t address, uint8_t write_value);
+bool k22_integration_test_read16(KinetisK22* device, uint32_t address, uint16_t* read_value);
+bool k22_integration_test_read32(KinetisK22* device, uint32_t address, uint32_t* read_value);
+bool k22_integration_test_read8(KinetisK22* device, uint32_t address, uint8_t* read_value);
+bool k22_integration_test_write16(KinetisK22* device, uint32_t address, uint16_t write_value);
+bool k22_integration_test_write32(KinetisK22* device, uint32_t address, uint32_t write_value);
 KinetisK22* k22_integration_test_create_device(TestState* state, KinetisK22Package package);
 KinetisK22* k22_integration_test_create_f12_device(TestState* state, KinetisK22Package package);
 void k22_integration_test_expect_can_irq_level(TestState* state);

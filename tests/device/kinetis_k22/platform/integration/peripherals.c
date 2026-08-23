@@ -1,10 +1,11 @@
 #include "device/kinetis_k22/platform/integration/internal.h"
 
-static uint32_t wait_states(void* context, uint32_t address, uint8_t size, CortexM4Access access,
-                            bool write, bool sequential) {
+static uint32_t wait_states(void* context, uint32_t address, uint8_t access_size,
+                            CortexM4Access access, bool write_access, bool sequential) {
     WaitFixture* fixture = context;
-    fixture->calls++;
-    return (address & 1u) + size + access + (write ? 1u : 0u) + (sequential ? 1u : 0u);
+    fixture->call_count++;
+    return (address & 1u) + access_size + access + (write_access ? 1u : 0u) +
+           (sequential ? 1u : 0u);
 }
 
 static void expect_serial_dma_sources(TestState* state) {
@@ -568,8 +569,8 @@ static void expect_copy(TestState* state, KinetisK22* source) {
     test_connect_debugger(state, kinetis_k22_cpu(destination));
     expect(state, cortex_m4_step(kinetis_k22_cpu(destination)).stop == CORTEX_M4_STOP_BREAKPOINT,
            "cortex_m4_step(kinetis_k22_cpu(destination)).stop == CORTEX_M4_STOP_BREAKPOINT");
-    expect(state, destination_wait.calls != 0u, "destination_wait.calls != 0u");
-    expect(state, source_wait.calls == 0u, "source_wait.calls == 0u");
+    expect(state, destination_wait.call_count != 0u, "destination_wait.call_count != 0u");
+    expect(state, source_wait.call_count == 0u, "source_wait.call_count == 0u");
     kinetis_k22_destroy(destination);
 }
 
