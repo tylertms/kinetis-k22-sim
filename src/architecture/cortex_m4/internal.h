@@ -335,9 +335,9 @@ CortexM4SystemAccess cortex_m4_mpu_read(CortexM4* cpu, uint32_t address, uint8_t
 CortexM4SystemAccess cortex_m4_mpu_write(CortexM4* cpu, uint32_t address, uint8_t byte_count,
                                          CortexM4Access access, uint32_t write_value);
 bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8_t byte_count,
-                                    CortexM4Access access, bool is_write);
+                                    CortexM4Access access, bool is_write_access);
 bool cortex_m4_mpu_check(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
-                         bool is_write);
+                         bool is_write_access);
 void cortex_m4_debug_reset(CortexM4* cpu);
 bool cortex_m4_debug_address(uint32_t address);
 CortexM4SystemAccess cortex_m4_debug_read(CortexM4* cpu, uint32_t address, uint8_t size,

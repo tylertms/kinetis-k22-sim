@@ -191,9 +191,9 @@ static int8_t matching_region(const CortexM4* cpu, uint32_t address) {
     return -1;
 }
 
-static bool region_permission(uint32_t attributes, bool privileged, bool is_write,
-                              bool instruction) {
-    if (instruction && (attributes & MPU_RASR_XN) != 0u) {
+static bool region_permission(uint32_t attributes, bool privileged, bool is_write_access,
+                              bool instruction_access) {
+    if (instruction_access && (attributes & MPU_RASR_XN) != 0u) {
         return false;
     }
     const uint8_t permission = (uint8_t)((attributes & MPU_RASR_AP_MASK) >> 24u);
@@ -201,41 +201,41 @@ static bool region_permission(uint32_t attributes, bool privileged, bool is_writ
     case 1u:
         return privileged;
     case 2u:
-        return privileged || !is_write;
+        return privileged || !is_write_access;
     case 3u:
         return true;
     case 5u:
-        return privileged && !is_write;
+        return privileged && !is_write_access;
     case 6u:
     case 7u:
-        return !is_write;
+        return !is_write_access;
     default:
         return false;
     }
 }
 
-static bool background_permission(uint32_t address, bool instruction) {
-    if (!instruction) {
+static bool background_permission(uint32_t address, bool instruction_access) {
+    if (!instruction_access) {
         return true;
     }
     return address < 0x40000000u || (address >= 0x60000000u && address < 0xa0000000u);
 }
 
 static bool byte_access_permitted(const CortexM4* cpu, uint32_t address, CortexM4Access access,
-                                  bool is_write) {
-    const bool instruction = access == CORTEX_M4_ACCESS_INSTRUCTION;
+                                  bool is_write_access) {
+    const bool instruction_access = access == CORTEX_M4_ACCESS_INSTRUCTION;
     const bool privileged = privileged_access(cpu, access);
     const int8_t region = matching_region(cpu, address);
     if (region >= 0) {
-        return region_permission(cpu->mpu_region_attributes[(uint8_t)region], privileged, is_write,
-                                 instruction);
+        return region_permission(cpu->mpu_region_attributes[(uint8_t)region], privileged,
+                                 is_write_access, instruction_access);
     }
     return privileged && (cpu->mpu_control & MPU_CTRL_PRIVDEFENA) != 0u &&
-           background_permission(address, instruction);
+           background_permission(address, instruction_access);
 }
 
 bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8_t byte_count,
-                                    CortexM4Access access, bool is_write) {
+                                    CortexM4Access access, bool is_write_access) {
     if (cpu == NULL || (byte_count != 1u && byte_count != 2u && byte_count != 4u) ||
         address > UINT32_MAX - (uint32_t)(byte_count - 1u)) {
         return false;
@@ -244,7 +244,7 @@ bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8
         return true;
     }
     for (uint8_t byte_offset = 0u; byte_offset < byte_count; byte_offset++) {
-        if (!byte_access_permitted(cpu, address + byte_offset, access, is_write)) {
+        if (!byte_access_permitted(cpu, address + byte_offset, access, is_write_access)) {
             return false;
         }
     }
@@ -252,8 +252,8 @@ bool cortex_m4_mpu_access_permitted(const CortexM4* cpu, uint32_t address, uint8
 }
 
 bool cortex_m4_mpu_check(CortexM4* cpu, uint32_t address, uint8_t byte_count, CortexM4Access access,
-                         bool is_write) {
-    if (cortex_m4_mpu_access_permitted(cpu, address, byte_count, access, is_write)) {
+                         bool is_write_access) {
+    if (cortex_m4_mpu_access_permitted(cpu, address, byte_count, access, is_write_access)) {
         return true;
     }
     if (cpu == NULL) {
