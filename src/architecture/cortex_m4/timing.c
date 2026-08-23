@@ -4,29 +4,29 @@ enum {
     CORTEX_M4_MAXIMUM_EXCLUSIVE_GRANULE = 2048,
 };
 
-static uint32_t population_count(uint32_t value) {
-    uint32_t count = 0;
-    while (value != 0) {
-        count += value & 1u;
-        value >>= 1;
+static uint32_t population_count(uint32_t bit_pattern) {
+    uint32_t set_bit_count = 0;
+    while (bit_pattern != 0) {
+        set_bit_count += bit_pattern & 1u;
+        bit_pattern >>= 1;
     }
-    return count;
+    return set_bit_count;
 }
 
-static uint32_t leading_zero_count(uint32_t value) {
-    uint32_t count = 0;
-    while ((value & 0x80000000u) == 0) {
-        value <<= 1;
-        count++;
+static uint32_t leading_zero_count(uint32_t bit_pattern) {
+    uint32_t leading_zeroes = 0;
+    while ((bit_pattern & 0x80000000u) == 0) {
+        bit_pattern <<= 1;
+        leading_zeroes++;
     }
-    return count;
+    return leading_zeroes;
 }
 
-static uint32_t signed_magnitude(uint32_t value) {
-    if ((value & 0x80000000u) == 0) {
-        return value;
+static uint32_t signed_magnitude(uint32_t encoded_value) {
+    if ((encoded_value & 0x80000000u) == 0) {
+        return encoded_value;
     }
-    return ~value + 1u;
+    return ~encoded_value + 1u;
 }
 
 static uint32_t saturating_add(uint32_t left, uint32_t right) {
