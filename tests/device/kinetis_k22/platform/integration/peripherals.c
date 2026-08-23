@@ -113,50 +113,53 @@ static void expect_periodic_dma_trigger(TestState* state) {
 
 static void expect_sdhc_integration(TestState* state) {
     uint8_t card[512];
-    for (size_t index = 0u; index < sizeof(card); index++)
-        card[index] = (uint8_t)index;
-    KinetisK22* small =
-        k22_integration_test_create_f12_device(state, KINETIS_K22_PACKAGE_LH_64_LQFP);
-    expect(state, !kinetis_k22_sdhc_insert(small, card, sizeof(card), false),
-           "!kinetis_k22_sdhc_insert(small, card, sizeof(card), false)");
-    kinetis_k22_destroy(small);
+    for (size_t card_index = 0u; card_index < sizeof(card); card_index++) {
+        card[card_index] = (uint8_t)card_index;
+    }
 
-    KinetisK22* large =
+    KinetisK22* unsupported_device =
+        k22_integration_test_create_f12_device(state, KINETIS_K22_PACKAGE_LH_64_LQFP);
+    expect(state, !kinetis_k22_sdhc_insert(unsupported_device, card, sizeof(card), false),
+           "!kinetis_k22_sdhc_insert(unsupported_device, card, sizeof(card), false)");
+    kinetis_k22_destroy(unsupported_device);
+
+    KinetisK22* sdhc_device =
         k22_integration_test_create_f12_device(state, KINETIS_K22_PACKAGE_LK_80_LQFP);
-    expect(state, kinetis_k22_sdhc_insert(large, card, sizeof(card), false),
-           "kinetis_k22_sdhc_insert(large, card, sizeof(card), false)");
-    CortexM4* cpu = kinetis_k22_cpu(large);
-    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC3, 4u, 1u << 17u),
-           "cortex_m4_write_memory(cpu, SIM_SCGC3, 4u, 1u << 17u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1034u, 4u, UINT32_MAX),
-           "cortex_m4_write_memory(cpu, 0x400b1034u, 4u, UINT32_MAX)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1038u, 4u, UINT32_MAX),
-           "cortex_m4_write_memory(cpu, 0x400b1038u, 4u, UINT32_MAX)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0u),
-           "cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 3u << 24u),
-           "cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 3u << 24u)");
-    uint32_t response = 0u;
-    expect(state, k22_integration_test_read32(large, 0x400b1010u, &response),
-           "k22_integration_test_read32(large, 0x400b1010u, &response)");
-    expect(state, response == 0x00010000u, "response == 0x00010000u");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0x00010000u),
-           "cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0x00010000u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 7u << 24u),
-           "cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 7u << 24u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1004u, 4u, 4u | (1u << 16u)),
-           "cortex_m4_write_memory(cpu, 0x400b1004u, 4u, 4u | (1u << 16u))");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0u),
-           "cortex_m4_write_memory(cpu, 0x400b1008u, 4u, 0u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 17u << 24u),
-           "cortex_m4_write_memory(cpu, 0x400b100cu, 4u, 17u << 24u)");
-    expect(state, k22_integration_test_read32(large, 0x400b1020u, &response),
-           "k22_integration_test_read32(large, 0x400b1020u, &response)");
-    expect(state, response == 0x03020100u, "response == 0x03020100u");
-    kinetis_k22_sdhc_eject(large);
-    expect(state, !kinetis_k22_sdhc_read_card(large, 0u, &response, 1u),
-           "!kinetis_k22_sdhc_read_card(large, 0u, &response, 1u)");
-    kinetis_k22_destroy(large);
+    expect(state, kinetis_k22_sdhc_insert(sdhc_device, card, sizeof(card), false),
+           "kinetis_k22_sdhc_insert(sdhc_device, card, sizeof(card), false)");
+    CortexM4* sdhc_cpu = kinetis_k22_cpu(sdhc_device);
+    expect(state, cortex_m4_write_memory(sdhc_cpu, SIM_SCGC3, 4u, 1u << 17u),
+           "cortex_m4_write_memory(sdhc_cpu, SIM_SCGC3, 4u, 1u << 17u)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1034u, 4u, UINT32_MAX),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1034u, 4u, UINT32_MAX)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1038u, 4u, UINT32_MAX),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1038u, 4u, UINT32_MAX)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0u)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 3u << 24u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 3u << 24u)");
+    uint32_t response_word = 0u;
+    expect(state, k22_integration_test_read32(sdhc_device, 0x400b1010u, &response_word),
+           "k22_integration_test_read32(sdhc_device, 0x400b1010u, &response_word)");
+    expect(state, response_word == 0x00010000u, "response_word == 0x00010000u");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0x00010000u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0x00010000u)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 7u << 24u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 7u << 24u)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1004u, 4u, 4u | (1u << 16u)),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1004u, 4u, 4u | (1u << 16u))");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b1008u, 4u, 0u)");
+    expect(state, cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 17u << 24u),
+           "cortex_m4_write_memory(sdhc_cpu, 0x400b100cu, 4u, 17u << 24u)");
+    expect(state, k22_integration_test_read32(sdhc_device, 0x400b1020u, &response_word),
+           "k22_integration_test_read32(sdhc_device, 0x400b1020u, &response_word)");
+    expect(state, response_word == 0x03020100u, "response_word == 0x03020100u");
+
+    kinetis_k22_sdhc_eject(sdhc_device);
+    expect(state, !kinetis_k22_sdhc_read_card(sdhc_device, 0u, &response_word, 1u),
+           "!kinetis_k22_sdhc_read_card(sdhc_device, 0u, &response_word, 1u)");
+    kinetis_k22_destroy(sdhc_device);
 }
 
 static void expect_endpoint_event_order(TestState* state, KinetisK22* device) {
@@ -380,14 +383,14 @@ static void expect_adc_alternate_triggers(TestState* state) {
     expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
            "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
     expect(state, counter == 3u, "counter == 3u");
-    expect(state, cortex_m4_write_memory(cpu, DHCSR, 4u, 0xa05f0003u),
-           "cortex_m4_write_memory(cpu, DHCSR, 4u, 0xa05f0003u)");
+    expect(state, cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0003u),
+           "cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0003u)");
     kinetis_k22_advance(device, 10u);
     expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
            "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
     expect(state, counter == 3u, "counter == 3u");
-    expect(state, cortex_m4_write_memory(cpu, DHCSR, 4u, 0xa05f0001u),
-           "cortex_m4_write_memory(cpu, DHCSR, 4u, 0xa05f0001u)");
+    expect(state, cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0001u),
+           "cortex_m4_write_memory(cpu, (uint32_t)DHCSR, 4u, 0xa05f0001u)");
     kinetis_k22_advance(device, 1u);
     expect(state, k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter),
            "k22_integration_test_read32(device, PIT_LDVAL0 + 4u, &counter)");
