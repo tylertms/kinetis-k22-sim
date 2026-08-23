@@ -158,51 +158,53 @@ void k22_data_internal_dma_queue_always_enabled(K22Data* data, uint8_t channel) 
 }
 
 static bool dma_copy_descriptor(K22Data* data, uint8_t* descriptor, uint32_t address) {
-    for (uint8_t offset = 0; offset < DMA_TCD_SIZE; offset += 4) {
-        uint32_t value = 0;
-        if (!dma_bus_read(data, address + offset, 4, &value))
+    for (uint8_t descriptor_offset = 0u; descriptor_offset < DMA_TCD_SIZE;
+         descriptor_offset += 4u) {
+        uint32_t descriptor_word = 0u;
+        if (!dma_bus_read(data, address + descriptor_offset, 4u, &descriptor_word))
             return false;
-        k22_data_internal_store_bytes(descriptor, offset, 4, value);
+        k22_data_internal_store_bytes(descriptor, descriptor_offset, 4u, descriptor_word);
     }
     return true;
 }
 
 static void dma_complete_major(K22Data* data, uint8_t channel, uint8_t* descriptor) {
-    uint32_t source = k22_data_internal_load_bytes(descriptor, 0, 4);
-    uint32_t destination = k22_data_internal_load_bytes(descriptor, 0x10, 4);
-    source =
-        (uint32_t)((int64_t)source + (int32_t)k22_data_internal_load_bytes(descriptor, 0x0c, 4));
-    destination = (uint32_t)((int64_t)destination +
-                             (int32_t)k22_data_internal_load_bytes(descriptor, 0x18, 4));
-    k22_data_internal_store_bytes(descriptor, 0, 4, source);
-    k22_data_internal_store_bytes(descriptor, 0x10, 4, destination);
-    uint16_t control = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1c, 2);
-    const uint16_t beginning =
+    uint32_t source_address = k22_data_internal_load_bytes(descriptor, 0u, 4u);
+    uint32_t destination_address = k22_data_internal_load_bytes(descriptor, 0x10u, 4u);
+    source_address = (uint32_t)((int64_t)source_address +
+                                (int32_t)k22_data_internal_load_bytes(descriptor, 0x0cu, 4u));
+    destination_address = (uint32_t)((int64_t)destination_address +
+                                     (int32_t)k22_data_internal_load_bytes(descriptor, 0x18u, 4u));
+    k22_data_internal_store_bytes(descriptor, 0u, 4u, source_address);
+    k22_data_internal_store_bytes(descriptor, 0x10u, 4u, destination_address);
+    uint16_t control_flags = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1cu, 2u);
+    const uint16_t initial_iteration_count =
         dma_iteration_count((uint16_t)k22_data_internal_load_bytes(descriptor, 0x1e, 2));
-    dma_set_iteration_count(descriptor, 0x16, beginning);
-    if ((control & 0x10u) != 0) {
-        const uint32_t next = k22_data_internal_load_bytes(descriptor, 0x18, 4);
-        if (!dma_copy_descriptor(data, descriptor, next)) {
+    dma_set_iteration_count(descriptor, 0x16u, initial_iteration_count);
+    if ((control_flags & 0x10u) != 0u) {
+        const uint32_t next_descriptor_address =
+            k22_data_internal_load_bytes(descriptor, 0x18u, 4u);
+        if (!dma_copy_descriptor(data, descriptor, next_descriptor_address)) {
             k22_data_internal_dma_error(data, channel, 1u << 2);
             return;
         }
-        control = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1c, 2);
+        control_flags = (uint16_t)k22_data_internal_load_bytes(descriptor, 0x1cu, 2u);
     } else {
-        control |= 0x80u;
-        k22_data_internal_store_bytes(descriptor, 0x1c, 2, control);
+        control_flags |= 0x80u;
+        k22_data_internal_store_bytes(descriptor, 0x1cu, 2u, control_flags);
     }
-    if ((control & 0x08u) != 0) {
-        uint16_t enable = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
-        enable &= (uint16_t)~(1u << channel);
-        k22_data_internal_store_bytes(data->dma, 0x0c, 2, enable);
+    if ((control_flags & 0x08u) != 0u) {
+        uint16_t channel_enable = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0cu, 2u);
+        channel_enable &= (uint16_t)~(1u << channel);
+        k22_data_internal_store_bytes(data->dma, 0x0cu, 2u, channel_enable);
     }
-    if ((control & 0x02u) != 0) {
-        uint16_t pending = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24, 2);
-        pending |= (uint16_t)(1u << channel);
-        k22_data_internal_store_bytes(data->dma, 0x24, 2, pending);
+    if ((control_flags & 0x02u) != 0u) {
+        uint16_t pending_interrupts = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x24u, 2u);
+        pending_interrupts |= (uint16_t)(1u << channel);
+        k22_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupts);
     }
-    if ((control & 0x20u) != 0)
-        dma_queue_channel(data, (uint8_t)((control >> 8) & 15u));
+    if ((control_flags & 0x20u) != 0u)
+        dma_queue_channel(data, (uint8_t)((control_flags >> 8u) & 15u));
 }
 
 bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel) {
