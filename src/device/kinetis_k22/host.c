@@ -4,17 +4,17 @@ void kinetis_k22_set_adc0_channel(KinetisK22* device, uint8_t channel, uint16_t 
     (void)kinetis_k22_set_adc_channel(device, 0, channel, sample_value);
 }
 
-bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input,
+bool kinetis_k22_set_cmp_input(KinetisK22* device, uint8_t instance, uint8_t input_index,
                                uint8_t input_level) {
     if (device == NULL)
         return false;
-    return k22_data_set_cmp_input(device->data, instance, input, input_level);
+    return k22_data_set_cmp_input(device->data, instance, input_index, input_level);
 }
 
-bool kinetis_k22_set_lptmr_input(KinetisK22* device, uint8_t input, bool high) {
+bool kinetis_k22_set_lptmr_input(KinetisK22* device, uint8_t input_index, bool input_high) {
     if (device == NULL)
         return false;
-    return k22_timing_set_lptmr_input(&device->timing, input, high);
+    return k22_timing_set_lptmr_input(&device->timing, input_index, input_high);
 }
 
 bool kinetis_k22_trigger_low_voltage_warning(KinetisK22* device) {
@@ -29,10 +29,10 @@ bool kinetis_k22_trigger_low_voltage_detect(KinetisK22* device) {
     return k22_timing_trigger_low_voltage_detect(&device->timing);
 }
 
-bool kinetis_k22_set_llwu_pin(KinetisK22* device, uint8_t pin, bool high) {
+bool kinetis_k22_set_llwu_pin(KinetisK22* device, uint8_t pin, bool pin_high) {
     if (device == NULL)
         return false;
-    return k22_timing_set_llwu_pin(&device->timing, pin, high);
+    return k22_timing_set_llwu_pin(&device->timing, pin, pin_high);
 }
 
 bool kinetis_k22_trigger_llwu_module(KinetisK22* device, uint8_t module) {
@@ -41,10 +41,10 @@ bool kinetis_k22_trigger_llwu_module(KinetisK22* device, uint8_t module) {
     return k22_timing_trigger_llwu_module(&device->timing, module);
 }
 
-bool kinetis_k22_set_ewm_input(KinetisK22* device, bool high) {
+bool kinetis_k22_set_ewm_input(KinetisK22* device, bool input_high) {
     if (device == NULL)
         return false;
-    return k22_timing_set_ewm_input(&device->timing, high);
+    return k22_timing_set_ewm_input(&device->timing, input_high);
 }
 
 bool kinetis_k22_ewm_output(const KinetisK22* device) {
@@ -77,16 +77,18 @@ bool kinetis_k22_get_cmt_output(const KinetisK22* device, bool* is_driven, bool*
     return true;
 }
 
-bool kinetis_k22_set_ftm_input(KinetisK22* device, uint8_t instance, uint8_t channel, bool high) {
+bool kinetis_k22_set_ftm_input(KinetisK22* device, uint8_t instance, uint8_t channel,
+                               bool input_high) {
     if (device == NULL)
         return false;
-    return k22_timing_set_ftm_input(&device->timing, instance, channel, high);
+    return k22_timing_set_ftm_input(&device->timing, instance, channel, input_high);
 }
 
-bool kinetis_k22_set_ftm_fault(KinetisK22* device, uint8_t instance, uint8_t input, bool high) {
+bool kinetis_k22_set_ftm_fault(KinetisK22* device, uint8_t instance, uint8_t input_index,
+                               bool input_high) {
     if (device == NULL)
         return false;
-    return k22_timing_set_ftm_fault(&device->timing, instance, input, high);
+    return k22_timing_set_ftm_fault(&device->timing, instance, input_index, input_high);
 }
 
 bool kinetis_k22_trigger_ftm_hardware(KinetisK22* device, uint8_t instance, uint8_t trigger) {
@@ -96,10 +98,10 @@ bool kinetis_k22_trigger_ftm_hardware(KinetisK22* device, uint8_t instance, uint
 }
 
 bool kinetis_k22_get_ftm_output(const KinetisK22* device, uint8_t instance, uint8_t channel,
-                                bool* high) {
+                                bool* output_high) {
     if (device == NULL)
         return false;
-    return k22_timing_get_ftm_output(&device->timing, instance, channel, high);
+    return k22_timing_get_ftm_output(&device->timing, instance, channel, output_high);
 }
 
 bool kinetis_k22_get_dac_output(const KinetisK22* device, uint8_t instance,
@@ -125,14 +127,14 @@ bool kinetis_k22_set_usb_pullup(KinetisK22* device, bool enabled) {
     return k22_usbdcd_set_pullup(&device->usbdcd, enabled);
 }
 
-void kinetis_k22_rng_seed(KinetisK22* device, uint32_t seed) {
+void kinetis_k22_rng_seed(KinetisK22* device, uint32_t seed_value) {
     if (device != NULL) {
-        k22_data_rng_seed(device->data, seed);
+        k22_data_rng_seed(device->data, seed_value);
     }
 }
 
-bool kinetis_k22_gpio_drive(KinetisK22* device, uint8_t port, uint8_t pin, bool high) {
-    if (device != NULL && k22_io_drive_pin(&device->io, port, pin, high)) {
+bool kinetis_k22_gpio_drive(KinetisK22* device, uint8_t port, uint8_t pin, bool pin_high) {
+    if (device != NULL && k22_io_drive_pin(&device->io, port, pin, pin_high)) {
         kinetis_k22_refresh_signals(device);
         return true;
     }
@@ -147,11 +149,11 @@ bool kinetis_k22_gpio_release(KinetisK22* device, uint8_t port, uint8_t pin) {
     return false;
 }
 
-bool kinetis_k22_gpio_pin(const KinetisK22* device, uint8_t port, uint8_t pin, bool* high) {
-    if (device == NULL || high == NULL || !k22_package_pin_exists(device->package, port, pin)) {
+bool kinetis_k22_gpio_pin(const KinetisK22* device, uint8_t port, uint8_t pin, bool* pin_high) {
+    if (device == NULL || pin_high == NULL || !k22_package_pin_exists(device->package, port, pin)) {
         return false;
     }
-    *high = (k22_io_pin_input(&device->io, port) & (1u << pin)) != 0u;
+    *pin_high = (k22_io_pin_input(&device->io, port) & (1u << pin)) != 0u;
     return true;
 }
 
@@ -332,22 +334,22 @@ bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status
     return true;
 }
 
-bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* value) {
-    uint16_t wide = 0;
-    if (device == NULL || value == NULL) {
+bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* output_value) {
+    uint16_t wide_value = 0;
+    if (device == NULL || output_value == NULL) {
         return false;
     }
     K22SerialFifo* fifo = &device->serial.uart[1].transmit;
     if (fifo->count == 0) {
-        if (!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &wide)) {
+        if (!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &wide_value)) {
             return false;
         }
     } else {
-        wide = fifo->values[fifo->read_index];
+        wide_value = fifo->values[fifo->read_index];
         fifo->read_index = (uint16_t)((fifo->read_index + 1u) % K22_SERIAL_FIFO_CAPACITY);
         fifo->count--;
     }
-    *value = (uint8_t)wide;
+    *output_value = (uint8_t)wide_value;
     return true;
 }
 
@@ -369,15 +371,15 @@ bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t value) {
     return true;
 }
 
-bool kinetis_k22_spi0_transmit(KinetisK22* device, uint16_t* value) {
-    if (device == NULL || value == NULL) {
+bool kinetis_k22_spi0_transmit(KinetisK22* device, uint16_t* output_value) {
+    if (device == NULL || output_value == NULL) {
         return false;
     }
     K22SerialFifo* fifo = &device->serial.spi[0].transmit;
     if (fifo->count == 0) {
-        return kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_SPI0, value);
+        return kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_SPI0, output_value);
     }
-    *value = fifo->values[fifo->read_index];
+    *output_value = fifo->values[fifo->read_index];
     fifo->read_index = (uint16_t)((fifo->read_index + 1u) % K22_SERIAL_FIFO_CAPACITY);
     fifo->count--;
     return true;
@@ -395,11 +397,11 @@ bool kinetis_k22_i2c0_lose_arbitration(KinetisK22* device) {
     return kinetis_k22_i2c_lose_arbitration(device, KINETIS_K22_SERIAL_I2C0);
 }
 
-bool kinetis_k22_i2c0_receive(KinetisK22* device, uint8_t value) {
+bool kinetis_k22_i2c0_receive(KinetisK22* device, uint8_t received_value) {
     if (device == NULL || !device->serial.i2c[0].present) {
         return false;
     }
-    device->serial.i2c[0].registers[4] = value;
+    device->serial.i2c[0].registers[4] = received_value;
     device->serial.i2c[0].registers[3] |= 0x82u;
     (void)k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C0, true);
     kinetis_k22_internal_refresh_serial_signals(device);
