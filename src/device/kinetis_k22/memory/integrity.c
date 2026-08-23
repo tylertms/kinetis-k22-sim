@@ -1,119 +1,126 @@
 #include "internal.h"
 
-static uint32_t reverse_bits(uint32_t value, uint8_t count) {
-    uint32_t result = 0;
-    for (uint8_t bit = 0; bit < count; bit++) {
-        result <<= 1;
-        result |= (value >> bit) & 1u;
+static uint32_t reverse_bits(uint32_t input_value, uint8_t bit_count) {
+    uint32_t reversed_value = 0u;
+    for (uint8_t bit_index = 0u; bit_index < bit_count; bit_index++) {
+        reversed_value <<= 1;
+        reversed_value |= (input_value >> bit_index) & 1u;
     }
-    return result;
+    return reversed_value;
 }
 
-static void crc_accumulate(K22Data* data, uint8_t byte) {
-    const bool width32 = (data->crc_control & 0x01000000u) != 0;
-    const uint8_t bits = width32 ? 32u : 16u;
-    const uint32_t mask = width32 ? UINT32_MAX : 0xffffu;
-    uint32_t input = byte;
-    data->crc_value &= mask;
-    data->crc_value ^= input << (bits - 8u);
-    for (uint8_t bit = 0; bit < 8; bit++) {
-        const bool top = (data->crc_value & (1u << (bits - 1u))) != 0;
-        data->crc_value = (data->crc_value << 1) & mask;
-        if (top)
-            data->crc_value ^= data->crc_polynomial & mask;
+static void crc_accumulate(K22Data* data, uint8_t input_byte) {
+    const bool wide_crc = (data->crc_control & 0x01000000u) != 0u;
+    const uint8_t crc_bit_count = wide_crc ? 32u : 16u;
+    const uint32_t crc_mask = wide_crc ? UINT32_MAX : 0xffffu;
+    uint32_t input_value = input_byte;
+    data->crc_value &= crc_mask;
+    data->crc_value ^= input_value << (crc_bit_count - 8u);
+    for (uint8_t bit_index = 0u; bit_index < 8u; bit_index++) {
+        const bool top_bit = (data->crc_value & (1u << (crc_bit_count - 1u))) != 0u;
+        data->crc_value = (data->crc_value << 1) & crc_mask;
+        if (top_bit)
+            data->crc_value ^= data->crc_polynomial & crc_mask;
     }
 }
 
 static uint32_t crc_result(const K22Data* data) {
-    const bool width32 = (data->crc_control & 0x01000000u) != 0;
-    const uint8_t bits = width32 ? 32u : 16u;
-    const uint32_t stored_high = width32 ? 0u : data->crc_value & 0xffff0000u;
-    uint32_t value = data->crc_value;
+    const bool wide_crc = (data->crc_control & 0x01000000u) != 0u;
+    const uint8_t crc_bit_count = wide_crc ? 32u : 16u;
+    const uint32_t stored_high = wide_crc ? 0u : data->crc_value & 0xffff0000u;
+    uint32_t crc_value = data->crc_value;
     const uint8_t transpose = (uint8_t)((data->crc_control >> 28) & 3u);
     uint32_t transformed = 0;
-    const uint8_t byte_count = (uint8_t)(bits / 8u);
-    for (uint8_t index = 0; index < byte_count; index++) {
-        uint8_t byte = (uint8_t)(value >> (index * 8u));
+    const uint8_t byte_count = (uint8_t)(crc_bit_count / 8u);
+    for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
+        uint8_t output_byte = (uint8_t)(crc_value >> (byte_index * 8u));
         if (transpose == 1 || transpose == 2)
-            byte = (uint8_t)reverse_bits(byte, 8);
-        const uint8_t target = transpose >= 2 ? (uint8_t)(byte_count - 1u - index) : index;
-        transformed |= (uint32_t)byte << (target * 8u);
+            output_byte = (uint8_t)reverse_bits(output_byte, 8u);
+        const uint8_t target_index =
+            transpose >= 2 ? (uint8_t)(byte_count - 1u - byte_index) : byte_index;
+        transformed |= (uint32_t)output_byte << (target_index * 8u);
     }
-    value = transformed;
+    crc_value = transformed;
     if ((data->crc_control & 0x04000000u) != 0)
-        value = ~value;
-    return width32 ? value : stored_high | (value & 0xffffu);
+        crc_value = ~crc_value;
+    return wide_crc ? crc_value : stored_high | (crc_value & 0xffffu);
 }
 
-bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const uint32_t offset = address - CRC_BASE;
-    if (!k22_data_internal_valid_access(offset, size, 12))
+bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                uint32_t* output_value) {
+    const uint32_t register_offset = address - CRC_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, 12u))
         return false;
-    if (offset < 4) {
-        *value = crc_result(data) >> (offset * 8u);
-        if (size < 4)
-            *value &= (1u << (size * 8u)) - 1u;
-    } else if (offset < 8)
-        *value = data->crc_polynomial >> ((offset - 4u) * 8u);
+    if (register_offset < 4u) {
+        *output_value = crc_result(data) >> (register_offset * 8u);
+        if (byte_count < 4u)
+            *output_value &= (1u << (byte_count * 8u)) - 1u;
+    } else if (register_offset < 8u)
+        *output_value = data->crc_polynomial >> ((register_offset - 4u) * 8u);
     else
-        *value = data->crc_control >> ((offset - 8u) * 8u);
+        *output_value = data->crc_control >> ((register_offset - 8u) * 8u);
     return true;
 }
 
-bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const uint32_t offset = address - CRC_BASE;
-    if (!k22_data_internal_valid_access(offset, size, 12))
+bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                 uint32_t write_value) {
+    const uint32_t register_offset = address - CRC_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, 12u))
         return false;
-    if (offset < 4) {
+    if (register_offset < 4u) {
         if ((data->crc_control & 0x02000000u) != 0) {
-            uint32_t mask = size == 4 ? UINT32_MAX : (1u << (size * 8u)) - 1u;
-            data->crc_value =
-                (data->crc_value & ~(mask << (offset * 8u))) | ((value & mask) << (offset * 8u));
+            uint32_t mask = byte_count == 4u ? UINT32_MAX : (1u << (byte_count * 8u)) - 1u;
+            data->crc_value = (data->crc_value & ~(mask << (register_offset * 8u))) |
+                              ((write_value & mask) << (register_offset * 8u));
             return true;
         }
         const uint8_t transpose = (uint8_t)((data->crc_control >> 30) & 3u);
-        for (uint8_t index = 0; index < size; index++) {
-            const uint8_t source = transpose >= 2 ? (uint8_t)(size - 1u - index) : index;
-            uint8_t byte = (uint8_t)(value >> (source * 8u));
+        for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
+            const uint8_t source_index =
+                transpose >= 2 ? (uint8_t)(byte_count - 1u - byte_index) : byte_index;
+            uint8_t input_byte = (uint8_t)(write_value >> (source_index * 8u));
             if (transpose == 1 || transpose == 2)
-                byte = (uint8_t)reverse_bits(byte, 8);
-            crc_accumulate(data, byte);
+                input_byte = (uint8_t)reverse_bits(input_byte, 8u);
+            crc_accumulate(data, input_byte);
         }
         return true;
     }
-    if (offset < 8) {
-        uint8_t bytes[4];
-        k22_data_internal_store_bytes(bytes, 0, 4, data->crc_polynomial);
-        k22_data_internal_store_bytes(bytes, offset - 4u, size, value);
-        data->crc_polynomial = k22_data_internal_load_bytes(bytes, 0, 4);
+    if (register_offset < 8u) {
+        uint8_t register_bytes[4];
+        k22_data_internal_store_bytes(register_bytes, 0u, 4u, data->crc_polynomial);
+        k22_data_internal_store_bytes(register_bytes, register_offset - 4u, byte_count,
+                                      write_value);
+        data->crc_polynomial = k22_data_internal_load_bytes(register_bytes, 0u, 4u);
     } else {
-        uint8_t bytes[4];
-        k22_data_internal_store_bytes(bytes, 0, 4, data->crc_control);
-        k22_data_internal_store_bytes(bytes, offset - 8u, size, value);
-        data->crc_control = k22_data_internal_load_bytes(bytes, 0, 4) & 0xf7000000u;
+        uint8_t register_bytes[4];
+        k22_data_internal_store_bytes(register_bytes, 0u, 4u, data->crc_control);
+        k22_data_internal_store_bytes(register_bytes, register_offset - 8u, byte_count,
+                                      write_value);
+        data->crc_control = k22_data_internal_load_bytes(register_bytes, 0u, 4u) & 0xf7000000u;
     }
     return true;
 }
 
-uint32_t k22_data_internal_rng_next(uint32_t value) {
-    value ^= value << 13;
-    value ^= value >> 17;
-    value ^= value << 5;
-    return value == 0 ? 0x6d2b79f5u : value;
+uint32_t k22_data_internal_rng_next(uint32_t seed_value) {
+    seed_value ^= seed_value << 13;
+    seed_value ^= seed_value >> 17;
+    seed_value ^= seed_value << 5;
+    return seed_value == 0u ? 0x6d2b79f5u : seed_value;
 }
 
-bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const uint32_t offset = address - RNG_BASE;
-    if (!k22_data_internal_valid_access(offset, size, 16) || size != 4)
+bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                uint32_t* output_value) {
+    const uint32_t register_offset = address - RNG_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, 16u) || byte_count != 4u)
         return false;
-    if (offset == 0)
-        *value = data->rng_control;
-    else if (offset == 4)
-        *value = data->rng_status;
-    else if (offset == 8)
-        *value = data->rng_error;
-    else if (offset == 12) {
-        *value = data->rng_output;
+    if (register_offset == 0u)
+        *output_value = data->rng_control;
+    else if (register_offset == 4u)
+        *output_value = data->rng_status;
+    else if (register_offset == 8u)
+        *output_value = data->rng_error;
+    else if (register_offset == 12u) {
+        *output_value = data->rng_output;
         data->rng_status &= ~1u;
         k22_data_internal_interrupt(data, K22_DATA_INTERRUPT_RNG, false);
     } else
@@ -121,19 +128,20 @@ bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t size, u
     return true;
 }
 
-bool k22_data_internal_rng_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const uint32_t offset = address - RNG_BASE;
-    if (size != 4 || !k22_data_internal_valid_access(offset, size, 16))
+bool k22_data_internal_rng_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                 uint32_t write_value) {
+    const uint32_t register_offset = address - RNG_BASE;
+    if (byte_count != 4u || !k22_data_internal_valid_access(register_offset, byte_count, 16u))
         return false;
-    if (offset != 0)
+    if (register_offset != 0u)
         return false;
-    data->rng_control = value & 0x1fu;
-    if ((value & 0x10u) != 0) {
+    data->rng_control = write_value & 0x1fu;
+    if ((write_value & 0x10u) != 0u) {
         data->rng_status = 0;
         data->rng_error = 0;
         k22_data_internal_interrupt(data, K22_DATA_INTERRUPT_RNG, false);
     }
-    if ((value & 1u) != 0)
-        data->rng_cycles = 64;
+    if ((write_value & 1u) != 0u)
+        data->rng_cycles = 64u;
     return true;
 }
