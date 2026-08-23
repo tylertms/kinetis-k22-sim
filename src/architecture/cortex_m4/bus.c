@@ -114,7 +114,7 @@ bool cortex_m4_require_alignment(CortexM4* cpu, uint32_t address, uint8_t alignm
 
 void cortex_m4_advance(CortexM4* cpu, uint32_t cycles) {
     const bool sleeping = cpu->sleeping;
-    for (uint32_t index = 0; index < cycles; index++) {
+    for (uint32_t cycle_index = 0; cycle_index < cycles; cycle_index++) {
         if ((cpu->systick_control & 1u) != 0) {
             if (cpu->systick_current == 0) {
                 cpu->systick_current = cpu->systick_reload;
@@ -130,8 +130,11 @@ void cortex_m4_advance(CortexM4* cpu, uint32_t cycles) {
             }
         }
     }
+
     cpu->cycles += cycles;
+
     cortex_m4_debug_advance(cpu, cycles, sleeping);
+
     if (cpu->bus.advance != NULL) {
         cpu->bus.advance(cpu->bus.context, cycles);
     }
