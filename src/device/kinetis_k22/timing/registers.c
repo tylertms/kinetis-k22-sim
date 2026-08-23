@@ -170,9 +170,9 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
                 write_value = (write_value & ~1u) | (current_register_value & 1u);
             ftm->registers[register_index] = (write_value & ~6u) | (current_register_value & 6u);
         } else if (offset == 0x6cu) {
-            const uint32_t mask = instance == 0u || instance == 3u ? 0xffu : 0xf0u;
+            const uint32_t input_mask = instance == 0u || instance == 3u ? 0xffu : 0xf0u;
             uint32_t next_value =
-                (ftm->registers[register_index] & 0x80u) | (write_value & mask & 0x7fu);
+                (ftm->registers[register_index] & 0x80u) | (write_value & input_mask & 0x7fu);
             if ((write_value & 0x80u) == 0u && ftm->trigger_flag_read)
                 next_value &= ~0x80u;
             ftm->registers[register_index] = next_value;
