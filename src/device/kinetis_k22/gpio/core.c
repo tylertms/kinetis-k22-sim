@@ -6,39 +6,40 @@
 #include "device/kinetis_k22/variants/manifest.h"
 
 uint32_t k22_io_internal_load_bytes(const uint8_t* data, uint8_t size) {
-    uint32_t value = 0;
-    for (uint8_t index = 0; index < size; index++)
-        value |= (uint32_t)data[index] << (index * 8u);
-    return value;
+    uint32_t output_value = 0;
+    for (uint8_t byte_index = 0; byte_index < size; byte_index++)
+        output_value |= (uint32_t)data[byte_index] << (byte_index * 8u);
+    return output_value;
 }
 
 static uint32_t width_mask(uint8_t size) {
     return size == 4 ? UINT32_MAX : (1u << (size * 8u)) - 1u;
 }
 
-static uint32_t merge_value(uint32_t previous, uint32_t offset, uint8_t size, uint32_t value) {
+static uint32_t merge_value(uint32_t previous_value, uint32_t offset, uint8_t size,
+                            uint32_t write_value) {
     const uint32_t shift = (offset & 3u) * 8u;
     const uint32_t mask = width_mask(size) << shift;
-    return (previous & ~mask) | ((value << shift) & mask);
+    return (previous_value & ~mask) | ((write_value << shift) & mask);
 }
 
-void k22_io_internal_emit(K22Io* io, K22IoEventType type, uint32_t source, uint32_t value,
+void k22_io_internal_emit(K22Io* io, K22IoEventType type, uint32_t source, uint32_t event_value,
                           uint32_t auxiliary) {
     if (io->configuration.event_handler == NULL)
         return;
     const K22IoEvent event = {
-        .type = type, .source = source, .value = value, .auxiliary = auxiliary};
+        .type = type, .source = source, .value = event_value, .auxiliary = auxiliary};
     io->configuration.event_handler(io->configuration.event_context, &event);
 }
 
-void k22_io_internal_emit_can(K22Io* io, uint8_t mailbox, uint32_t identifier, uint32_t control,
-                              uint32_t high, uint32_t low) {
+void k22_io_internal_emit_can(K22Io* io, uint8_t mailbox, uint32_t identifier,
+                              uint32_t control_value, uint32_t upper_word, uint32_t lower_word) {
     if (io->configuration.event_handler == NULL)
         return;
     K22IoEvent event = {K22_IO_EVENT_CAN_TRANSMIT,
                         mailbox,
                         identifier,
-                        (control >> 16) & 15u,
+                        (control_value >> 16) & 15u,
                         {0},
                         0,
                         false,
@@ -46,21 +47,21 @@ void k22_io_internal_emit_can(K22Io* io, uint8_t mailbox, uint32_t identifier, u
     event.length = (uint8_t)event.auxiliary;
     if (event.length > 8)
         event.length = 8;
-    event.extended = (control & (1u << 21)) != 0;
-    event.remote = (control & (1u << 20)) != 0;
-    for (uint8_t index = 0; index < 4; index++) {
-        event.data[index] = (uint8_t)(high >> ((3u - index) * 8u));
-        event.data[index + 4u] = (uint8_t)(low >> ((3u - index) * 8u));
+    event.extended = (control_value & (1u << 21)) != 0;
+    event.remote = (control_value & (1u << 20)) != 0;
+    for (uint8_t byte_index = 0; byte_index < 4; byte_index++) {
+        event.data[byte_index] = (uint8_t)(upper_word >> ((3u - byte_index) * 8u));
+        event.data[byte_index + 4u] = (uint8_t)(lower_word >> ((3u - byte_index) * 8u));
     }
     io->configuration.event_handler(io->configuration.event_context, &event);
 }
 
 bool k22_io_internal_valid_size(uint8_t size) { return size == 1 || size == 2 || size == 4; }
 
-uint8_t k22_io_internal_first_set_bit(uint32_t value) {
+uint8_t k22_io_internal_first_set_bit(uint32_t bit_mask) {
     uint8_t bit = 0;
-    while ((value & 1u) == 0) {
-        value >>= 1;
+    while ((bit_mask & 1u) == 0) {
+        bit_mask >>= 1;
         bit++;
     }
     return bit;
@@ -86,16 +87,16 @@ bool k22_io_internal_is_gpio(K22PeripheralId id) {
 }
 
 uint32_t k22_io_internal_pin_level_unfiltered(const K22Io* io, uint8_t port) {
-    uint32_t value = 0;
+    uint32_t pin_levels = 0;
     for (uint8_t pin = 0; pin < K22_IO_PIN_COUNT; pin++) {
         const uint32_t bit = 1u << pin;
         if (!k22_io_internal_pin_exists(io, port, pin))
             continue;
         const uint32_t pcr = io->port_pcr[port][pin];
-        const bool output = (io->gpio_pddr[port] & bit) != 0 && ((pcr >> 8) & 7u) == 1u;
+        const bool is_output = (io->gpio_pddr[port] & bit) != 0 && ((pcr >> 8) & 7u) == 1u;
         const bool externally_driven = (io->gpio_external_drive[port] & bit) != 0;
         bool high = false;
-        if (output && ((pcr & K22_PORT_PCR_ODE) == 0 || (io->gpio_pdor[port] & bit) == 0)) {
+        if (is_output && ((pcr & K22_PORT_PCR_ODE) == 0 || (io->gpio_pdor[port] & bit) == 0)) {
             high = (io->gpio_pdor[port] & bit) != 0;
         } else if (externally_driven) {
             high = (io->gpio_external[port] & bit) != 0;
@@ -103,16 +104,16 @@ uint32_t k22_io_internal_pin_level_unfiltered(const K22Io* io, uint8_t port) {
             high = (pcr & K22_PORT_PCR_PS) != 0;
         }
         if (high)
-            value |= bit;
+            pin_levels |= bit;
     }
-    return value;
+    return pin_levels;
 }
 
 uint32_t k22_io_internal_pin_level(const K22Io* io, uint8_t port) {
-    uint32_t value = k22_io_internal_pin_level_unfiltered(io, port);
+    uint32_t pin_levels = k22_io_internal_pin_level_unfiltered(io, port);
     const uint32_t filtered = io->port_dfer[port] & io->configuration.package_pin_mask[port];
-    value = (value & ~filtered) | (io->gpio_filtered[port] & filtered);
-    return value;
+    pin_levels = (pin_levels & ~filtered) | (io->gpio_filtered[port] & filtered);
+    return pin_levels;
 }
 
 static void update_pin_event(K22Io* io, uint8_t port, uint8_t pin, bool previous, bool current) {
