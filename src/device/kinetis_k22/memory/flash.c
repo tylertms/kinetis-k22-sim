@@ -204,76 +204,80 @@ static bool flash_read_resource(K22Data* data) {
     const bool ftfe = k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE);
     const uint32_t address = flash_address(data);
     const uint8_t option = flash_fccob(data, ftfe ? 4u : 8u);
-    const uint8_t length = ftfe ? 8u : 4u;
-    const uint8_t* source = NULL;
-    uint32_t offset = address;
+    const uint8_t resource_size = ftfe ? 8u : 4u;
+    const uint8_t* resource_bytes = NULL;
+    uint32_t resource_offset = address;
     if (option == 0u && address < (ftfe ? 1024u : 256u))
-        source = data->flash_program_ifr;
+        resource_bytes = data->flash_program_ifr;
     else if (option == 0u && ftfe && data->profile->flexnvm_size != 0u && address >= 0x800000u &&
-             address - 0x800000u <= 1024u - length) {
-        source = data->flash_data_ifr;
-        offset = address - 0x800000u;
+             address - 0x800000u <= 1024u - resource_size) {
+        resource_bytes = data->flash_data_ifr;
+        resource_offset = address - 0x800000u;
     } else if (option == 1u && address == (ftfe ? 8u : 0u)) {
         static const uint8_t ftfa_version[8] = {0x01u, 0x00u, 0x46u, 0x54u,
                                                 0x46u, 0x41u, 0x00u, 0x00u};
         static const uint8_t ftfe_version[8] = {0x01u, 0x00u, 0x46u, 0x54u,
                                                 0x46u, 0x45u, 0x00u, 0x00u};
-        source = ftfe ? ftfe_version : ftfa_version;
-        offset = 0;
+        resource_bytes = ftfe ? ftfe_version : ftfa_version;
+        resource_offset = 0u;
     }
-    if (source == NULL || offset > 1024u - length || (address & (length - 1u)) != 0u)
+    if (resource_bytes == NULL || resource_offset > 1024u - resource_size ||
+        (address & (resource_size - 1u)) != 0u)
         return false;
-    for (uint8_t index = 0; index < length; index++)
-        flash_set_fccob(data, (uint8_t)(4u + index), source[offset + index]);
+    for (uint8_t byte_index = 0u; byte_index < resource_size; byte_index++)
+        flash_set_fccob(data, (uint8_t)(4u + byte_index),
+                        resource_bytes[resource_offset + byte_index]);
     return true;
 }
 
-static bool flash_once_record(const K22Data* data, uint8_t index, uint32_t* offset,
-                              uint8_t* length) {
+static bool flash_once_record(const K22Data* data, uint8_t record_index, uint32_t* record_offset,
+                              uint8_t* record_size) {
     if (k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE)) {
-        if (index > 7u)
+        if (record_index > 7u)
             return false;
-        *offset = 0x3c0u + (uint32_t)index * 8u;
-        *length = 8u;
+        *record_offset = 0x3c0u + (uint32_t)record_index * 8u;
+        *record_size = 8u;
         return true;
     }
-    if (index <= 7u) {
-        *offset = 0xc0u + (uint32_t)index * 4u;
-        *length = 4u;
+    if (record_index <= 7u) {
+        *record_offset = 0xc0u + (uint32_t)record_index * 4u;
+        *record_size = 4u;
         return true;
     }
-    if (index >= 0x10u && index <= 0x13u) {
-        *offset = 0xe0u + (uint32_t)(index - 0x10u) * 8u;
-        *length = 8u;
+    if (record_index >= 0x10u && record_index <= 0x13u) {
+        *record_offset = 0xe0u + (uint32_t)(record_index - 0x10u) * 8u;
+        *record_size = 8u;
         return true;
     }
     return false;
 }
 
 static bool flash_read_once(K22Data* data) {
-    uint32_t offset = 0;
-    uint8_t length = 0;
-    if (!flash_once_record(data, flash_fccob(data, 1u), &offset, &length))
+    uint32_t record_offset = 0u;
+    uint8_t record_size = 0u;
+    if (!flash_once_record(data, flash_fccob(data, 1u), &record_offset, &record_size))
         return false;
-    for (uint8_t index = 0; index < length; index++)
-        flash_set_fccob(data, (uint8_t)(4u + index), data->flash_program_ifr[offset + index]);
+    for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
+        flash_set_fccob(data, (uint8_t)(4u + byte_index),
+                        data->flash_program_ifr[record_offset + byte_index]);
     return true;
 }
 
 static bool flash_program_once(K22Data* data, bool* verify_failure) {
-    uint32_t offset = 0;
-    uint8_t length = 0;
-    if (!flash_once_record(data, flash_fccob(data, 1u), &offset, &length))
+    uint32_t record_offset = 0u;
+    uint8_t record_size = 0u;
+    if (!flash_once_record(data, flash_fccob(data, 1u), &record_offset, &record_size))
         return false;
-    for (uint8_t index = 0; index < length; index++) {
-        if (data->flash_program_ifr[offset + index] != 0xffu)
+    for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++) {
+        if (data->flash_program_ifr[record_offset + byte_index] != 0xffu)
             return false;
     }
-    for (uint8_t index = 0; index < length; index++)
-        data->flash_program_ifr[offset + index] = flash_fccob(data, (uint8_t)(4u + index));
-    for (uint8_t index = 0; index < length; index++)
-        *verify_failure |=
-            data->flash_program_ifr[offset + index] != flash_fccob(data, (uint8_t)(4u + index));
+    for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
+        data->flash_program_ifr[record_offset + byte_index] =
+            flash_fccob(data, (uint8_t)(4u + byte_index));
+    for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
+        *verify_failure |= data->flash_program_ifr[record_offset + byte_index] !=
+                           flash_fccob(data, (uint8_t)(4u + byte_index));
     return true;
 }
 
@@ -283,11 +287,11 @@ static bool flash_verify_key(K22Data* data) {
     uint8_t aggregate_and = 0xffu;
     uint8_t aggregate_or = 0u;
     bool matches = true;
-    for (uint8_t index = 0; index < 8u; index++) {
-        const uint8_t key = flash_fccob(data, (uint8_t)(4u + index));
-        aggregate_and &= key;
-        aggregate_or |= key;
-        matches &= key == data->flash_config[index];
+    for (uint8_t key_index = 0u; key_index < 8u; key_index++) {
+        const uint8_t key_byte = flash_fccob(data, (uint8_t)(4u + key_index));
+        aggregate_and &= key_byte;
+        aggregate_or |= key_byte;
+        matches &= key_byte == data->flash_config[key_index];
     }
     if (aggregate_or == 0u || aggregate_and == 0xffu)
         matches = false;
@@ -303,21 +307,22 @@ static bool flash_program_partition(K22Data* data) {
                                            0x0bu, 0x0cu, 0x0du, 0x0fu};
     if (data->profile->flexnvm_size == 0u || data->flash_partitioned)
         return false;
-    const uint8_t load = flash_fccob(data, 3u);
-    const uint8_t eeesize = flash_fccob(data, 4u);
-    const uint8_t depart = flash_fccob(data, 5u);
-    bool valid_depart_code = false;
-    for (size_t index = 0; index < sizeof(valid_depart); index++)
-        valid_depart_code |= depart == valid_depart[index];
-    const bool no_eeprom = depart == 0x00u || depart == 0x0du || depart == 0x0fu;
-    const bool eeprom_disabled = eeesize == 0x0fu;
-    if (load > 1u || (eeesize & 0xc0u) != 0u || (depart & 0xf0u) != 0u || !valid_depart_code ||
-        (eeesize < 2u && !eeprom_disabled) || (eeesize > 9u && !eeprom_disabled) ||
-        no_eeprom != eeprom_disabled)
+    const uint8_t load_code = flash_fccob(data, 3u);
+    const uint8_t eeprom_size_code = flash_fccob(data, 4u);
+    const uint8_t partition_code = flash_fccob(data, 5u);
+    bool valid_partition_code = false;
+    for (size_t code_index = 0u; code_index < sizeof(valid_depart); code_index++)
+        valid_partition_code |= partition_code == valid_depart[code_index];
+    const bool no_eeprom =
+        partition_code == 0x00u || partition_code == 0x0du || partition_code == 0x0fu;
+    const bool eeprom_disabled = eeprom_size_code == 0x0fu;
+    if (load_code > 1u || (eeprom_size_code & 0xc0u) != 0u || (partition_code & 0xf0u) != 0u ||
+        !valid_partition_code || (eeprom_size_code < 2u && !eeprom_disabled) ||
+        (eeprom_size_code > 9u && !eeprom_disabled) || no_eeprom != eeprom_disabled)
         return false;
     memset(data->flexnvm, 0xff, data->profile->flexnvm_size);
-    data->flash_data_ifr[0x3fcu] = depart;
-    data->flash_data_ifr[0x3fdu] = eeesize;
+    data->flash_data_ifr[0x3fcu] = partition_code;
+    data->flash_data_ifr[0x3fdu] = eeprom_size_code;
     data->flash_partitioned = true;
     data->flexram_eeprom = !no_eeprom;
     memset(data->flexram, 0xff, data->profile->flexram_size);
