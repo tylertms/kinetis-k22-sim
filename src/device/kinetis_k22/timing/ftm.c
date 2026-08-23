@@ -39,7 +39,8 @@ static bool is_ftm_complementary_mode(const K22FtmState* ftm, uint8_t channel) {
            !output_compare;
 }
 
-bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel, bool high) {
+bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel,
+                              bool input_high) {
     if (timing == NULL || timing->profile == NULL || instance >= 4u ||
         channel >= k22_timing_internal_ftm_channel_count(instance))
         return false;
@@ -47,23 +48,24 @@ bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t chann
     if (!k22_timing_internal_has(timing, peripheral))
         return false;
     K22FtmState* ftm = &timing->ftm[instance];
-    if (ftm->channel_input[channel] != high) {
-        ftm->channel_input[channel] = high;
+    if (ftm->channel_input[channel] != input_high) {
+        ftm->channel_input[channel] = input_high;
         ftm->channel_input_age[channel] = 0u;
     }
     return true;
 }
 
-bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input, bool high) {
-    if (timing == NULL || timing->profile == NULL || instance >= 4u || input >= 4u)
+bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input_index,
+                              bool input_high) {
+    if (timing == NULL || timing->profile == NULL || instance >= 4u || input_index >= 4u)
         return false;
     const K22PeripheralId peripheral = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + instance);
     if (!k22_timing_internal_has(timing, peripheral))
         return false;
     K22FtmState* ftm = &timing->ftm[instance];
-    if (ftm->fault_input[input] != high) {
-        ftm->fault_input[input] = high;
-        ftm->fault_input_age[input] = 0u;
+    if (ftm->fault_input[input_index] != input_high) {
+        ftm->fault_input[input_index] = input_high;
+        ftm->fault_input_age[input_index] = 0u;
     }
     return true;
 }
@@ -123,8 +125,8 @@ static bool ftm_fault_channel_enabled(const K22FtmState* ftm, uint8_t channel) {
 }
 
 bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_t channel,
-                               bool* high) {
-    if (timing == NULL || high == NULL || timing->profile == NULL || instance >= 4u ||
+                               bool* output_high) {
+    if (timing == NULL || output_high == NULL || timing->profile == NULL || instance >= 4u ||
         channel >= k22_timing_internal_ftm_channel_count(instance))
         return false;
     const K22PeripheralId peripheral = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + instance);
@@ -132,7 +134,7 @@ bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_
         return false;
     const K22FtmState* ftm = &timing->ftm[instance];
     if (is_ftm_quadrature_enabled(ftm)) {
-        *high = false;
+        *output_high = false;
         return true;
     }
     bool output = is_ftm_deadtime_enabled(ftm, channel) ? ftm->channel_deadtime_output[channel]
@@ -143,7 +145,7 @@ bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_
         output = false;
     if ((ftm->registers[7] & (1u << channel)) != 0u)
         output = !output;
-    *high = output;
+    *output_high = output;
     return true;
 }
 
