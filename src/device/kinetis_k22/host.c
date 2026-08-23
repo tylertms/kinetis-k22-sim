@@ -180,35 +180,42 @@ bool kinetis_k22_serial_transmit(KinetisK22* device, KinetisK22SerialEndpoint en
 }
 
 bool kinetis_k22_spi_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
-                              KinetisK22SpiTransfer* transfer) {
-    if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) || transfer == NULL ||
-        endpoint < KINETIS_K22_SERIAL_SPI0 || endpoint > KINETIS_K22_SERIAL_SPI2) {
+                              KinetisK22SpiTransfer* output_transfer) {
+    if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) ||
+        output_transfer == NULL || endpoint < KINETIS_K22_SERIAL_SPI0 ||
+        endpoint > KINETIS_K22_SERIAL_SPI2) {
         return false;
     }
+
     K22SerialSpiTransfer internal_transfer;
     if (!k22_serial_pop_spi_transfer(&device->serial, (K22SerialEndpoint)endpoint,
                                      &internal_transfer)) {
         return false;
     }
-    transfer->data = internal_transfer.data;
-    transfer->chip_selects = internal_transfer.chip_selects;
-    transfer->clock_and_transfer_attributes = internal_transfer.clock_and_transfer_attributes;
-    transfer->continuous_chip_select = internal_transfer.continuous_chip_select;
-    transfer->end_of_queue = internal_transfer.end_of_queue;
+
+    output_transfer->data = internal_transfer.data;
+    output_transfer->chip_selects = internal_transfer.chip_selects;
+    output_transfer->clock_and_transfer_attributes =
+        internal_transfer.clock_and_transfer_attributes;
+    output_transfer->continuous_chip_select = internal_transfer.continuous_chip_select;
+    output_transfer->end_of_queue = internal_transfer.end_of_queue;
     return true;
 }
 
 bool kinetis_k22_i2c_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
-                              KinetisK22I2cTransfer* transfer) {
-    if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) || transfer == NULL ||
-        endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
+                              KinetisK22I2cTransfer* output_transfer) {
+    if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) ||
+        output_transfer == NULL || endpoint < KINETIS_K22_SERIAL_I2C0 ||
+        endpoint > KINETIS_K22_SERIAL_I2C2) {
         return false;
     }
+
     K22SerialEvent serial_event;
     if (!kinetis_k22_internal_pop_serial_event(&device->serial, (K22SerialEndpoint)endpoint,
                                                &serial_event)) {
         return false;
     }
+
     static const KinetisK22I2cTransferType transfer_types[] = {
         KINETIS_K22_I2C_START, KINETIS_K22_I2C_REPEATED_START, KINETIS_K22_I2C_STOP,
         KINETIS_K22_I2C_WRITE, KINETIS_K22_I2C_READ,
@@ -216,8 +223,9 @@ bool kinetis_k22_i2c_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpo
     if ((unsigned)serial_event.type >= sizeof(transfer_types) / sizeof(transfer_types[0])) {
         return false;
     }
-    transfer->type = transfer_types[serial_event.type];
-    transfer->value = (uint8_t)serial_event.value;
+
+    output_transfer->type = transfer_types[serial_event.type];
+    output_transfer->value = (uint8_t)serial_event.value;
     return true;
 }
 
@@ -245,10 +253,11 @@ bool kinetis_k22_i2c_lose_arbitration(KinetisK22* device, KinetisK22SerialEndpoi
     return arbitration_lost;
 }
 
-bool kinetis_k22_i2c_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint, uint8_t value) {
+bool kinetis_k22_i2c_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
+                             uint8_t received_value) {
     if (endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2)
         return false;
-    return kinetis_k22_serial_receive(device, endpoint, value, 0);
+    return kinetis_k22_serial_receive(device, endpoint, received_value, 0);
 }
 
 bool kinetis_k22_usb_token(KinetisK22* device, uint8_t endpoint, uint8_t token, bool transmit) {
@@ -259,33 +268,34 @@ bool kinetis_k22_usb_token(KinetisK22* device, uint8_t endpoint, uint8_t token, 
     return token_accepted;
 }
 
-bool kinetis_k22_can_receive(KinetisK22* device, const KinetisK22CanFrame* frame) {
-    if (device == NULL || frame == NULL) {
+bool kinetis_k22_can_receive(KinetisK22* device, const KinetisK22CanFrame* input_frame) {
+    if (device == NULL || input_frame == NULL) {
         return false;
     }
+
     K22CanFrame can_frame;
-    can_frame.identifier = frame->identifier;
-    can_frame.length = frame->length;
-    memcpy(can_frame.data, frame->data, sizeof(can_frame.data));
-    can_frame.extended = frame->extended;
-    can_frame.remote = frame->remote;
+    can_frame.identifier = input_frame->identifier;
+    can_frame.length = input_frame->length;
+    memcpy(can_frame.data, input_frame->data, sizeof(can_frame.data));
+    can_frame.extended = input_frame->extended;
+    can_frame.remote = input_frame->remote;
     const bool frame_accepted = k22_io_can_receive(&device->io, &can_frame);
     kinetis_k22_refresh_signals(device);
     return frame_accepted;
 }
 
-bool kinetis_k22_i2s_receive(KinetisK22* device, uint32_t sample) {
+bool kinetis_k22_i2s_receive(KinetisK22* device, uint32_t sample_value) {
     if (device == NULL)
         return false;
-    const bool sample_accepted = k22_io_i2s_receive(&device->io, sample);
+    const bool sample_accepted = k22_io_i2s_receive(&device->io, sample_value);
     kinetis_k22_refresh_signals(device);
     return sample_accepted;
 }
 
-bool kinetis_k22_i2s_transmit(KinetisK22* device, uint32_t* sample) {
+bool kinetis_k22_i2s_transmit(KinetisK22* device, uint32_t* output_sample) {
     if (device == NULL)
         return false;
-    const bool sample_transmitted = k22_io_i2s_transmit(&device->io, sample);
+    const bool sample_transmitted = k22_io_i2s_transmit(&device->io, output_sample);
     kinetis_k22_refresh_signals(device);
     return sample_transmitted;
 }
@@ -314,7 +324,7 @@ bool kinetis_k22_sdhc_read_card(const KinetisK22* device, size_t card_offset, vo
     return k22_sdhc_read_card(&device->sdhc, card_offset, card_data, byte_count);
 }
 
-bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status) {
+bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t received_value, uint8_t receive_status) {
     if (device == NULL) {
         return false;
     }
@@ -322,8 +332,8 @@ bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status
     if (!uart->present || uart->receive.count == K22_SERIAL_FIFO_CAPACITY) {
         return false;
     }
-    uart->receive.values[uart->receive.write_index] = value;
-    uart->receive.metadata[uart->receive.write_index] = status & 0x0fu;
+    uart->receive.values[uart->receive.write_index] = received_value;
+    uart->receive.metadata[uart->receive.write_index] = receive_status & 0x0fu;
     uart->receive.write_index =
         (uint16_t)((uart->receive.write_index + 1u) % K22_SERIAL_FIFO_CAPACITY);
     uart->receive.count++;
@@ -353,7 +363,7 @@ bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* output_value) {
     return true;
 }
 
-bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t value) {
+bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t received_value) {
     if (device == NULL) {
         return false;
     }
@@ -361,7 +371,7 @@ bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t value) {
     if (!spi->present || spi->receive.count == K22_SERIAL_FIFO_CAPACITY) {
         return false;
     }
-    spi->receive.values[spi->receive.write_index] = value;
+    spi->receive.values[spi->receive.write_index] = received_value;
     spi->receive.metadata[spi->receive.write_index] = 0;
     spi->receive.write_index =
         (uint16_t)((spi->receive.write_index + 1u) % K22_SERIAL_FIFO_CAPACITY);
