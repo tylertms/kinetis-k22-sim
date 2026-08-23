@@ -153,39 +153,44 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
            "kinetis_k22_serial_receive(device, KINETIS_K22_SERIAL_UART1, 0x5au, 0u)");
     expect(state, !kinetis_k22_serial_receive(NULL, KINETIS_K22_SERIAL_UART1, 0u, 0u),
            "!kinetis_k22_serial_receive(NULL, KINETIS_K22_SERIAL_UART1, 0u, 0u)");
-    uint16_t value = 0u;
-    expect(state, !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &value),
-           "!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &value)");
-    expect(state, !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &value),
-           "!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &value)");
+    uint16_t transmitted_value = 0u;
+    expect(state,
+           !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &transmitted_value),
+           "!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART1, &transmitted_value)");
+    expect(state,
+           !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &transmitted_value),
+           "!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &transmitted_value)");
     expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true),
            "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true)");
     k22_serial_advance_endpoint(&device->serial, K22_SERIAL_UART0);
-    expect(state, kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &value),
-           "kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &value)");
-    expect(state, value == 0x44u, "value == 0x44u");
-    expect(state, !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_ENDPOINT_COUNT, &value),
-           "!kinetis_k22_serial_transmit( device, KINETIS_K22_SERIAL_ENDPOINT_COUNT, &value)");
+    expect(state, kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &transmitted_value),
+           "kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_UART0, &transmitted_value)");
+    expect(state, transmitted_value == 0x44u, "transmitted_value == 0x44u");
+    expect(
+        state,
+        !kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_ENDPOINT_COUNT, &transmitted_value),
+        "!kinetis_k22_serial_transmit(device, KINETIS_K22_SERIAL_ENDPOINT_COUNT, "
+        "&transmitted_value)");
 
     expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_SPI0, true),
            "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_SPI0, true)");
     serial_write(state, device, SPI0, 4u, 0u);
     serial_write(state, device, SPI0 + 0x34u, 4u, 0x98030055u);
     k22_serial_advance(&device->serial, 64u);
-    KinetisK22SpiTransfer spi;
-    expect(state, kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi),
-           "kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi)");
-    expect(state, spi.data == 0x55u, "spi.data == 0x55u");
-    expect(state, spi.chip_selects == 3u, "spi.chip_selects == 3u");
-    expect(state, spi.clock_and_transfer_attributes == 1u,
-           "spi.clock_and_transfer_attributes == 1u");
-    expect(state, spi.continuous_chip_select, "spi.continuous_chip_select");
-    expect(state, spi.end_of_queue, "spi.end_of_queue");
-    expect(state, !kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_UART0, &spi),
-           "!kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_UART0, &spi)");
+    KinetisK22SpiTransfer spi_transfer;
+    expect(state, kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi_transfer),
+           "kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi_transfer)");
+    expect(state, spi_transfer.data == 0x55u, "spi_transfer.data == 0x55u");
+    expect(state, spi_transfer.chip_selects == 3u, "spi_transfer.chip_selects == 3u");
+    expect(state, spi_transfer.clock_and_transfer_attributes == 1u,
+           "spi_transfer.clock_and_transfer_attributes == 1u");
+    expect(state, spi_transfer.continuous_chip_select, "spi_transfer.continuous_chip_select");
+    expect(state, spi_transfer.end_of_queue, "spi_transfer.end_of_queue");
+    expect(state, !kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_UART0, &spi_transfer),
+           "!kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_UART0, &spi_transfer)");
     expect(state, !kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, NULL),
            "!kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, NULL)");
-    expect(state, !kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi),
+    expect(state, !kinetis_k22_spi_transfer(device, KINETIS_K22_SERIAL_SPI0, &spi_transfer),
            "empty SPI transfer queue is reported");
 
     expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C0, true),
@@ -195,19 +200,22 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
     serial_write(state, device, I2C0 + 2u, 1u, 0xf0u);
     serial_write(state, device, I2C1 + 2u, 1u, 0xf0u);
     serial_write(state, device, I2C0 + 4u, 1u, 0x52u);
-    KinetisK22I2cTransfer i2c;
-    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C1, &i2c),
-           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C1, &i2c)");
-    expect(state, i2c.type == KINETIS_K22_I2C_START, "i2c.type == KINETIS_K22_I2C_START");
-    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c),
-           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c)");
-    expect(state, i2c.type == KINETIS_K22_I2C_START, "i2c.type == KINETIS_K22_I2C_START");
-    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c),
-           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c)");
-    expect(state, i2c.type == KINETIS_K22_I2C_WRITE, "i2c.type == KINETIS_K22_I2C_WRITE");
-    expect(state, i2c.value == 0x52u, "i2c.value == 0x52u");
-    expect(state, !kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_UART0, &i2c),
-           "!kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_UART0, &i2c)");
+    KinetisK22I2cTransfer i2c_transfer;
+    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C1, &i2c_transfer),
+           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C1, &i2c_transfer)");
+    expect(state, i2c_transfer.type == KINETIS_K22_I2C_START,
+           "i2c_transfer.type == KINETIS_K22_I2C_START");
+    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c_transfer),
+           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c_transfer)");
+    expect(state, i2c_transfer.type == KINETIS_K22_I2C_START,
+           "i2c_transfer.type == KINETIS_K22_I2C_START");
+    expect(state, kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c_transfer),
+           "kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, &i2c_transfer)");
+    expect(state, i2c_transfer.type == KINETIS_K22_I2C_WRITE,
+           "i2c_transfer.type == KINETIS_K22_I2C_WRITE");
+    expect(state, i2c_transfer.value == 0x52u, "i2c_transfer.value == 0x52u");
+    expect(state, !kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_UART0, &i2c_transfer),
+           "!kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_UART0, &i2c_transfer)");
     expect(state, !kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, NULL),
            "!kinetis_k22_i2c_transfer(device, KINETIS_K22_SERIAL_I2C0, NULL)");
     expect(state, kinetis_k22_i2c_acknowledge(device, KINETIS_K22_SERIAL_I2C0, false),
@@ -223,24 +231,26 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
     expect(state, !kinetis_k22_i2c_receive(device, KINETIS_K22_SERIAL_UART0, 0u),
            "!kinetis_k22_i2c_receive(device, KINETIS_K22_SERIAL_UART0, 0u)");
 
-    uint8_t uart_value = 0u;
-    uint16_t spi_value = 0u;
+    uint8_t uart_received_value = 0u;
+    uint16_t spi_received_value = 0u;
     expect(state,
            !kinetis_k22_uart1_receive(NULL, 0u, 0u) &&
-               !kinetis_k22_uart1_transmit(NULL, &uart_value) &&
+               !kinetis_k22_uart1_transmit(NULL, &uart_received_value) &&
                !kinetis_k22_uart1_transmit(device, NULL) && !kinetis_k22_spi0_receive(NULL, 0u) &&
-               !kinetis_k22_spi0_transmit(NULL, &spi_value) &&
+               !kinetis_k22_spi0_transmit(NULL, &spi_received_value) &&
                !kinetis_k22_spi0_transmit(device, NULL) && !kinetis_k22_i2c0_receive(NULL, 0u),
            "legacy serial APIs reject null arguments");
-    uint16_t uart_accepted = 0u;
-    uint16_t spi_accepted = 0u;
-    while (uart_accepted <= K22_SERIAL_FIFO_CAPACITY &&
-           kinetis_k22_uart1_receive(device, (uint8_t)uart_accepted, 0u))
-        uart_accepted++;
-    while (spi_accepted <= K22_SERIAL_FIFO_CAPACITY &&
-           kinetis_k22_spi0_receive(device, spi_accepted))
-        spi_accepted++;
-    expect(state, uart_accepted != 0u && spi_accepted != 0u,
+    uint16_t uart_received_count = 0u;
+    uint16_t spi_received_count = 0u;
+    while (uart_received_count <= K22_SERIAL_FIFO_CAPACITY &&
+           kinetis_k22_uart1_receive(device, (uint8_t)uart_received_count, 0u)) {
+        uart_received_count++;
+    }
+    while (spi_received_count <= K22_SERIAL_FIFO_CAPACITY &&
+           kinetis_k22_spi0_receive(device, spi_received_count)) {
+        spi_received_count++;
+    }
+    expect(state, uart_received_count != 0u && spi_received_count != 0u,
            "legacy serial receive queues accept data before filling");
     expect(state,
            !kinetis_k22_uart1_receive(device, 0u, 0u) && !kinetis_k22_spi0_receive(device, 0u),
