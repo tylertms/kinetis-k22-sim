@@ -631,56 +631,61 @@ static void flash_execute(K22Data* data) {
     k22_data_internal_flash_update_interrupts(data);
 }
 
-bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value) {
-    const uint32_t offset = address - FLASH_BASE;
-    if (!k22_data_internal_valid_access(offset, size, sizeof(data->flash)))
+bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                  uint32_t* output_value) {
+    const uint32_t register_offset = address - FLASH_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
         return false;
     const bool ftfe = k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE);
-    for (uint8_t index = 0; index < size; index++) {
-        const uint32_t current = offset + index;
-        const bool common = current <= 0x13u;
-        const bool extension = ftfe ? current >= 0x16u && current <= 0x17u
-                                    : (current >= 0x18u && current <= 0x28u) || current == 0x2bu;
-        if (!common && !extension)
+    for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
+        const uint32_t register_address = register_offset + byte_index;
+        const bool common_register = register_address <= 0x13u;
+        const bool extension_register =
+            ftfe ? register_address >= 0x16u && register_address <= 0x17u
+                 : (register_address >= 0x18u && register_address <= 0x28u) ||
+                       register_address == 0x2bu;
+        if (!common_register && !extension_register)
             return false;
     }
-    *value = k22_data_internal_load_bytes(data->flash, offset, size);
+    *output_value = k22_data_internal_load_bytes(data->flash, register_offset, byte_count);
     return true;
 }
 
-bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value) {
-    const uint32_t offset = address - FLASH_BASE;
-    if (!k22_data_internal_valid_access(offset, size, sizeof(data->flash)))
+bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                   uint32_t write_value) {
+    const uint32_t register_offset = address - FLASH_BASE;
+    if (!k22_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
         return false;
-    if (offset == 0 && size == 1) {
-        data->flash[0] &= (uint8_t)~(value & 0x70u);
-        if ((value & 0x80u) != 0 && (data->flash[0] & 0xb0u) == 0x80u)
+    if (register_offset == 0u && byte_count == 1u) {
+        data->flash[0] &= (uint8_t)~(write_value & 0x70u);
+        if ((write_value & 0x80u) != 0u && (data->flash[0] & 0xb0u) == 0x80u)
             flash_execute(data);
         else
             k22_data_internal_flash_update_interrupts(data);
         return true;
     }
-    if (offset == 1u && size == 1u) {
-        data->flash[1] = (uint8_t)((data->flash[1] & 0x2fu) | (value & 0xd0u));
+    if (register_offset == 1u && byte_count == 1u) {
+        data->flash[1] = (uint8_t)((data->flash[1] & 0x2fu) | (write_value & 0xd0u));
         k22_data_internal_flash_update_interrupts(data);
         return true;
     }
-    if (offset >= 4u && offset <= 0x10u - size) {
+    if (register_offset >= 4u && register_offset <= 0x10u - byte_count) {
         if ((data->flash[0] & 0x80u) != 0u)
-            k22_data_internal_store_bytes(data->flash, offset, size, value);
+            k22_data_internal_store_bytes(data->flash, register_offset, byte_count, write_value);
         return true;
     }
-    if (offset >= 0x10u && offset <= 0x14u - size) {
+    if (register_offset >= 0x10u && register_offset <= 0x14u - byte_count) {
         if ((data->flash[0] & 0x80u) == 0u)
             return true;
-        for (uint8_t index = 0; index < size; index++)
-            data->flash[offset + index] &= (uint8_t)(value >> (index * 8u));
+        for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++)
+            data->flash[register_offset + byte_index] &=
+                (uint8_t)(write_value >> (byte_index * 8u));
         return true;
     }
     if (k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE) &&
-        (offset == 0x16u || offset == 0x17u) && size == 1u) {
+        (register_offset == 0x16u || register_offset == 0x17u) && byte_count == 1u) {
         if ((data->flash[0] & 0x80u) != 0u)
-            data->flash[offset] &= (uint8_t)value;
+            data->flash[register_offset] &= (uint8_t)write_value;
         return true;
     }
     return false;

@@ -121,8 +121,10 @@ bool k22_data_internal_dma_source_valid(const K22Data* data, uint8_t source);
 bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
 bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
 bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
-bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
+bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_count,
+                                  uint32_t* output_value);
+bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte_count,
+                                   uint32_t write_value);
 bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id,
                                      uint32_t* block_address, uint32_t* block_size);
 bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t byte_count,
