@@ -379,9 +379,9 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
         return accepted_read((cpu->external_irq_count - 1u) / 32u, address, size, output_value);
     }
     if (aligned == SYST_CSR) {
-        const uint32_t data = cpu->systick_control;
+        const uint32_t systick_control_value = cpu->systick_control;
         cpu->systick_control &= ~(1u << 16);
-        return accepted_read(data, address, size, output_value);
+        return accepted_read(systick_control_value, address, size, output_value);
     }
     if (aligned == SYST_RVR) {
         return accepted_read(cpu->systick_reload, address, size, output_value);
@@ -426,24 +426,24 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
     }
     if (aligned == SCB_ICSR) {
         const uint16_t pending = pending_vector(cpu);
-        uint32_t data = cpu->xpsr & 0x1ffu;
-        data |= (uint32_t)pending << 12;
+        uint32_t icsr_value = cpu->xpsr & 0x1ffu;
+        icsr_value |= (uint32_t)pending << 12;
         if (cpu->exception_depth <= 1) {
-            data |= 1u << 11;
+            icsr_value |= 1u << 11;
         }
         if (has_enabled_external_pending(cpu)) {
-            data |= 1u << 22;
+            icsr_value |= 1u << 22;
         }
         if ((cpu->system_pending & (1u << 2)) != 0) {
-            data |= 1u << 31;
+            icsr_value |= 1u << 31;
         }
         if ((cpu->system_pending & (1u << 14)) != 0) {
-            data |= 1u << 28;
+            icsr_value |= 1u << 28;
         }
         if ((cpu->system_pending & (1u << 15)) != 0) {
-            data |= 1u << 26;
+            icsr_value |= 1u << 26;
         }
-        return accepted_read(data, address, size, output_value);
+        return accepted_read(icsr_value, address, size, output_value);
     }
     if (aligned == SCB_VTOR) {
         return accepted_read(cpu->vtor, address, size, output_value);
