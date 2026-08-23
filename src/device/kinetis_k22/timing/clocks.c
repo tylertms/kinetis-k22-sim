@@ -14,7 +14,7 @@ uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, u
     return scaled / core_hz;
 }
 
-static uint32_t fll_clock(const K22Timing* timing) {
+static uint32_t calculate_fll_clock_hz(const K22Timing* timing) {
     const uint8_t c4 = timing->mcg[3];
     const uint16_t multipliers[4] = {640u, 1280u, 1920u, 2560u};
     uint32_t reference = timing->slow_irc_hz;
@@ -34,7 +34,7 @@ static uint32_t fll_clock(const K22Timing* timing) {
     return reference == 0 ? timing->slow_irc_hz * multiplier : reference * multiplier;
 }
 
-static uint32_t pll_clock(const K22Timing* timing) {
+static uint32_t calculate_pll_clock_hz(const K22Timing* timing) {
     if (timing->external_oscillator_hz == 0) {
         return 0;
     }
@@ -58,11 +58,11 @@ void k22_timing_internal_update_clocks(K22Timing* timing) {
         mcg_output_hz = timing->external_oscillator_hz;
         mcg_status |= 2u << 2u;
     } else if ((timing->mcg[5] & 0x40u) != 0) {
-        mcg_output_hz = pll_clock(timing);
+        mcg_output_hz = calculate_pll_clock_hz(timing);
         mcg_status |= 3u << 2u;
         mcg_status |= (1u << 5u) | (1u << 6u);
     } else {
-        mcg_output_hz = fll_clock(timing);
+        mcg_output_hz = calculate_fll_clock_hz(timing);
         if ((timing->mcg[0] & 4u) != 0) {
             mcg_status |= 1u << 4u;
         }
@@ -82,7 +82,7 @@ void k22_timing_internal_update_clocks(K22Timing* timing) {
     }
 }
 
-static uint32_t sim_fcfg1(const K22Timing* timing) {
+static uint32_t sim_fcfg1_value(const K22Timing* timing) {
     return timing->profile->program_flash_size >= 1024u * 1024u ||
                    timing->profile->flexnvm_size != 0
                ? 0xff0f0f00u
@@ -144,7 +144,7 @@ bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uin
         *output_value = timing->sim_clkdiv2;
         return true;
     case SIM_FCFG1:
-        *output_value = sim_fcfg1(timing);
+        *output_value = sim_fcfg1_value(timing);
         return true;
     case SIM_FCFG2:
         *output_value = timing->profile->id == K22_PROFILE_MK22FN1M012 ||
