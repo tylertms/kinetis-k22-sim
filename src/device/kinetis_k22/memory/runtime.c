@@ -152,9 +152,9 @@ void k22_data_reset(K22Data* data) {
     data->flash[0x16] = data->flash_config[0x0e];
     data->flash[0x17] = data->flash_config[0x0f];
     if (data->flexram != NULL) {
-        const uint8_t depart = data->flash_data_ifr[0x3fcu];
-        const bool eeprom_partitioned =
-            depart != 0xffu && depart != 0x00u && depart != 0x0du && depart != 0x0fu;
+        const uint8_t partition_code = data->flash_data_ifr[0x3fcu];
+        const bool eeprom_partitioned = partition_code != 0xffu && partition_code != 0x00u &&
+                                        partition_code != 0x0du && partition_code != 0x0fu;
         data->flash[1] = eeprom_partitioned ? 0x01u : 0x02u;
         data->flexram_eeprom = eeprom_partitioned;
     }
@@ -303,29 +303,29 @@ bool k22_data_write(K22Data* data, uint32_t address, uint8_t byte_count, uint32_
 bool k22_data_dma_request(K22Data* data, uint8_t request_source) {
     if (data == NULL || !k22_data_internal_dma_source_valid(data, request_source))
         return false;
-    bool accepted = false;
+    bool request_accepted = false;
     const uint16_t enabled = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
     for (uint8_t channel = 0; channel < data->dmamux_count; channel++) {
-        const uint8_t mux = data->dmamux[channel];
-        if ((mux & 0x80u) != 0 && (mux & 0x3fu) == request_source &&
+        const uint8_t mux_configuration = data->dmamux[channel];
+        if ((mux_configuration & 0x80u) != 0 && (mux_configuration & 0x3fu) == request_source &&
             (enabled & (1u << channel)) != 0) {
-            if (channel < 4u && (mux & 0x40u) != 0u)
+            if (channel < 4u && (mux_configuration & 0x40u) != 0u)
                 data->dma_trigger_waiting |= (uint16_t)(1u << channel);
             else
                 k22_data_internal_dma_queue_hardware_channel(data, channel, request_source);
-            accepted = true;
+            request_accepted = true;
         }
     }
-    return accepted;
+    return request_accepted;
 }
 
 bool k22_data_dma_trigger(K22Data* data, uint8_t channel) {
     if (data == NULL || channel >= 4u || channel >= data->dma_channel_count)
         return false;
-    const uint8_t mux = data->dmamux[channel];
-    const uint8_t request_source = mux & 0x3fu;
+    const uint8_t mux_configuration = data->dmamux[channel];
+    const uint8_t request_source = mux_configuration & 0x3fu;
     const uint16_t enabled = (uint16_t)k22_data_internal_load_bytes(data->dma, 0x0c, 2);
-    if ((mux & 0xc0u) != 0xc0u || (enabled & (1u << channel)) == 0u ||
+    if ((mux_configuration & 0xc0u) != 0xc0u || (enabled & (1u << channel)) == 0u ||
         (!k22_data_internal_dma_source_always_enabled(data, request_source) &&
          (data->dma_trigger_waiting & (1u << channel)) == 0u))
         return false;
@@ -352,10 +352,11 @@ bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel,
     return true;
 }
 
-bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input, uint8_t input_level) {
-    if (data == NULL || instance >= data->cmp_count || input >= 8)
+bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input_index,
+                            uint8_t input_level) {
+    if (data == NULL || instance >= data->cmp_count || input_index >= 8)
         return false;
-    data->cmp[instance].inputs[input] = input_level;
+    data->cmp[instance].inputs[input_index] = input_level;
     k22_data_internal_cmp_evaluate(data, instance);
     return true;
 }
@@ -381,32 +382,32 @@ void k22_data_dac_trigger(K22Data* data, uint8_t instance) {
     if ((dac->registers[0x21] & 0x80u) == 0 || (dac->registers[0x22] & 0x80u) == 0)
         return;
     uint8_t buffer_index = (dac->registers[0x23] >> 4) & 15u;
-    const uint8_t upper_index = dac->registers[0x23] & 15u;
+    const uint8_t upper_buffer_index = dac->registers[0x23] & 15u;
     uint8_t status_flags = 0;
     if ((dac->registers[0x22] & 3u) == 1u) {
         if (buffer_index == 0) {
             status_flags |= 2u;
-            buffer_index = upper_index;
+            buffer_index = upper_buffer_index;
         } else {
             buffer_index--;
         }
     } else {
         buffer_index++;
-        if (buffer_index == upper_index)
+        if (buffer_index == upper_buffer_index)
             status_flags |= 4u;
-        if (buffer_index > upper_index) {
+        if (buffer_index > upper_buffer_index) {
             buffer_index = 0;
             status_flags |= 1u;
         }
     }
-    dac->registers[0x23] = (uint8_t)((buffer_index << 4) | upper_index);
+    dac->registers[0x23] = (uint8_t)((buffer_index << 4) | upper_buffer_index);
     k22_data_internal_dac_update_output(data, instance);
     k22_data_internal_dac_flags(data, instance, status_flags);
 }
 
-void k22_data_rng_seed(K22Data* data, uint32_t seed) {
+void k22_data_rng_seed(K22Data* data, uint32_t seed_value) {
     if (data != NULL)
-        data->rng_state = seed == 0 ? 0x6d2b79f5u : seed;
+        data->rng_state = seed_value == 0 ? 0x6d2b79f5u : seed_value;
 }
 
 bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t byte_count) {
@@ -424,14 +425,17 @@ bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_
     return true;
 }
 
-bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t byte_offset, uint8_t byte_count) {
+bool k22_data_flash_read(K22Data* data, bool is_data_flash, uint32_t byte_offset,
+                         uint8_t byte_count) {
     if (data == NULL)
         return false;
-    const uint8_t bank = data_flash ? 2u : 1u;
-    const bool same_block = data->flash_busy_banks == 3u ||
-                            (byte_offset < data->flash_busy_start + data->flash_busy_length &&
-                             (uint64_t)byte_offset + byte_count > data->flash_busy_start);
-    if (data->flash_cycles == 0u || (data->flash_busy_banks & bank) == 0u || !same_block)
+    const uint8_t flash_bank_mask = is_data_flash ? 2u : 1u;
+    const bool overlaps_busy_block =
+        data->flash_busy_banks == 3u ||
+        (byte_offset < data->flash_busy_start + data->flash_busy_length &&
+         (uint64_t)byte_offset + byte_count > data->flash_busy_start);
+    if (data->flash_cycles == 0u || (data->flash_busy_banks & flash_bank_mask) == 0u ||
+        !overlaps_busy_block)
         return true;
     data->flash[0] |= 0x40u;
     k22_data_internal_flash_update_interrupts(data);
