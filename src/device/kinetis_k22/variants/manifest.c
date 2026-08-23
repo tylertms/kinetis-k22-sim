@@ -28,32 +28,32 @@ const K22RegisterDescriptor* k22_register_manifest_lookup(K22ProfileId profile, 
     const K22RegisterManifest* manifest = k22_register_manifest_get(profile);
     if (manifest == NULL || (width != 8u && width != 16u && width != 32u))
         return NULL;
-    size_t lower = 0;
-    size_t upper = manifest->register_count;
-    while (lower < upper) {
-        size_t middle = lower + (upper - lower) / 2u;
+    size_t lower_bound = 0;
+    size_t upper_bound = manifest->register_count;
+    while (lower_bound < upper_bound) {
+        size_t middle = lower_bound + (upper_bound - lower_bound) / 2u;
         const K22RegisterDescriptor* descriptor = &manifest->registers[middle];
         if (descriptor->address < address ||
             (descriptor->address == address && descriptor->width < width))
-            lower = middle + 1u;
+            lower_bound = middle + 1u;
         else
-            upper = middle;
+            upper_bound = middle;
     }
-    if (lower == manifest->register_count)
+    if (lower_bound == manifest->register_count)
         return NULL;
-    const K22RegisterDescriptor* descriptor = &manifest->registers[lower];
+    const K22RegisterDescriptor* descriptor = &manifest->registers[lower_bound];
     if (descriptor->address != address || descriptor->width != width)
         return NULL;
     return descriptor;
 }
 
 bool k22_register_manifest_reset(K22ProfileId profile, uint32_t address, uint8_t width,
-                                 uint32_t* value, uint32_t* mask) {
+                                 uint32_t* reset_value, uint32_t* reset_mask) {
     const K22RegisterDescriptor* descriptor = k22_register_manifest_lookup(profile, address, width);
-    if (descriptor == NULL || value == NULL || mask == NULL)
+    if (descriptor == NULL || reset_value == NULL || reset_mask == NULL)
         return false;
-    *value = descriptor->reset_value;
-    *mask = descriptor->reset_mask;
+    *reset_value = descriptor->reset_value;
+    *reset_mask = descriptor->reset_mask;
     return true;
 }
 

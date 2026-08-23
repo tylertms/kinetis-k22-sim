@@ -41,7 +41,7 @@ const K22RegisterManifest* k22_register_manifest_get(K22ProfileId profile);
 const K22RegisterDescriptor* k22_register_manifest_lookup(K22ProfileId profile, uint32_t address,
                                                           uint8_t width);
 bool k22_register_manifest_reset(K22ProfileId profile, uint32_t address, uint8_t width,
-                                 uint32_t* value, uint32_t* mask);
+                                 uint32_t* reset_value, uint32_t* reset_mask);
 bool k22_register_manifest_has_peripheral(K22ProfileId profile, const char* name);
 const char* k22_register_manifest_peripheral_name(const K22RegisterManifest* manifest,
                                                   uint16_t index);

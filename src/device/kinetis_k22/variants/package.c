@@ -94,7 +94,7 @@ static const K22PackageSelection selections[] = {
               0x000fffffu, 0x0000ffffu, 0x1f001ff8u),
 };
 
-static size_t selection_count(void) { return sizeof(selections) / sizeof(selections[0]); }
+static size_t package_selection_count(void) { return sizeof(selections) / sizeof(selections[0]); }
 
 const K22Package* k22_package_get(K22PackageId id) {
     if ((unsigned)id >= K22_PACKAGE_COUNT)
@@ -116,7 +116,7 @@ const K22PackageSelection* k22_package_select(const K22Profile* profile, K22Pack
     if (profile == NULL || (unsigned)profile->id >= K22_PROFILE_COUNT ||
         (unsigned)id >= K22_PACKAGE_COUNT)
         return NULL;
-    for (size_t index = 0; index < selection_count(); index++) {
+    for (size_t index = 0; index < package_selection_count(); index++) {
         if (selections[index].profile == profile->id && selections[index].package == id)
             return &selections[index];
     }
@@ -131,52 +131,52 @@ const K22PackageSelection* k22_package_default(const K22Profile* profile) {
     return k22_package_select(profile, K22_PACKAGE_LH_64_LQFP);
 }
 
-K22ProfileId k22_package_selection_profile(const K22PackageSelection* selected) {
-    return selected == NULL ? K22_PROFILE_COUNT : selected->profile;
+K22ProfileId k22_package_selection_profile(const K22PackageSelection* selection) {
+    return selection == NULL ? K22_PROFILE_COUNT : selection->profile;
 }
 
-const K22Package* k22_package_selection_package(const K22PackageSelection* selected) {
-    return selected == NULL ? NULL : k22_package_get(selected->package);
+const K22Package* k22_package_selection_package(const K22PackageSelection* selection) {
+    return selection == NULL ? NULL : k22_package_get(selection->package);
 }
 
-uint32_t k22_package_port_pin_mask(const K22PackageSelection* selected, uint8_t port) {
-    if (selected == NULL || port >= K22_PACKAGE_PORT_COUNT)
+uint32_t k22_package_port_pin_mask(const K22PackageSelection* selection, uint8_t port) {
+    if (selection == NULL || port >= K22_PACKAGE_PORT_COUNT)
         return 0;
-    return selected->port_pin_mask[port];
+    return selection->port_pin_mask[port];
 }
 
-bool k22_package_pin_exists(const K22PackageSelection* selected, uint8_t port, uint8_t pin) {
-    return selected != NULL && port < K22_PACKAGE_PORT_COUNT && pin < K22_PACKAGE_PIN_COUNT &&
-           (selected->port_pin_mask[port] & (UINT32_C(1) << pin)) != 0;
+bool k22_package_pin_exists(const K22PackageSelection* selection, uint8_t port, uint8_t pin) {
+    return selection != NULL && port < K22_PACKAGE_PORT_COUNT && pin < K22_PACKAGE_PIN_COUNT &&
+           (selection->port_pin_mask[port] & (UINT32_C(1) << pin)) != 0;
 }
 
-bool k22_package_has_peripheral(const K22PackageSelection* selected, K22PeripheralId peripheral) {
-    if (selected == NULL || (unsigned)peripheral >= K22_PERIPHERAL_COUNT)
+bool k22_package_has_peripheral(const K22PackageSelection* selection, K22PeripheralId peripheral) {
+    if (selection == NULL || (unsigned)peripheral >= K22_PERIPHERAL_COUNT)
         return false;
-    const K22Profile* profile = k22_profile_get(selected->profile);
+    const K22Profile* profile = k22_profile_get(selection->profile);
     if (!k22_profile_has_peripheral(profile, peripheral))
         return false;
-    if (selected->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_DAC1)
-        return selected->package != K22_PACKAGE_FX_88_HVQFN;
-    if (selected->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_FB)
-        return selected->package != K22_PACKAGE_FX_88_HVQFN;
-    if (selected->profile == K22_PROFILE_MK22FN1M012 ||
-        selected->profile == K22_PROFILE_MK22FX51212) {
-        const bool at_least_80 = selected->package != K22_PACKAGE_LH_64_LQFP;
-        const bool at_least_100 = selected->package == K22_PACKAGE_LL_100_LQFP ||
-                                  selected->package == K22_PACKAGE_MC_121_MAPBGA ||
-                                  selected->package == K22_PACKAGE_LQ_144_LQFP ||
-                                  selected->package == K22_PACKAGE_MD_144_MAPBGA;
-        const bool at_least_121 = selected->package == K22_PACKAGE_MC_121_MAPBGA ||
-                                  selected->package == K22_PACKAGE_LQ_144_LQFP ||
-                                  selected->package == K22_PACKAGE_MD_144_MAPBGA;
+    if (selection->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_DAC1)
+        return selection->package != K22_PACKAGE_FX_88_HVQFN;
+    if (selection->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_FB)
+        return selection->package != K22_PACKAGE_FX_88_HVQFN;
+    if (selection->profile == K22_PROFILE_MK22FN1M012 ||
+        selection->profile == K22_PROFILE_MK22FX51212) {
+        const bool supports_80_pins = selection->package != K22_PACKAGE_LH_64_LQFP;
+        const bool supports_100_pins = selection->package == K22_PACKAGE_LL_100_LQFP ||
+                                       selection->package == K22_PACKAGE_MC_121_MAPBGA ||
+                                       selection->package == K22_PACKAGE_LQ_144_LQFP ||
+                                       selection->package == K22_PACKAGE_MD_144_MAPBGA;
+        const bool supports_121_pins = selection->package == K22_PACKAGE_MC_121_MAPBGA ||
+                                       selection->package == K22_PACKAGE_LQ_144_LQFP ||
+                                       selection->package == K22_PACKAGE_MD_144_MAPBGA;
         if (peripheral == K22_PERIPHERAL_SPI1 || peripheral == K22_PERIPHERAL_UART3 ||
             peripheral == K22_PERIPHERAL_SDHC)
-            return at_least_80;
+            return supports_80_pins;
         if (peripheral == K22_PERIPHERAL_SPI2 || peripheral == K22_PERIPHERAL_UART4)
-            return at_least_100;
+            return supports_100_pins;
         if (peripheral == K22_PERIPHERAL_UART5 || peripheral == K22_PERIPHERAL_DAC1)
-            return at_least_121;
+            return supports_121_pins;
     }
     return true;
 }
