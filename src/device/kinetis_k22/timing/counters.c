@@ -1,6 +1,6 @@
 #include "internal.h"
 
-static uint32_t advance_pit_channel(K22Timing* timing, uint8_t channel, uint64_t ticks) {
+static uint32_t advance_pit_channel_ticks(K22Timing* timing, uint8_t channel, uint64_t ticks) {
     K22PitChannel* pit = &timing->pit[channel];
     if ((pit->control & 1u) == 0 || ticks == 0) {
         return 0;
@@ -41,7 +41,7 @@ void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
         if ((timing->pit[channel].control & 4u) == 0) {
             chained_ticks = ticks;
         }
-        chained_ticks = advance_pit_channel(timing, channel, chained_ticks);
+        chained_ticks = advance_pit_channel_ticks(timing, channel, chained_ticks);
     }
 }
 
@@ -114,7 +114,7 @@ bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t 
     }
 }
 
-static uint32_t lptmr_clock(const K22Timing* timing) {
+static uint32_t lptmr_clock_hz(const K22Timing* timing) {
     switch (timing->lptmr_psr & 3u) {
     case 0:
         return (timing->mcg[1] & 1u) != 0 ? timing->fast_irc_hz : timing->slow_irc_hz;
@@ -127,7 +127,7 @@ static uint32_t lptmr_clock(const K22Timing* timing) {
     }
 }
 
-static bool lptmr_running(const K22Timing* timing) {
+static bool is_lptmr_running(const K22Timing* timing) {
     return k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0) &&
            (timing->sim_scgc5 & 1u) != 0 && (timing->lptmr_csr & 1u) != 0;
 }
@@ -140,7 +140,7 @@ bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing) {
     return (timing->lptmr_csr & 8u) == 0 ? high : !high;
 }
 
-static void increment_lptmr(K22Timing* timing, uint64_t ticks) {
+static void advance_lptmr_counter(K22Timing* timing, uint64_t ticks) {
     if (ticks == 0)
         return;
     const uint32_t compare = timing->lptmr_cmr & 0xffffu;
@@ -171,7 +171,7 @@ static void sample_lptmr_filter(K22Timing* timing, uint32_t cycles) {
     if (prescale == 0u)
         return;
     const uint64_t samples = k22_timing_internal_clock_ticks(
-        &timing->lptmr_filter_remainder, cycles, lptmr_clock(timing), timing->core_clock_hz);
+        &timing->lptmr_filter_remainder, cycles, lptmr_clock_hz(timing), timing->core_clock_hz);
     const bool active = k22_timing_internal_lptmr_selected_active(timing);
     if (active == timing->lptmr_observed_active) {
         timing->lptmr_filter_ticks = 0u;
@@ -186,11 +186,11 @@ static void sample_lptmr_filter(K22Timing* timing, uint32_t cycles) {
     timing->lptmr_filter_ticks = 0u;
     timing->lptmr_observed_active = active;
     if (active)
-        increment_lptmr(timing, 1u);
+        advance_lptmr_counter(timing, 1u);
 }
 
 void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles) {
-    if (!lptmr_running(timing)) {
+    if (!is_lptmr_running(timing)) {
         return;
     }
     if ((timing->lptmr_csr & 2u) != 0) {
@@ -198,13 +198,13 @@ void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles) {
             sample_lptmr_filter(timing, cycles);
         return;
     }
-    uint32_t source_hz = lptmr_clock(timing);
+    uint32_t source_hz = lptmr_clock_hz(timing);
     if ((timing->lptmr_psr & 4u) == 0) {
         source_hz >>= ((timing->lptmr_psr >> 3u) & 15u) + 1u;
     }
     const uint64_t ticks = k22_timing_internal_clock_ticks(&timing->lptmr_remainder, cycles,
                                                            source_hz, timing->core_clock_hz);
-    increment_lptmr(timing, ticks);
+    advance_lptmr_counter(timing, ticks);
 }
 
 bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input, bool high) {
@@ -212,14 +212,14 @@ bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input, bool high) {
         !k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0))
         return false;
     timing->lptmr_input[input] = high;
-    if (!lptmr_running(timing) || (timing->lptmr_csr & 2u) == 0 || (timing->lptmr_psr & 4u) == 0 ||
-        ((timing->lptmr_csr >> 4u) & 3u) != input)
+    if (!is_lptmr_running(timing) || (timing->lptmr_csr & 2u) == 0 ||
+        (timing->lptmr_psr & 4u) == 0 || ((timing->lptmr_csr >> 4u) & 3u) != input)
         return true;
     const bool active = k22_timing_internal_lptmr_selected_active(timing);
     if (active != timing->lptmr_observed_active) {
         timing->lptmr_observed_active = active;
         if (active)
-            increment_lptmr(timing, 1u);
+            advance_lptmr_counter(timing, 1u);
     }
     return true;
 }
