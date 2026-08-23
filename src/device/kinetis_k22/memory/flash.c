@@ -345,16 +345,17 @@ static bool flash_set_flexram(K22Data* data) {
 }
 
 static bool flash_swap_address_valid(const K22Data* data, uint32_t address) {
-    const uint32_t block_size = data->profile->program_flash_size / 2u;
-    return (address & 0x0fu) == 0u && address < block_size &&
+    const uint32_t swap_block_size = data->profile->program_flash_size / 2u;
+    return (address & 0x0fu) == 0u && address < swap_block_size &&
            (address < 0x400u || address >= 0x410u);
 }
 
-static bool flash_swap_program_indicator(K22Data* data, uint8_t block, uint16_t value) {
-    const uint32_t logical_address =
-        data->flash_swap_address + ((uint32_t)(block ^ data->flash_swap_current_block) *
+static bool flash_swap_program_indicator(K22Data* data, uint8_t block_index,
+                                         uint16_t indicator_value) {
+    const uint32_t logical_flash_address =
+        data->flash_swap_address + ((uint32_t)(block_index ^ data->flash_swap_current_block) *
                                     (data->profile->program_flash_size / 2u));
-    return flash_memory_store(data, logical_address, 2u, value);
+    return flash_memory_store(data, logical_flash_address, 2u, indicator_value);
 }
 
 static bool flash_swap_control(K22Data* data, uint32_t address, bool* verify_failure) {
@@ -406,28 +407,30 @@ static bool flash_swap_control(K22Data* data, uint32_t address, bool* verify_fai
     return false;
 }
 
-static void flash_swap_erased(K22Data* data, uint32_t start, uint32_t length) {
+static void flash_swap_erased(K22Data* data, uint32_t range_start, uint32_t range_size) {
     if (data->flash_swap_mode != 2u)
         return;
-    const uint32_t block_size = data->profile->program_flash_size / 2u;
-    const uint32_t nonactive = data->flash_swap_address + block_size;
-    if (start <= nonactive && nonactive - start < length)
+    const uint32_t swap_block_size = data->profile->program_flash_size / 2u;
+    const uint32_t nonactive_address = data->flash_swap_address + swap_block_size;
+    if (range_start <= nonactive_address && nonactive_address - range_start < range_size)
         data->flash_swap_mode = 3u;
 }
 
-static bool flash_swap_range_protected(const K22Data* data, uint32_t start, uint32_t length,
-                                       bool erase) {
-    if (data->flash_swap_mode == 0u || length == 0u)
+static bool flash_swap_range_protected(const K22Data* data, uint32_t range_start,
+                                       uint32_t range_size, bool erase_operation) {
+    if (data->flash_swap_mode == 0u || range_size == 0u)
         return false;
-    const uint32_t block_size = data->profile->program_flash_size / 2u;
-    const uint32_t active = data->flash_swap_address;
-    const uint32_t nonactive = active + block_size;
-    const bool active_overlap = start <= active && active - start < length;
-    const bool nonactive_overlap = start <= nonactive && nonactive - start < length;
+    const uint32_t swap_block_size = data->profile->program_flash_size / 2u;
+    const uint32_t active_address = data->flash_swap_address;
+    const uint32_t nonactive_address = active_address + swap_block_size;
+    const bool active_overlap =
+        range_start <= active_address && active_address - range_start < range_size;
+    const bool nonactive_overlap =
+        range_start <= nonactive_address && nonactive_address - range_start < range_size;
     if (active_overlap)
         return true;
     return nonactive_overlap &&
-           (!erase || (data->flash_swap_mode != 2u && data->flash_swap_mode != 3u));
+           (!erase_operation || (data->flash_swap_mode != 2u && data->flash_swap_mode != 3u));
 }
 
 static uint8_t flash_busy_banks(uint8_t command, uint32_t address) {
