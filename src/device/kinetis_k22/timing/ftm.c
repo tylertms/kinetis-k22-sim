@@ -270,10 +270,13 @@ static void ftm_fault_cycle_boundary(K22Timing* timing, uint8_t instance, bool n
     k22_timing_internal_update_ftm_irq(timing, instance);
 }
 
-static uint64_t ftm_phase_crossing_count(uint32_t phase, uint64_t ticks, uint32_t period,
-                                         uint32_t target) {
-    const uint32_t distance = target > phase ? target - phase : period - (phase - target);
-    return ticks < distance ? 0u : 1u + (ticks - distance) / period;
+static uint64_t ftm_phase_crossing_count(uint32_t current_phase, uint64_t elapsed_ticks,
+                                         uint32_t cycle_period, uint32_t target_phase) {
+    const uint32_t ticks_to_target = target_phase > current_phase
+                                         ? target_phase - current_phase
+                                         : cycle_period - (current_phase - target_phase);
+    return elapsed_ticks < ticks_to_target ? 0u
+                                           : 1u + (elapsed_ticks - ticks_to_target) / cycle_period;
 }
 
 static void ftm_channel_event(K22Timing* timing, uint8_t instance, uint8_t channel) {
