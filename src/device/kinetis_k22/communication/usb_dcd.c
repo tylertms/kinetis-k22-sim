@@ -130,7 +130,7 @@ bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
     return false;
 }
 
-static uint32_t clocks_per_millisecond(const K22UsbDcd* usbdcd) {
+static uint32_t clock_cycles_per_millisecond(const K22UsbDcd* usbdcd) {
     const uint32_t speed = (usbdcd->clock >> 2u) & 0x3ffu;
     if (speed == 0u)
         return 1u;
@@ -142,7 +142,7 @@ static void set_phase(K22UsbDcd* usbdcd, K22UsbDcdPhase phase) {
     usbdcd->phase_elapsed = 0u;
 }
 
-static void signal(K22UsbDcd* usbdcd) { usbdcd->control |= CONTROL_IF; }
+static void signal_interrupt(K22UsbDcd* usbdcd) { usbdcd->control |= CONTROL_IF; }
 
 static void finish(K22UsbDcd* usbdcd, uint8_t phase, uint8_t result, bool error) {
     const uint32_t timeout = usbdcd->status & STATUS_TIMEOUT;
@@ -150,7 +150,7 @@ static void finish(K22UsbDcd* usbdcd, uint8_t phase, uint8_t result, bool error)
                      ((uint32_t)result << STATUS_RESULT_SHIFT) |
                      (error || timeout != 0u ? STATUS_ERROR : 0u);
     usbdcd->phase = K22_USBDCD_IDLE;
-    signal(usbdcd);
+    signal_interrupt(usbdcd);
 }
 
 static void primary_result(K22UsbDcd* usbdcd) {
@@ -168,7 +168,7 @@ static void primary_result(K22UsbDcd* usbdcd) {
 static void charging_port_result(K22UsbDcd* usbdcd) {
     usbdcd->status = (usbdcd->status & (STATUS_TIMEOUT | STATUS_ERROR)) | STATUS_ACTIVE |
                      (2u << STATUS_PHASE_SHIFT) | (2u << STATUS_RESULT_SHIFT);
-    signal(usbdcd);
+    signal_interrupt(usbdcd);
     set_phase(usbdcd, (usbdcd->control & CONTROL_BC12) != 0u ? K22_USBDCD_SECONDARY_DETECTION
                                                              : K22_USBDCD_WAIT_PULLUP);
 }
@@ -180,7 +180,7 @@ static void advance_millisecond(K22UsbDcd* usbdcd) {
     usbdcd->timer0 = (usbdcd->timer0 & 0x03ff0000u) | elapsed;
     if (elapsed >= 1000u && (usbdcd->status & STATUS_TIMEOUT) == 0u) {
         usbdcd->status |= STATUS_TIMEOUT | STATUS_ERROR;
-        signal(usbdcd);
+        signal_interrupt(usbdcd);
     }
     usbdcd->phase_elapsed++;
     switch (usbdcd->phase) {
@@ -227,7 +227,7 @@ void k22_usbdcd_advance(K22UsbDcd* usbdcd, uint64_t cycles) {
     if (usbdcd == NULL || cycles == 0u || (usbdcd->status & STATUS_ACTIVE) == 0u)
         return;
     usbdcd->clock_cycles += cycles;
-    const uint32_t period = clocks_per_millisecond(usbdcd);
+    const uint32_t period = clock_cycles_per_millisecond(usbdcd);
     while (usbdcd->clock_cycles >= period) {
         usbdcd->clock_cycles -= period;
         advance_millisecond(usbdcd);
