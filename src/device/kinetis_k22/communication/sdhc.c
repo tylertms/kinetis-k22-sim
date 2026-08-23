@@ -46,7 +46,7 @@ static const uint32_t* const_register_pointer(const K22Sdhc* sdhc, uint32_t regi
     return &sdhc->registers[register_offset / 4u];
 }
 
-static void set_status(K22Sdhc* sdhc, uint32_t status_flags) {
+static void set_interrupt_status(K22Sdhc* sdhc, uint32_t status_flags) {
     *register_pointer(sdhc, SDHC_IRQSTAT) |= status_flags & *register_pointer(sdhc, SDHC_IRQSTATEN);
 }
 
@@ -144,7 +144,7 @@ bool k22_sdhc_insert(K22Sdhc* sdhc, const void* card_data, size_t card_size, boo
     sdhc->present = true;
     sdhc->write_protected = write_protected;
     sdhc->selected = false;
-    set_status(sdhc, SDHC_IRQ_CARD_INSERTION);
+    set_interrupt_status(sdhc, SDHC_IRQ_CARD_INSERTION);
     refresh_present_state(sdhc);
     return true;
 }
@@ -158,7 +158,7 @@ void k22_sdhc_eject(K22Sdhc* sdhc) {
     sdhc->present = false;
     sdhc->selected = false;
     sdhc->transfer_remaining = 0u;
-    set_status(sdhc, SDHC_IRQ_CARD_REMOVAL);
+    set_interrupt_status(sdhc, SDHC_IRQ_CARD_REMOVAL);
     refresh_present_state(sdhc);
 }
 
@@ -187,11 +187,11 @@ static bool transfer_bounds(const K22Sdhc* sdhc, size_t card_offset, size_t byte
 
 static void complete_transfer(K22Sdhc* sdhc) {
     sdhc->transfer_remaining = 0u;
-    set_status(sdhc, SDHC_IRQ_TRANSFER_COMPLETE);
+    set_interrupt_status(sdhc, SDHC_IRQ_TRANSFER_COMPLETE);
     refresh_present_state(sdhc);
 }
 
-static bool dma_transfer(K22Sdhc* sdhc) {
+static bool perform_dma_transfer(K22Sdhc* sdhc) {
     uint32_t bus_address = *register_pointer(sdhc, SDHC_DSADDR) & 0xfffffffcu;
     while (sdhc->transfer_remaining != 0u) {
         const uint8_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : 1u;
@@ -211,7 +211,7 @@ static bool dma_transfer(K22Sdhc* sdhc) {
         sdhc->transfer_remaining -= byte_count;
     }
     *register_pointer(sdhc, SDHC_DSADDR) = bus_address;
-    set_status(sdhc, SDHC_IRQ_DMA | SDHC_IRQ_TRANSFER_COMPLETE);
+    set_interrupt_status(sdhc, SDHC_IRQ_DMA | SDHC_IRQ_TRANSFER_COMPLETE);
     refresh_present_state(sdhc);
     return true;
 }
@@ -223,11 +223,11 @@ static bool begin_transfer(K22Sdhc* sdhc, bool read_transfer, bool multiple_bloc
     if (!sdhc->selected || transfer_size == 0u || transfer_size > 4096u ||
         block_count > SIZE_MAX / transfer_size ||
         !transfer_bounds(sdhc, card_offset, transfer_size * block_count)) {
-        set_status(sdhc, SDHC_IRQ_DATA_TIMEOUT);
+        set_interrupt_status(sdhc, SDHC_IRQ_DATA_TIMEOUT);
         return false;
     }
     if (!read_transfer && sdhc->write_protected) {
-        set_status(sdhc, SDHC_IRQ_DATA_CRC);
+        set_interrupt_status(sdhc, SDHC_IRQ_DATA_CRC);
         return false;
     }
     sdhc->transfer_address = card_offset;
@@ -236,12 +236,13 @@ static bool begin_transfer(K22Sdhc* sdhc, bool read_transfer, bool multiple_bloc
     sdhc->transfer_multiple = multiple_blocks;
     refresh_present_state(sdhc);
     if ((*register_pointer(sdhc, SDHC_XFERTYP) & 1u) != 0u) {
-        if (!dma_transfer(sdhc)) {
-            set_status(sdhc, SDHC_IRQ_DATA_TIMEOUT);
+        if (!perform_dma_transfer(sdhc)) {
+            set_interrupt_status(sdhc, SDHC_IRQ_DATA_TIMEOUT);
             return false;
         }
     } else {
-        set_status(sdhc, read_transfer ? SDHC_IRQ_BUFFER_READ_READY : SDHC_IRQ_BUFFER_WRITE_READY);
+        set_interrupt_status(sdhc, read_transfer ? SDHC_IRQ_BUFFER_READ_READY
+                                                 : SDHC_IRQ_BUFFER_WRITE_READY);
     }
     return true;
 }
@@ -251,7 +252,7 @@ static void issue_command(K22Sdhc* sdhc) {
     const uint32_t argument = *register_pointer(sdhc, SDHC_CMDARG);
     memset(register_pointer(sdhc, SDHC_CMDRSP0), 0, 4u * sizeof(uint32_t));
     if (command_index != 0u && !sdhc->present) {
-        set_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
+        set_interrupt_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
         return;
     }
     if (sdhc->application_command && command_index == 41u) {
@@ -290,7 +291,7 @@ static void issue_command(K22Sdhc* sdhc) {
             break;
         case 16u:
             if (argument == 0u || argument > 4096u)
-                set_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
+                set_interrupt_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
             else
                 sdhc->block_length = argument;
             break;
@@ -311,11 +312,11 @@ static void issue_command(K22Sdhc* sdhc) {
             *register_pointer(sdhc, SDHC_CMDRSP0) = 1u << 5u;
             break;
         default:
-            set_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
+            set_interrupt_status(sdhc, SDHC_IRQ_COMMAND_TIMEOUT);
             break;
         }
     }
-    set_status(sdhc, SDHC_IRQ_COMMAND_COMPLETE);
+    set_interrupt_status(sdhc, SDHC_IRQ_COMMAND_COMPLETE);
 }
 
 static bool read_data(K22Sdhc* sdhc, uint32_t* read_value) {
@@ -390,7 +391,7 @@ bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_siz
         return true;
     }
     if (register_offset == SDHC_FEVT) {
-        set_status(sdhc, write_value);
+        set_interrupt_status(sdhc, write_value);
         return true;
     }
     if (register_offset == SDHC_SYSCTL && (write_value & 0x07000000u) != 0u) {
