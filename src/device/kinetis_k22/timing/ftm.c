@@ -1,13 +1,15 @@
 #include "internal.h"
 
-static uint8_t ftm_irq(uint8_t instance) { return instance == 3u ? IRQ_FTM3 : IRQ_FTM0 + instance; }
+static uint8_t ftm_irq_for_instance(uint8_t instance) {
+    return instance == 3u ? IRQ_FTM3 : IRQ_FTM0 + instance;
+}
 
-static uint8_t ftm_dma_source(uint8_t module, uint8_t channel) {
+static uint8_t ftm_dma_source_for_channel(uint8_t module, uint8_t channel) {
     static const uint8_t bases[4] = {20u, 28u, 30u, 32u};
     return bases[module] + channel;
 }
 
-static uint8_t ftm_trigger_bit(uint8_t channel) {
+static uint8_t ftm_trigger_bit_for_channel(uint8_t channel) {
     static const uint8_t bits[6] = {4u, 5u, 0u, 1u, 2u, 3u};
     return channel < 6u ? bits[channel] : UINT8_MAX;
 }
@@ -16,24 +18,24 @@ uint8_t k22_timing_internal_ftm_channel_count(uint8_t instance) {
     return instance == 0u || instance == 3u ? 8u : 2u;
 }
 
-static bool ftm_quadrature_enabled(const K22FtmState* ftm) {
+static bool is_ftm_quadrature_enabled(const K22FtmState* ftm) {
     return ftm->quadrature_capable && (ftm->registers[11] & 1u) != 0u;
 }
 
-static bool ftm_combine_mode(const K22FtmState* ftm, uint8_t channel) {
+static bool is_ftm_combine_mode(const K22FtmState* ftm, uint8_t channel) {
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
     const uint32_t pair = ftm->registers[4] >> pair_shift;
-    return (ftm->sc & (1u << 5u)) == 0u && !ftm_quadrature_enabled(ftm) && (pair & 1u) != 0u &&
+    return (ftm->sc & (1u << 5u)) == 0u && !is_ftm_quadrature_enabled(ftm) && (pair & 1u) != 0u &&
            (pair & 4u) == 0u;
 }
 
-static bool ftm_complementary_mode(const K22FtmState* ftm, uint8_t channel) {
+static bool is_ftm_complementary_mode(const K22FtmState* ftm, uint8_t channel) {
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
     const uint32_t pair = ftm->registers[4] >> pair_shift;
     const uint8_t first_channel = channel & 0xfeu;
     const bool output_compare =
         (ftm->sc & (1u << 5u)) == 0u && (ftm->channel_sc[first_channel] & 0x30u) == 0x10u;
-    return !ftm_quadrature_enabled(ftm) && (pair & 2u) != 0u && (pair & 4u) == 0u &&
+    return !is_ftm_quadrature_enabled(ftm) && (pair & 2u) != 0u && (pair & 4u) == 0u &&
            !output_compare;
 }
 
@@ -76,11 +78,11 @@ bool k22_timing_trigger_ftm_hardware(K22Timing* timing, uint8_t instance, uint8_
     return true;
 }
 
-static bool ftm_pre_deadtime_output(const K22FtmState* ftm, uint8_t channel) {
+static bool ftm_output_before_deadtime(const K22FtmState* ftm, uint8_t channel) {
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
     const uint32_t pair = ftm->registers[4] >> pair_shift;
-    const bool combined = ftm_combine_mode(ftm, channel);
-    const bool complementary = ftm_complementary_mode(ftm, channel);
+    const bool combined = is_ftm_combine_mode(ftm, channel);
+    const bool complementary = is_ftm_complementary_mode(ftm, channel);
     const uint8_t first_channel = channel & 0xfeu;
     bool output = ftm->channel_output[channel];
     if ((combined || complementary) && (ftm->channel_sc[channel] & 0x0cu) != 0u) {
@@ -91,7 +93,7 @@ static bool ftm_pre_deadtime_output(const K22FtmState* ftm, uint8_t channel) {
     }
     const bool dual_capture = (pair & 4u) != 0u;
     const bool software_enabled = (ftm->registers[16] & (1u << channel)) != 0u;
-    if (!ftm_quadrature_enabled(ftm) && !dual_capture && software_enabled) {
+    if (!is_ftm_quadrature_enabled(ftm) && !dual_capture && software_enabled) {
         output = (ftm->registers[16] & (1u << (channel + 8u))) != 0u;
         const bool pair_software_enabled =
             (ftm->registers[16] & (3u << first_channel)) == (3u << first_channel);
@@ -102,9 +104,9 @@ static bool ftm_pre_deadtime_output(const K22FtmState* ftm, uint8_t channel) {
     return output;
 }
 
-static bool ftm_deadtime_enabled(const K22FtmState* ftm, uint8_t channel) {
+static bool is_ftm_deadtime_enabled(const K22FtmState* ftm, uint8_t channel) {
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
-    return ftm_complementary_mode(ftm, channel) &&
+    return is_ftm_complementary_mode(ftm, channel) &&
            (ftm->registers[4] & (1u << (pair_shift + 4u))) != 0u &&
            (ftm->registers[5] & 0x3fu) != 0u;
 }
@@ -129,12 +131,12 @@ bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_
     if (!k22_timing_internal_has(timing, peripheral))
         return false;
     const K22FtmState* ftm = &timing->ftm[instance];
-    if (ftm_quadrature_enabled(ftm)) {
+    if (is_ftm_quadrature_enabled(ftm)) {
         *high = false;
         return true;
     }
-    bool output = ftm_deadtime_enabled(ftm, channel) ? ftm->channel_deadtime_output[channel]
-                                                     : ftm_pre_deadtime_output(ftm, channel);
+    bool output = is_ftm_deadtime_enabled(ftm, channel) ? ftm->channel_deadtime_output[channel]
+                                                        : ftm_output_before_deadtime(ftm, channel);
     if ((ftm->registers[3] & (1u << channel)) != 0u)
         output = false;
     if (ftm->fault_output_active && ftm_fault_channel_enabled(ftm, channel))
@@ -152,7 +154,7 @@ void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instanc
     for (uint8_t channel = 0u; channel < channels; channel++)
         asserted = asserted || (ftm->channel_sc[channel] & 0xc0u) == 0xc0u;
     asserted = asserted || ((ftm->registers[0] & 0x80u) != 0u && (ftm->registers[8] & 0x80u) != 0u);
-    k22_timing_internal_set_irq(timing, ftm_irq(instance), asserted);
+    k22_timing_internal_set_irq(timing, ftm_irq_for_instance(instance), asserted);
 }
 
 void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t instance) {
@@ -275,8 +277,8 @@ static void ftm_channel_event(K22Timing* timing, uint8_t instance, uint8_t chann
     ftm->channel_sc[channel] |= 1u << 7u;
     ftm->channel_flag_read[channel] = false;
     if ((ftm->channel_sc[channel] & 1u) != 0)
-        k22_timing_internal_request_dma(timing, ftm_dma_source(instance, channel));
-    const uint8_t trigger_bit = ftm_trigger_bit(channel);
+        k22_timing_internal_request_dma(timing, ftm_dma_source_for_channel(instance, channel));
+    const uint8_t trigger_bit = ftm_trigger_bit_for_channel(channel);
     if (trigger_bit != UINT8_MAX && (ftm->registers[6] & (1u << trigger_bit)) != 0u)
         k22_timing_internal_ftm_trigger(timing, instance);
 }
@@ -287,7 +289,7 @@ static bool ftm_pair_mode_disabled(const K22FtmState* ftm, uint8_t channel) {
 }
 
 static void ftm_combine_pwm_advance(K22FtmState* ftm, uint8_t channel) {
-    if ((channel & 1u) != 0u || !ftm_combine_mode(ftm, channel))
+    if ((channel & 1u) != 0u || !is_ftm_combine_mode(ftm, channel))
         return;
     const uint8_t edges = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
     if (edges == 0u)
@@ -309,16 +311,16 @@ static void ftm_combine_pwm_advance(K22FtmState* ftm, uint8_t channel) {
 
 bool k22_timing_internal_ftm_output_compare_mode(const K22FtmState* ftm, uint8_t channel) {
     return (ftm->sc & (1u << 5u)) == 0u && (ftm->channel_sc[channel] & 0x30u) == 0x10u &&
-           !ftm_quadrature_enabled(ftm) && ftm_pair_mode_disabled(ftm, channel);
+           !is_ftm_quadrature_enabled(ftm) && ftm_pair_mode_disabled(ftm, channel);
 }
 
 static bool ftm_edge_aligned_pwm_mode(const K22FtmState* ftm, uint8_t channel) {
     return (ftm->sc & (1u << 5u)) == 0u && (ftm->channel_sc[channel] & 0x20u) != 0u &&
-           !ftm_quadrature_enabled(ftm) && ftm_pair_mode_disabled(ftm, channel);
+           !is_ftm_quadrature_enabled(ftm) && ftm_pair_mode_disabled(ftm, channel);
 }
 
 static bool ftm_center_aligned_pwm_mode(const K22FtmState* ftm, uint8_t channel) {
-    return (ftm->sc & (1u << 5u)) != 0u && !ftm_quadrature_enabled(ftm) &&
+    return (ftm->sc & (1u << 5u)) != 0u && !is_ftm_quadrature_enabled(ftm) &&
            ftm_pair_mode_disabled(ftm, channel);
 }
 
@@ -418,7 +420,7 @@ static void ftm_apply_legacy_boundary_values(K22FtmState* ftm, uint8_t channels)
     ftm_apply_modulo(ftm);
     for (uint8_t channel = 0u; channel < channels; channel++) {
         if (ftm_edge_aligned_pwm_mode(ftm, channel) || ftm_center_aligned_pwm_mode(ftm, channel) ||
-            ftm_combine_mode(ftm, channel))
+            is_ftm_combine_mode(ftm, channel))
             ftm_apply_channel_value(ftm, channel);
     }
 }
@@ -487,7 +489,7 @@ static void advance_ftm_up_down(K22Timing* timing, uint8_t instance, uint64_t ti
 
 static void advance_ftm_counter(K22Timing* timing, uint8_t instance, uint32_t cycles) {
     K22FtmState* ftm = &timing->ftm[instance];
-    if (ftm_quadrature_enabled(ftm))
+    if (is_ftm_quadrature_enabled(ftm))
         return;
     const uint8_t clock_select = (uint8_t)((ftm->sc >> 3u) & 3u);
     if (!ftm_gate(timing, instance) || clock_select == 0 || timing->debug_halted) {
@@ -524,7 +526,7 @@ static void advance_ftm_counter(K22Timing* timing, uint8_t instance, uint32_t cy
         const uint32_t distance = compare > start ? compare - start : period - (start - compare);
         const bool output_compare = k22_timing_internal_ftm_output_compare_mode(ftm, channel);
         const bool edge_aligned = ftm_edge_aligned_pwm_mode(ftm, channel);
-        const bool combined = ftm_combine_mode(ftm, channel);
+        const bool combined = is_ftm_combine_mode(ftm, channel);
         const bool valid_compare = output_compare ? compare >= first && compare <= last
                                                   : compare > first && compare <= last;
         const bool combine_compare = combined && compare >= first && compare <= last;
@@ -555,7 +557,7 @@ static uint32_t ftm_input_threshold(const K22FtmState* ftm, uint8_t channel) {
     if (channel >= 4u)
         return 3u;
     const uint8_t filter = (uint8_t)((ftm->registers[9] >> (channel * 4u)) & 15u);
-    if (ftm_quadrature_enabled(ftm) && channel < 2u &&
+    if (is_ftm_quadrature_enabled(ftm) && channel < 2u &&
         (ftm->registers[11] & (1u << (7u - channel))) == 0u)
         return 3u;
     return filter == 0u ? 3u : 4u + (uint32_t)filter * 4u;
@@ -564,7 +566,7 @@ static uint32_t ftm_input_threshold(const K22FtmState* ftm, uint8_t channel) {
 bool k22_timing_internal_ftm_input_capture_mode(const K22FtmState* ftm, uint8_t channel) {
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
     const uint32_t pair = ftm->registers[4] >> pair_shift;
-    return !ftm_quadrature_enabled(ftm) && (ftm->sc & (1u << 5u)) == 0u &&
+    return !is_ftm_quadrature_enabled(ftm) && (ftm->sc & (1u << 5u)) == 0u &&
            (ftm->channel_sc[channel] & 0x30u) == 0u && (ftm->channel_sc[channel] & 0x0cu) != 0u &&
            (pair & 5u) == 0u;
 }
@@ -627,7 +629,7 @@ static void ftm_quadrature_transition(K22Timing* timing, uint8_t instance, uint8
 static void ftm_capture_input(K22Timing* timing, uint8_t instance, uint8_t channel, bool previous,
                               bool current) {
     K22FtmState* ftm = &timing->ftm[instance];
-    if (ftm_quadrature_enabled(ftm) && channel < 2u) {
+    if (is_ftm_quadrature_enabled(ftm) && channel < 2u) {
         ftm_quadrature_transition(timing, instance, channel, previous, current);
         return;
     }
@@ -837,7 +839,7 @@ static void ftm_process_hardware_triggers(K22Timing* timing, uint8_t instance) {
 
 static bool ftm_has_deadtime(const K22FtmState* ftm, uint8_t channels) {
     for (uint8_t channel = 0u; channel < channels; channel += 2u) {
-        if (ftm_deadtime_enabled(ftm, channel))
+        if (is_ftm_deadtime_enabled(ftm, channel))
             return true;
     }
     return false;
@@ -853,8 +855,8 @@ static void ftm_advance_deadtime(K22Timing* timing, uint8_t instance, uint32_t c
     const uint64_t ticks = k22_timing_internal_clock_ticks(
         &ftm->deadtime_remainder, cycles, timing->bus_clock_hz >> shift, timing->core_clock_hz);
     for (uint8_t channel = 0u; channel < channels; channel++) {
-        const bool raw = ftm_pre_deadtime_output(ftm, channel);
-        if (!ftm_deadtime_enabled(ftm, channel)) {
+        const bool raw = ftm_output_before_deadtime(ftm, channel);
+        if (!is_ftm_deadtime_enabled(ftm, channel)) {
             ftm->channel_deadtime_output[channel] = raw;
             ftm->channel_deadtime_remaining[channel] = 0u;
         } else if (!raw) {
