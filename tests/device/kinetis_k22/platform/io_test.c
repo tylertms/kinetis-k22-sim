@@ -257,8 +257,9 @@ static void test_can(TestState* state) {
     write_value(state, &io, CAN0 + 0x10u, 4, 0);
     write_value(state, &io, CAN0 + 0x28u, 4, 1u);
     write_value(state, &io, CAN0 + 0x80u, 4, 4u << 24);
-    K22CanFrame frame = {0x123u, 8, {0, 1, 2, 3, 4, 5, 6, 7}, false, false};
-    expect(state, k22_io_can_receive(&io, &frame), "k22_io_can_receive(&io, &frame)");
+    K22CanFrame receive_frame = {0x123u, 8, {0, 1, 2, 3, 4, 5, 6, 7}, false, false};
+    expect(state, k22_io_can_receive(&io, &receive_frame),
+           "k22_io_can_receive(&io, &receive_frame)");
     expect(state, (read_value(state, &io, CAN0 + 0x30u, 4) & 1u) != 0,
            "(read_value(state, &io, CAN0 + 0x30u, 4) & 1u) != 0");
     expect(state, read_value(state, &io, CAN0 + 0x84u, 4) == 0x123u,
@@ -277,11 +278,11 @@ static void test_can(TestState* state) {
     write_value(state, &io, CAN0 + 0x90u, 4, (0xcu << 24) | (3u << 16));
     expect(state, has_event(&log, K22_IO_EVENT_CAN_TRANSMIT, 1u),
            "has_event(&log, K22_IO_EVENT_CAN_TRANSMIT, 1u)");
-    const K22IoEvent* transmit = find_event(&log, K22_IO_EVENT_CAN_TRANSMIT, 1u);
-    expect(state, transmit != NULL, "transmit != NULL");
-    expect(state, transmit->length == 3u, "transmit->length == 3u");
-    expect(state, transmit->data[0] == 1u, "transmit->data[0] == 1u");
-    expect(state, transmit->data[7] == 8u, "transmit->data[7] == 8u");
+    const K22IoEvent* transmit_event = find_event(&log, K22_IO_EVENT_CAN_TRANSMIT, 1u);
+    expect(state, transmit_event != NULL, "transmit_event != NULL");
+    expect(state, transmit_event->length == 3u, "transmit_event->length == 3u");
+    expect(state, transmit_event->data[0] == 1u, "transmit_event->data[0] == 1u");
+    expect(state, transmit_event->data[7] == 8u, "transmit_event->data[7] == 8u");
     k22_io_advance(&io, 17u);
     expect(state, read_value(state, &io, CAN0 + 8u, 4) == 17u,
            "read_value(state, &io, CAN0 + 8u, 4) == 17u");
@@ -304,9 +305,10 @@ static void test_i2s(TestState* state) {
     write_value(state, &io, I2S0 + 0x20u, 4, 0x12345678u);
     expect(state, has_event(&log, K22_IO_EVENT_I2S_TRANSMIT, 0),
            "has_event(&log, K22_IO_EVENT_I2S_TRANSMIT, 0)");
-    uint32_t sample = 0;
-    expect(state, k22_io_i2s_transmit(&io, &sample), "k22_io_i2s_transmit(&io, &sample)");
-    expect(state, sample == 0x12345678u, "sample == 0x12345678u");
+    uint32_t transmit_sample = 0u;
+    expect(state, k22_io_i2s_transmit(&io, &transmit_sample),
+           "k22_io_i2s_transmit(&io, &transmit_sample)");
+    expect(state, transmit_sample == 0x12345678u, "transmit_sample == 0x12345678u");
     expect(state, k22_io_i2s_receive(&io, 0x87654321u), "k22_io_i2s_receive(&io, 0x87654321u)");
     expect(state, read_value(state, &io, I2S0 + 0xa0u, 4) == 0x87654321u,
            "read_value(state, &io, I2S0 + 0xa0u, 4) == 0x87654321u");
@@ -329,7 +331,7 @@ static void test_flexbus_sysmpu_copy_and_reset(TestState* state) {
     configuration.event_handler = record_event;
     configuration.event_context = &log;
     K22Io io;
-    K22Io copy;
+    K22Io copied_io;
     expect(state, k22_io_init(&io, configuration), "k22_io_init(&io, configuration)");
     k22_io_set_clock(&io, K22_PERIPHERAL_FB, true);
     k22_io_set_clock(&io, K22_PERIPHERAL_SYSMPU, true);
@@ -355,8 +357,9 @@ static void test_flexbus_sysmpu_copy_and_reset(TestState* state) {
            "read_value(state, &io, SYSMPU + 0x408u, 4) == 0x0061f7dfu");
     expect(state, k22_io_sysmpu_access(&io, 0x1000u, 0, false, K22_SYSMPU_WRITE),
            "k22_io_sysmpu_access(&io, 0x1000u, 0, false, K22_SYSMPU_WRITE)");
-    for (uint8_t region = 0; region < 12; region++)
-        write_value(state, &io, SYSMPU + 0x40cu + (uint32_t)region * 16u, 4, 0);
+    for (uint8_t region_index = 0u; region_index < 12u; region_index++) {
+        write_value(state, &io, SYSMPU + 0x40cu + (uint32_t)region_index * 16u, 4, 0);
+    }
     write_value(state, &io, SYSMPU + 0x400u, 4, 0x1000u);
     write_value(state, &io, SYSMPU + 0x404u, 4, 0x1fffu);
     write_value(state, &io, SYSMPU + 0x408u, 4, 4u | (3u << 3));
@@ -383,16 +386,16 @@ static void test_flexbus_sysmpu_copy_and_reset(TestState* state) {
     write_value(state, &io, SYSMPU + 0x400u, 4, 0x1234u);
     expect(state, read_value(state, &io, SYSMPU + 0x400u, 4) == 0x1234u,
            "read_value(state, &io, SYSMPU + 0x400u, 4) == 0x1234u");
-    expect(state, k22_io_init(&copy, configuration), "k22_io_init(&copy, configuration)");
-    expect(state, k22_io_copy(&copy, &io), "k22_io_copy(&copy, &io)");
-    expect(state, read_value(state, &copy, FLEXBUS, 4) == 0x60000000u,
-           "read_value(state, &copy, FLEXBUS, 4) == 0x60000000u");
-    k22_io_reset(&copy);
-    expect(state, !k22_io_clock_enabled(&copy, K22_PERIPHERAL_FB),
-           "!k22_io_clock_enabled(&copy, K22_PERIPHERAL_FB)");
-    expect(state, k22_io_clock_enabled(&copy, K22_PERIPHERAL_MCM),
-           "k22_io_clock_enabled(&copy, K22_PERIPHERAL_MCM)");
-    expect(state, k22_io_copy(&copy, &copy), "k22_io_copy(&copy, &copy)");
+    expect(state, k22_io_init(&copied_io, configuration), "k22_io_init(&copied_io, configuration)");
+    expect(state, k22_io_copy(&copied_io, &io), "k22_io_copy(&copied_io, &io)");
+    expect(state, read_value(state, &copied_io, FLEXBUS, 4) == 0x60000000u,
+           "read_value(state, &copied_io, FLEXBUS, 4) == 0x60000000u");
+    k22_io_reset(&copied_io);
+    expect(state, !k22_io_clock_enabled(&copied_io, K22_PERIPHERAL_FB),
+           "!k22_io_clock_enabled(&copied_io, K22_PERIPHERAL_FB)");
+    expect(state, k22_io_clock_enabled(&copied_io, K22_PERIPHERAL_MCM),
+           "k22_io_clock_enabled(&copied_io, K22_PERIPHERAL_MCM)");
+    expect(state, k22_io_copy(&copied_io, &copied_io), "k22_io_copy(&copied_io, &copied_io)");
     expect(state, !k22_io_copy(NULL, &io), "!k22_io_copy(NULL, &io)");
 }
 
@@ -410,9 +413,11 @@ static void test_edges_and_fail_closed_access(TestState* state) {
     k22_io_set_clock(&io, K22_PERIPHERAL_COUNT, true);
     expect(state, !k22_io_clock_enabled(NULL, K22_PERIPHERAL_USB0),
            "!k22_io_clock_enabled(NULL, K22_PERIPHERAL_USB0)");
-    uint32_t value = 0;
-    expect(state, !k22_io_read(NULL, PORTA, 4, &value), "!k22_io_read(NULL, PORTA, 4, &value)");
-    expect(state, !k22_io_read(&io, PORTA, 3, &value), "!k22_io_read(&io, PORTA, 3, &value)");
+    uint32_t read_data = 0u;
+    expect(state, !k22_io_read(NULL, PORTA, 4, &read_data),
+           "!k22_io_read(NULL, PORTA, 4, &read_data)");
+    expect(state, !k22_io_read(&io, PORTA, 3, &read_data),
+           "!k22_io_read(&io, PORTA, 3, &read_data)");
     expect(state, !k22_io_read(&io, PORTA, 4, NULL), "!k22_io_read(&io, PORTA, 4, NULL)");
     expect(state, !k22_io_write(NULL, PORTA, 4, 0), "!k22_io_write(NULL, PORTA, 4, 0)");
     expect(state, !k22_io_write(&io, PORTA, 3, 0), "!k22_io_write(&io, PORTA, 3, 0)");
@@ -461,8 +466,8 @@ static void test_edges_and_fail_closed_access(TestState* state) {
     write_value(state, &io, USB0 + 0x114u, 1, 0x55u);
     expect(state, read_value(state, &io, USB0 + 0x114u, 1) == 0x55u,
            "read_value(state, &io, USB0 + 0x114u, 1) == 0x55u");
-    expect(state, !k22_io_read(&io, USB0 + 0x114u, 2, &value),
-           "!k22_io_read(&io, USB0 + 0x114u, 2, &value)");
+    expect(state, !k22_io_read(&io, USB0 + 0x114u, 2, &read_data),
+           "!k22_io_read(&io, USB0 + 0x114u, 2, &read_data)");
     expect(state, !k22_io_usb_token(&io, 16, 0, false), "!k22_io_usb_token(&io, 16, 0, false)");
     expect(state, !k22_io_usb_token(&io, 0, 0, false), "!k22_io_usb_token(&io, 0, 0, false)");
     k22_io_set_clock(&io, K22_PERIPHERAL_CAN0, true);
@@ -474,22 +479,26 @@ static void test_edges_and_fail_closed_access(TestState* state) {
     write_value(state, &io, CAN0 + 0x10u, 4, UINT32_MAX);
     write_value(state, &io, CAN0 + 0xa0u, 4, 4u << 24);
     write_value(state, &io, CAN0 + 0xa4u, 4, 0x456u);
-    K22CanFrame frame = {0x123u, 1, {9, 0, 0, 0, 0, 0, 0, 0}, true, true};
-    expect(state, !k22_io_can_receive(&io, &frame), "!k22_io_can_receive(&io, &frame)");
-    frame.identifier = 0x456u;
-    expect(state, k22_io_can_receive(&io, &frame), "k22_io_can_receive(&io, &frame)");
+    K22CanFrame receive_frame = {0x123u, 1, {9, 0, 0, 0, 0, 0, 0, 0}, true, true};
+    expect(state, !k22_io_can_receive(&io, &receive_frame),
+           "!k22_io_can_receive(&io, &receive_frame)");
+    receive_frame.identifier = 0x456u;
+    expect(state, k22_io_can_receive(&io, &receive_frame),
+           "k22_io_can_receive(&io, &receive_frame)");
     expect(state, (read_value(state, &io, CAN0 + 0xa0u, 4) & ((1u << 21) | (1u << 20))) != 0,
            "(read_value(state, &io, CAN0 + 0xa0u, 4) & ((1u << 21) | (1u << 20))) != 0");
     k22_io_set_clock(&io, K22_PERIPHERAL_I2S0, true);
     write_value(state, &io, I2S0, 4, UINT32_C(0x80000001));
-    for (uint8_t index = 0; index < K22_IO_FIFO_CAPACITY; index++)
-        write_value(state, &io, I2S0 + 0x20u, 4, index);
+    for (uint8_t fifo_index = 0u; fifo_index < K22_IO_FIFO_CAPACITY; fifo_index++) {
+        write_value(state, &io, I2S0 + 0x20u, 4, fifo_index);
+    }
     write_value(state, &io, I2S0 + 0x20u, 4, 99u);
     expect(state, (read_value(state, &io, I2S0, 4) & (1u << 18)) != 0,
            "(read_value(state, &io, I2S0, 4) & (1u << 18)) != 0");
-    for (uint8_t index = 0; index < K22_IO_FIFO_CAPACITY; index++)
-        expect(state, k22_io_i2s_transmit(&io, &value), "k22_io_i2s_transmit(&io, &value)");
-    expect(state, !k22_io_i2s_transmit(&io, &value), "!k22_io_i2s_transmit(&io, &value)");
+    for (uint8_t fifo_index = 0u; fifo_index < K22_IO_FIFO_CAPACITY; fifo_index++) {
+        expect(state, k22_io_i2s_transmit(&io, &read_data), "k22_io_i2s_transmit(&io, &read_data)");
+    }
+    expect(state, !k22_io_i2s_transmit(&io, &read_data), "!k22_io_i2s_transmit(&io, &read_data)");
     write_value(state, &io, I2S0 + 0x100u, 4, 0x1234u);
     expect(state, read_value(state, &io, I2S0 + 0x100u, 4) == 0x1234u,
            "read_value(state, &io, I2S0 + 0x100u, 4) == 0x1234u");
@@ -517,13 +526,14 @@ static void test_edges_and_fail_closed_access(TestState* state) {
     K22Io quiet;
     expect(state, k22_io_init(&quiet, quiet_configuration),
            "k22_io_init(&quiet, quiet_configuration)");
-    expect(state, !k22_io_read(&quiet, PORTA, 4, &value), "!k22_io_read(&quiet, PORTA, 4, &value)");
-    K22CanFrame oversized = {0};
-    oversized.length = 9u;
+    expect(state, !k22_io_read(&quiet, PORTA, 4, &read_data),
+           "!k22_io_read(&quiet, PORTA, 4, &read_data)");
+    K22CanFrame oversized_frame = {0};
+    oversized_frame.length = 9u;
     expect(state,
-           !k22_io_can_receive(NULL, &oversized) && !k22_io_can_receive(&quiet, &oversized) &&
-               !k22_io_i2s_receive(&quiet, 0u) && !k22_io_irq_asserted(NULL, 0u) &&
-               !k22_io_irq_asserted(&quiet, 0u),
+           !k22_io_can_receive(NULL, &oversized_frame) &&
+               !k22_io_can_receive(&quiet, &oversized_frame) && !k22_io_i2s_receive(&quiet, 0u) &&
+               !k22_io_irq_asserted(NULL, 0u) && !k22_io_irq_asserted(&quiet, 0u),
            "I/O APIs reject unavailable inputs");
     expect(state, !k22_io_sysmpu_access(&quiet, 0u, 0u, false, K22_SYSMPU_READ),
            "clock-gated SYSMPU rejects access");
