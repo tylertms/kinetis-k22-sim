@@ -101,18 +101,18 @@ bool k22_data_internal_adc_read(K22Data* data, uint8_t instance, uint32_t addres
                                 uint8_t byte_count, uint32_t* output_value);
 bool k22_data_internal_adc_write(K22Data* data, uint8_t instance, uint32_t address,
                                  uint8_t byte_count, uint32_t write_value);
-bool k22_data_internal_cmp_read(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                uint32_t* value);
-bool k22_data_internal_cmp_write(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                 uint32_t value);
+bool k22_data_internal_cmp_read(K22Data* data, uint8_t instance, uint32_t address,
+                                uint8_t byte_count, uint32_t* output_value);
+bool k22_data_internal_cmp_write(K22Data* data, uint8_t instance, uint32_t address,
+                                 uint8_t byte_count, uint32_t write_value);
 bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_count,
                                 uint32_t* output_value);
 bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t byte_count,
                                  uint32_t write_value);
-bool k22_data_internal_dac_read(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                uint32_t* value);
-bool k22_data_internal_dac_write(K22Data* data, uint8_t instance, uint32_t address, uint8_t size,
-                                 uint32_t value);
+bool k22_data_internal_dac_read(K22Data* data, uint8_t instance, uint32_t address,
+                                uint8_t byte_count, uint32_t* output_value);
+bool k22_data_internal_dac_write(K22Data* data, uint8_t instance, uint32_t address,
+                                 uint8_t byte_count, uint32_t write_value);
 bool k22_data_internal_dma_priorities_valid(const K22Data* data);
 bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t byte_count,
                                 uint32_t* output_value);
@@ -146,7 +146,7 @@ void k22_data_internal_adc_complete(K22Data* data, uint8_t instance);
 void k22_data_internal_adc_reset_registers(K22Adc* adc);
 void k22_data_internal_adc_start(K22Adc* adc, uint8_t slot);
 void k22_data_internal_cmp_evaluate(K22Data* data, uint8_t instance);
-void k22_data_internal_dac_flags(K22Data* data, uint8_t instance, uint8_t flags);
+void k22_data_internal_dac_flags(K22Data* data, uint8_t instance, uint8_t event_flags);
 void k22_data_internal_dac_update_output(K22Data* data, uint8_t instance);
 void k22_data_internal_dma_error(K22Data* data, uint8_t channel, uint32_t error_reason);
 void k22_data_internal_dma_queue_always_enabled(K22Data* data, uint8_t channel);
