@@ -304,69 +304,74 @@ static bool memory_write_unprotected(KinetisK22* device, uint32_t address, uint8
     return kinetis_k22_peripheral_write(device, address, access_size, access, write_value);
 }
 
-bool kinetis_k22_memory_read(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_memory_read(KinetisK22* device, uint32_t address, uint8_t access_size,
                              CortexM4Access access, uint32_t* output_value) {
-    if (device == NULL || output_value == NULL || (size != 1 && size != 2 && size != 4))
+    if (device == NULL || output_value == NULL ||
+        (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
     if (access != CORTEX_M4_ACCESS_DEBUG) {
-        const uint8_t master = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
+        const uint8_t master_id = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
         const bool supervisor = access != CORTEX_M4_ACCESS_UNPRIVILEGED_DATA &&
                                 (access != CORTEX_M4_ACCESS_INSTRUCTION || device->cpu == NULL ||
                                  (cortex_m4_get_xpsr(device->cpu) & 0x1ffu) != 0u ||
                                  (cortex_m4_get_control(device->cpu) & 1u) == 0u);
         const K22SysMpuAccess operation =
             access == CORTEX_M4_ACCESS_INSTRUCTION ? K22_SYSMPU_EXECUTE : K22_SYSMPU_READ;
-        if (!sysmpu_access_allowed(device, address, size, master, supervisor, operation))
+        if (!sysmpu_access_allowed(device, address, access_size, master_id, supervisor, operation))
             return false;
     }
-    const uint8_t master = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
-    return memory_read_unprotected(device, address, size, access, master, output_value);
+    const uint8_t master_id = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
+    return memory_read_unprotected(device, address, access_size, access, master_id, output_value);
 }
 
-bool kinetis_k22_memory_write(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_memory_write(KinetisK22* device, uint32_t address, uint8_t access_size,
                               CortexM4Access access, uint32_t write_value) {
-    if (device == NULL || (size != 1 && size != 2 && size != 4))
+    if (device == NULL || (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
     if (access != CORTEX_M4_ACCESS_DEBUG) {
         const bool supervisor = access != CORTEX_M4_ACCESS_UNPRIVILEGED_DATA;
-        if (!sysmpu_access_allowed(device, address, size, 1u, supervisor, K22_SYSMPU_WRITE))
+        if (!sysmpu_access_allowed(device, address, access_size, 1u, supervisor, K22_SYSMPU_WRITE))
             return false;
     }
-    return memory_write_unprotected(device, address, size, access, 1u, write_value);
+    return memory_write_unprotected(device, address, access_size, access, 1u, write_value);
 }
 
-bool kinetis_k22_dma_read(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_dma_read(KinetisK22* device, uint32_t address, uint8_t access_size,
                           uint32_t* output_value) {
-    if (device == NULL || output_value == NULL || (size != 1u && size != 2u && size != 4u) ||
-        !sysmpu_access_allowed(device, address, size, 2u, true, K22_SYSMPU_READ))
+    if (device == NULL || output_value == NULL ||
+        (access_size != 1u && access_size != 2u && access_size != 4u) ||
+        !sysmpu_access_allowed(device, address, access_size, 2u, true, K22_SYSMPU_READ))
         return false;
-    return memory_read_unprotected(device, address, size, CORTEX_M4_ACCESS_DATA, 2u, output_value);
+    return memory_read_unprotected(device, address, access_size, CORTEX_M4_ACCESS_DATA, 2u,
+                                   output_value);
 }
 
-bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_dma_write(KinetisK22* device, uint32_t address, uint8_t access_size,
                            uint32_t write_value) {
-    if (device == NULL || (size != 1u && size != 2u && size != 4u) ||
-        !sysmpu_access_allowed(device, address, size, 2u, true, K22_SYSMPU_WRITE))
+    if (device == NULL || (access_size != 1u && access_size != 2u && access_size != 4u) ||
+        !sysmpu_access_allowed(device, address, access_size, 2u, true, K22_SYSMPU_WRITE))
         return false;
-    return memory_write_unprotected(device, address, size, CORTEX_M4_ACCESS_DATA, 2u, write_value);
+    return memory_write_unprotected(device, address, access_size, CORTEX_M4_ACCESS_DATA, 2u,
+                                    write_value);
 }
 
-bool kinetis_k22_flash_controller_write(KinetisK22* device, uint32_t address, uint8_t size,
+bool kinetis_k22_flash_controller_write(KinetisK22* device, uint32_t address, uint8_t access_size,
                                         uint32_t write_value) {
-    if (device == NULL || (size != 1u && size != 2u && size != 4u) ||
-        !valid_range(address, size, K22_FLASH_BASE, device->configuration.flash_size))
+    if (device == NULL || (access_size != 1u && access_size != 2u && access_size != 4u) ||
+        !valid_range(address, access_size, K22_FLASH_BASE, device->configuration.flash_size))
         return false;
-    store_little_endian(device->flash + address, size, write_value);
+    store_little_endian(device->flash + address, access_size, write_value);
     return true;
 }
 
 static const K22RegisterDescriptor* bit_band_descriptor(const KinetisK22* device,
-                                                        uint32_t byte_address) {
+                                                        uint32_t register_byte_address) {
     for (size_t register_index = 0; register_index < device->manifest->register_count;
          register_index++) {
         const K22RegisterDescriptor* descriptor = &device->manifest->registers[register_index];
-        const uint8_t size = (uint8_t)(descriptor->width / 8u);
-        if (byte_address >= descriptor->address && byte_address - descriptor->address < size) {
+        const uint8_t register_size = (uint8_t)(descriptor->width / 8u);
+        if (register_byte_address >= descriptor->address &&
+            register_byte_address - descriptor->address < register_size) {
             return descriptor;
         }
     }
@@ -378,19 +383,20 @@ static bool bit_band_read(KinetisK22* device, uint32_t address, CortexM4Access a
     if ((address & 3u) != 0) {
         return false;
     }
-    const uint32_t alias = address - K22_BIT_BAND_BASE;
-    const uint32_t byte_address = K22_PERIPHERAL_BASE + alias / 32u;
-    const uint8_t bit_in_byte = (uint8_t)((alias / 4u) & 7u);
-    const K22RegisterDescriptor* descriptor = bit_band_descriptor(device, byte_address);
+    const uint32_t alias_address = address - K22_BIT_BAND_BASE;
+    const uint32_t register_byte_address = K22_PERIPHERAL_BASE + alias_address / 32u;
+    const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
+    const K22RegisterDescriptor* descriptor = bit_band_descriptor(device, register_byte_address);
     if (descriptor == NULL || (descriptor->access & K22_REGISTER_ACCESS_READ) == 0) {
         return false;
     }
-    const uint8_t bit = (uint8_t)((byte_address - descriptor->address) * 8u + bit_in_byte);
-    const uint32_t mask = 1u << bit;
+    const uint8_t register_bit =
+        (uint8_t)((register_byte_address - descriptor->address) * 8u + bit_index);
+    const uint32_t mask = 1u << register_bit;
     if ((descriptor->implemented_mask & descriptor->read_mask & mask) == 0) {
         return false;
     }
-    uint32_t register_value = 0;
+    uint32_t register_value = 0u;
     if (!kinetis_k22_peripheral_read(device, descriptor->address, (uint8_t)(descriptor->width / 8u),
                                      access, &register_value)) {
         return false;
@@ -404,19 +410,20 @@ static bool bit_band_write(KinetisK22* device, uint32_t address, CortexM4Access 
     if ((address & 3u) != 0) {
         return false;
     }
-    const uint32_t alias = address - K22_BIT_BAND_BASE;
-    const uint32_t byte_address = K22_PERIPHERAL_BASE + alias / 32u;
-    const uint8_t bit_in_byte = (uint8_t)((alias / 4u) & 7u);
-    const K22RegisterDescriptor* descriptor = bit_band_descriptor(device, byte_address);
+    const uint32_t alias_address = address - K22_BIT_BAND_BASE;
+    const uint32_t register_byte_address = K22_PERIPHERAL_BASE + alias_address / 32u;
+    const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
+    const K22RegisterDescriptor* descriptor = bit_band_descriptor(device, register_byte_address);
     if (descriptor == NULL || (descriptor->access & K22_REGISTER_ACCESS_WRITE) == 0) {
         return false;
     }
-    const uint8_t bit = (uint8_t)((byte_address - descriptor->address) * 8u + bit_in_byte);
-    const uint32_t mask = 1u << bit;
+    const uint8_t register_bit =
+        (uint8_t)((register_byte_address - descriptor->address) * 8u + bit_index);
+    const uint32_t mask = 1u << register_bit;
     if ((descriptor->implemented_mask & descriptor->write_mask & mask) == 0) {
         return false;
     }
-    uint32_t register_value = 0;
+    uint32_t register_value = 0u;
     if (!kinetis_k22_peripheral_read(device, descriptor->address, (uint8_t)(descriptor->width / 8u),
                                      access, &register_value)) {
         return false;
@@ -433,26 +440,26 @@ static bool bit_band_write(KinetisK22* device, uint32_t address, CortexM4Access 
                                         (uint8_t)(descriptor->width / 8u), access, register_value);
 }
 
-static bool k22_read_bus(void* context, uint32_t address, uint8_t size, CortexM4Access access,
-                         uint32_t* output_value) {
+static bool k22_read_bus(void* context, uint32_t address, uint8_t access_size,
+                         CortexM4Access access, uint32_t* output_value) {
     KinetisK22* device = context;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_BASE + K22_BIT_BAND_SIZE) {
-        if (size != 1u && size != 2u && size != 4u)
+        if (access_size != 1u && access_size != 2u && access_size != 4u)
             return false;
         return bit_band_read(device, address, access, output_value);
     }
-    return kinetis_k22_memory_read(device, address, size, access, output_value);
+    return kinetis_k22_memory_read(device, address, access_size, access, output_value);
 }
 
-static bool k22_write_bus(void* context, uint32_t address, uint8_t size, CortexM4Access access,
-                          uint32_t write_value) {
+static bool k22_write_bus(void* context, uint32_t address, uint8_t access_size,
+                          CortexM4Access access, uint32_t write_value) {
     KinetisK22* device = context;
     if (address >= K22_BIT_BAND_BASE && address < K22_BIT_BAND_BASE + K22_BIT_BAND_SIZE) {
-        if (size != 1u && size != 2u && size != 4u)
+        if (access_size != 1u && access_size != 2u && access_size != 4u)
             return false;
         return bit_band_write(device, address, access, write_value);
     }
-    return kinetis_k22_memory_write(device, address, size, access, write_value);
+    return kinetis_k22_memory_write(device, address, access_size, access, write_value);
 }
 
 static void k22_advance_bus(void* context, uint32_t cycles) {
