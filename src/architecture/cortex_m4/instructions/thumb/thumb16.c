@@ -274,12 +274,12 @@ static bool execute_immediate_memory(CortexM4* cpu, uint16_t opcode) {
 }
 
 static bool execute_halfword_memory(CortexM4* cpu, uint16_t opcode) {
-    const bool load = (opcode & (1u << 11)) != 0;
+    const bool is_load = (opcode & (1u << 11)) != 0;
     const uint8_t immediate = (uint8_t)((opcode >> 6) & 31u);
     const uint8_t base_register = (uint8_t)((opcode >> 3) & 7u);
     const uint8_t target_register = (uint8_t)(opcode & 7u);
     const uint32_t address = cpu->registers[base_register] + immediate * 2u;
-    if (!load) {
+    if (!is_load) {
         return cortex_m4_internal_write_data(cpu, address, 2, cpu->registers[target_register]);
     }
     uint32_t value = 0;
@@ -290,10 +290,10 @@ static bool execute_halfword_memory(CortexM4* cpu, uint16_t opcode) {
 }
 
 static bool execute_stack_memory(CortexM4* cpu, uint16_t opcode) {
-    const bool load = (opcode & (1u << 11)) != 0;
+    const bool is_load = (opcode & (1u << 11)) != 0;
     const uint8_t target_register = (uint8_t)((opcode >> 8) & 7u);
     const uint32_t address = cortex_m4_read_register_internal(cpu, 13) + (opcode & 0xffu) * 4u;
-    if (!load) {
+    if (!is_load) {
         return cortex_m4_internal_write_data(cpu, address, 4, cpu->registers[target_register]);
     }
     uint32_t value = 0;
@@ -389,7 +389,7 @@ static bool execute_push_pop(CortexM4* cpu, uint16_t opcode) {
 }
 
 static bool execute_multiple(CortexM4* cpu, uint16_t opcode) {
-    const bool load = (opcode & (1u << 11)) != 0;
+    const bool is_load = (opcode & (1u << 11)) != 0;
     const uint8_t base = (uint8_t)((opcode >> 8) & 7u);
     const uint8_t list = (uint8_t)opcode;
     uint32_t address = cortex_m4_exception_advanced_multiple_address(cpu, cpu->registers[base]);
@@ -399,7 +399,7 @@ static bool execute_multiple(CortexM4* cpu, uint16_t opcode) {
             continue;
         if ((list & (1u << index)) == 0)
             continue;
-        if (load) {
+        if (is_load) {
             uint32_t value = 0;
             if (!cortex_m4_internal_read_data(cpu, address, 4, &value))
                 return true;
@@ -418,7 +418,7 @@ static bool execute_multiple(CortexM4* cpu, uint16_t opcode) {
         if (cortex_m4_exception_advanced_multiple_suspend(cpu, next, 2u, address))
             return true;
     }
-    if (!load || (list & (1u << base)) == 0) {
+    if (!is_load || (list & (1u << base)) == 0) {
         cpu->registers[base] = address;
     }
     cortex_m4_exception_advanced_multiple_complete(cpu);

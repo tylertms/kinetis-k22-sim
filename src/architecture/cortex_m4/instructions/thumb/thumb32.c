@@ -499,7 +499,7 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
         return true;
     }
     if (((first & 0xffd0u) == 0xe880u || (first & 0xffd0u) == 0xe890u) && second != 0) {
-        const bool load = (first & 0x0010u) != 0;
+        const bool is_load = (first & 0x0010u) != 0;
         const bool write_back = (first & 0x0020u) != 0;
         const uint8_t base = (uint8_t)(first & 15u);
         uint32_t address = cortex_m4_exception_advanced_multiple_address(
@@ -515,7 +515,7 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
             if ((second & (1u << index)) == 0) {
                 continue;
             }
-            if (load) {
+            if (is_load) {
                 uint32_t value = 0;
                 if (!cortex_m4_internal_read_data(cpu, address, 4, &value)) {
                     return true;
@@ -564,11 +564,11 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
         const uint32_t base_value = base == 15 ? cortex_m4_internal_visible_pc32(cpu) & ~3u
                                                : cortex_m4_read_register_internal(cpu, base);
         const uint32_t address = base_value + (second & 0x0fffu);
-        const bool load = (memory_operation & 0x0010u) != 0;
+        const bool is_load = (memory_operation & 0x0010u) != 0;
         const uint8_t size = (memory_operation & 0x0040u) != 0   ? 4
                              : (memory_operation & 0x0020u) != 0 ? 2
                                                                  : 1;
-        if (!load) {
+        if (!is_load) {
             return cortex_m4_internal_write_data(cpu, address, size,
                                                  cortex_m4_read_register_internal(cpu, target));
         }
@@ -598,11 +598,11 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
         const uint32_t offset = second & 0xffu;
         const uint32_t offset_address = add ? base_value + offset : base_value - offset;
         const uint32_t address = pre_index ? offset_address : base_value;
-        const bool load = (memory_operation & 0x0010u) != 0;
+        const bool is_load = (memory_operation & 0x0010u) != 0;
         const uint8_t size = (memory_operation & 0x0040u) != 0   ? 4
                              : (memory_operation & 0x0020u) != 0 ? 2
                                                                  : 1;
-        if (load) {
+        if (is_load) {
             uint32_t value = 0;
             if (!cortex_m4_internal_read_data(cpu, address, size, &value)) {
                 return true;
