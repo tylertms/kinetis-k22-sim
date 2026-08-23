@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#ifdef K22_TEST_ALLOCATION_FAILURE
 static size_t allocations_remaining = SIZE_MAX;
 
 void* __real_malloc(size_t size);
@@ -35,8 +34,3 @@ void test_allow_allocations(void) { allocations_remaining = SIZE_MAX; }
 void test_fail_allocation_after(size_t successful_allocations) {
     allocations_remaining = successful_allocations;
 }
-#else
-void test_allow_allocations(void) {}
-
-void test_fail_allocation_after(size_t successful_allocations) { (void)successful_allocations; }
-#endif

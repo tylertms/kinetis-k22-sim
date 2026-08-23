@@ -7,7 +7,6 @@
 enum { MEMORY_SIZE = 256 };
 
 static const uint32_t FPCCR_LSPACT = 1u;
-static const uint32_t FPCCR_THREAD = 1u << 3u;
 static const uint32_t FPCCR_LSPEN = 1u << 30u;
 static const uint32_t FPCCR_ASPEN = 1u << 31u;
 

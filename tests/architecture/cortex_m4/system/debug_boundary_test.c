@@ -4,8 +4,7 @@
 
 #include "test.h"
 
-static const uint32_t ITM_BASE = 0xe0000000u, DWT_BASE = 0xe0001000u, FPB_BASE = 0xe0002000u,
-                      DCRSR = 0xe000edf4u, DCRDR = 0xe000edf8u, DEMCR = 0xe000edfcu,
+static const uint32_t ITM_BASE = 0xe0000000u, DCRSR = 0xe000edf4u, DCRDR = 0xe000edf8u,
                       TRACE_ENABLE = 1u << 24u;
 
 static CortexM4 create_cpu(void) {
