@@ -15,17 +15,18 @@ enum {
     SIM_SCGC5 = 0x40048038u,
 };
 
-static void write_value(TestState* state, KinetisK22* device, uint32_t address, uint8_t size,
-                        uint32_t value) {
+static void write_register(TestState* state, KinetisK22* device, uint32_t address, uint8_t size,
+                           uint32_t value) {
     expect(state, kinetis_k22_write(device, address, &value, size),
            "kinetis_k22_write(device, address, &value, size)");
 }
 
-static uint32_t read_value(TestState* state, KinetisK22* device, uint32_t address, uint8_t size) {
-    uint32_t value = 0;
-    expect(state, kinetis_k22_read(device, address, &value, size),
-           "kinetis_k22_read(device, address, &value, size)");
-    return value;
+static uint32_t read_register(TestState* state, KinetisK22* device, uint32_t address,
+                              uint8_t size) {
+    uint32_t output_value = 0;
+    expect(state, kinetis_k22_read(device, address, &output_value, size),
+           "kinetis_k22_read(device, address, &output_value, size)");
+    return output_value;
 }
 
 int main(void) {
@@ -33,32 +34,32 @@ int main(void) {
     KinetisK22* device = kinetis_k22_create(kinetis_k22_default_configuration());
     expect(&state, device != NULL, "device != NULL");
 
-    write_value(&state, device, SMC_PMPROT, 1, 0x80u);
-    write_value(&state, device, SMC_PMCTRL, 1, 0x60u);
-    expect(&state, read_value(&state, device, SMC_PMSTAT, 1) == 0x80u,
-           "read_value(&state, device, SMC_PMSTAT, 1) == 0x80u");
-    write_value(&state, device, SMC_PMCTRL, 1, 0);
-    expect(&state, read_value(&state, device, SMC_PMSTAT, 1) == 1,
-           "read_value(&state, device, SMC_PMSTAT, 1) == 1");
+    write_register(&state, device, SMC_PMPROT, 1, 0x80u);
+    write_register(&state, device, SMC_PMCTRL, 1, 0x60u);
+    expect(&state, read_register(&state, device, SMC_PMSTAT, 1) == 0x80u,
+           "read_register(&state, device, SMC_PMSTAT, 1) == 0x80u");
+    write_register(&state, device, SMC_PMCTRL, 1, 0);
+    expect(&state, read_register(&state, device, SMC_PMSTAT, 1) == 1,
+           "read_register(&state, device, SMC_PMSTAT, 1) == 1");
 
-    write_value(&state, device, MCG_C1, 1, 0x32u);
-    expect(&state, (read_value(&state, device, MCG_S, 1) & 0x1cu) == 0,
-           "(read_value(&state, device, MCG_S, 1) & 0x1cu) == 0");
-    write_value(&state, device, MCG_C6, 1, 0);
-    expect(&state, (read_value(&state, device, MCG_S, 1) & 0x1cu) == 0,
-           "(read_value(&state, device, MCG_S, 1) & 0x1cu) == 0");
+    write_register(&state, device, MCG_C1, 1, 0x32u);
+    expect(&state, (read_register(&state, device, MCG_S, 1) & 0x1cu) == 0,
+           "(read_register(&state, device, MCG_S, 1) & 0x1cu) == 0");
+    write_register(&state, device, MCG_C6, 1, 0);
+    expect(&state, (read_register(&state, device, MCG_S, 1) & 0x1cu) == 0,
+           "(read_register(&state, device, MCG_S, 1) & 0x1cu) == 0");
 
-    write_value(&state, device, SIM_SCGC5, 4, read_value(&state, device, SIM_SCGC5, 4) | 1u);
-    write_value(&state, device, LPTMR0_CSR, 4, 1);
-    expect(&state, read_value(&state, device, LPTMR0_CSR, 4) == 1u,
-           "read_value(&state, device, LPTMR0_CSR, 4) == 1u");
-    write_value(&state, device, LPTMR0_CSR, 4, 0);
-    expect(&state, read_value(&state, device, LPTMR0_CSR, 4) == 0,
-           "read_value(&state, device, LPTMR0_CSR, 4) == 0");
+    write_register(&state, device, SIM_SCGC5, 4, read_register(&state, device, SIM_SCGC5, 4) | 1u);
+    write_register(&state, device, LPTMR0_CSR, 4, 1);
+    expect(&state, read_register(&state, device, LPTMR0_CSR, 4) == 1u,
+           "read_register(&state, device, LPTMR0_CSR, 4) == 1u");
+    write_register(&state, device, LPTMR0_CSR, 4, 0);
+    expect(&state, read_register(&state, device, LPTMR0_CSR, 4) == 0,
+           "read_register(&state, device, LPTMR0_CSR, 4) == 0");
 
-    write_value(&state, device, SIM_SCGC5, 4, 0xa55ac33cu);
-    expect(&state, read_value(&state, device, SIM_SCGC5, 4) == 0x00040382u,
-           "read_value(&state, device, SIM_SCGC5, 4) == 0x00040382u");
+    write_register(&state, device, SIM_SCGC5, 4, 0xa55ac33cu);
+    expect(&state, read_register(&state, device, SIM_SCGC5, 4) == 0x00040382u,
+           "read_register(&state, device, SIM_SCGC5, 4) == 0x00040382u");
 
     kinetis_k22_destroy(device);
     return test_finish(&state);
