@@ -121,13 +121,15 @@ bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t size
 bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
 bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
 bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
-bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id, uint32_t* base,
-                                     uint32_t* size);
+bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id,
+                                     uint32_t* block_address, uint32_t* block_size);
 bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t size, uint32_t* value);
 bool k22_data_internal_rng_write(K22Data* data, uint32_t address, uint8_t size, uint32_t value);
-bool k22_data_internal_valid_access(uint32_t offset, uint8_t size, uint32_t length);
+bool k22_data_internal_valid_access(uint32_t byte_offset, uint8_t byte_count,
+                                    uint32_t buffer_length);
 uint32_t k22_data_internal_dma_priority_offset(uint8_t channel);
-uint32_t k22_data_internal_load_bytes(const uint8_t* bytes, uint32_t offset, uint8_t size);
+uint32_t k22_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t byte_offset,
+                                      uint8_t byte_count);
 uint32_t k22_data_internal_rng_next(uint32_t value);
 uint8_t k22_data_internal_dma_select_channel(const K22Data* data);
 void k22_data_internal_adc_complete(K22Data* data, uint8_t instance);
@@ -142,6 +144,7 @@ void k22_data_internal_dma_queue_hardware_channel(K22Data* data, uint8_t channel
 void k22_data_internal_dma_update_interrupts(K22Data* data);
 void k22_data_internal_flash_update_interrupts(K22Data* data);
 void k22_data_internal_interrupt(K22Data* data, K22DataInterrupt line, bool asserted);
-void k22_data_internal_store_bytes(uint8_t* bytes, uint32_t offset, uint8_t size, uint32_t value);
+void k22_data_internal_store_bytes(uint8_t* output_bytes, uint32_t byte_offset, uint8_t byte_count,
+                                   uint32_t write_value);
 
 #endif

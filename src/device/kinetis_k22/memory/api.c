@@ -3,16 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-uint32_t k22_data_internal_load_bytes(const uint8_t* bytes, uint32_t offset, uint8_t size) {
-    uint32_t value = 0;
-    for (uint8_t index = 0; index < size; index++)
-        value |= (uint32_t)bytes[offset + index] << (8u * index);
-    return value;
+uint32_t k22_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t byte_offset,
+                                      uint8_t byte_count) {
+    uint32_t output_value = 0u;
+    for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++)
+        output_value |= (uint32_t)input_bytes[byte_offset + byte_index] << (8u * byte_index);
+    return output_value;
 }
 
-void k22_data_internal_store_bytes(uint8_t* bytes, uint32_t offset, uint8_t size, uint32_t value) {
-    for (uint8_t index = 0; index < size; index++)
-        bytes[offset + index] = (uint8_t)(value >> (8u * index));
+void k22_data_internal_store_bytes(uint8_t* output_bytes, uint32_t byte_offset, uint8_t byte_count,
+                                   uint32_t write_value) {
+    for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++)
+        output_bytes[byte_offset + byte_index] = (uint8_t)(write_value >> (8u * byte_index));
 }
 
 void k22_data_internal_adc_reset_registers(K22Adc* adc) {
@@ -37,8 +39,10 @@ void k22_data_internal_adc_reset_registers(K22Adc* adc) {
     k22_data_internal_store_bytes(adc->registers, 0x6cu, 4u, 0x0020u);
 }
 
-bool k22_data_internal_valid_access(uint32_t offset, uint8_t size, uint32_t length) {
-    return (size == 1 || size == 2 || size == 4) && offset < length && size <= length - offset;
+bool k22_data_internal_valid_access(uint32_t byte_offset, uint8_t byte_count,
+                                    uint32_t buffer_length) {
+    return (byte_count == 1u || byte_count == 2u || byte_count == 4u) &&
+           byte_offset < buffer_length && byte_count <= buffer_length - byte_offset;
 }
 
 void k22_data_internal_interrupt(K22Data* data, K22DataInterrupt line, bool asserted) {
@@ -46,14 +50,14 @@ void k22_data_internal_interrupt(K22Data* data, K22DataInterrupt line, bool asse
         data->bus.interrupt(data->bus.context, line, asserted);
 }
 
-bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id, uint32_t* base,
-                                     uint32_t* size) {
+bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id,
+                                     uint32_t* block_address, uint32_t* block_size) {
     K22PeripheralBlock block;
     if (!k22_profile_peripheral_block(data->profile, id, &block))
         return false;
-    if (base != NULL)
-        *base = block.address;
-    if (size != NULL)
-        *size = block.size;
+    if (block_address != NULL)
+        *block_address = block.address;
+    if (block_size != NULL)
+        *block_size = block.size;
     return true;
 }
