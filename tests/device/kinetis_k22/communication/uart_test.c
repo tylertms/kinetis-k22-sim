@@ -45,6 +45,14 @@ int main(void) {
            "read_byte(&state, device, UART1_D) == 0x5au");
     expect(&state, (read_byte(&state, device, UART1_S1) & 0x20u) == 0,
            "(read_byte(&state, device, UART1_S1) & 0x20u) == 0");
+    expect(&state, kinetis_k22_uart1_error(device, 0xffu),
+           "kinetis_k22_uart1_error(device, 0xffu)");
+    expect(&state, (read_byte(&state, device, UART1_S1) & 0x0fu) == 0x0fu,
+           "(read_byte(&state, device, UART1_S1) & 0x0fu) == 0x0fu");
+    expect(&state, read_byte(&state, device, UART1_D) == 0u,
+           "read_byte(&state, device, UART1_D) == 0u");
+    expect(&state, (read_byte(&state, device, UART1_S1) & 0x0fu) == 0u,
+           "(read_byte(&state, device, UART1_S1) & 0x0fu) == 0u");
     write_byte(&state, device, UART1_D, 0xa5u);
     uint8_t transmitted_value = 0u;
     expect(&state, kinetis_k22_uart1_transmit(device, &transmitted_value),

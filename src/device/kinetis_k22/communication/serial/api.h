@@ -192,6 +192,8 @@ bool k22_serial_pop_spi_transfer(K22Serial* serial, K22SerialEndpoint endpoint,
                                  K22SerialSpiTransfer* transfer);
 bool k22_serial_i2c_set_acknowledge(K22Serial* serial, K22SerialEndpoint endpoint,
                                     bool acknowledge);
+bool k22_serial_i2c_detect_start(K22Serial* serial, K22SerialEndpoint endpoint);
+bool k22_serial_i2c_detect_stop(K22Serial* serial, K22SerialEndpoint endpoint);
 bool k22_serial_i2c_lose_arbitration(K22Serial* serial, K22SerialEndpoint endpoint);
 bool k22_serial_i2c_slave_address(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t address,
                                   bool read);

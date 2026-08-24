@@ -14,6 +14,9 @@ enum {
     I2C0 = 0x40066000u,
     I2C1 = 0x40067000u,
     UART0 = 0x4006a000u,
+    PMC_REGSC = 0x4007d002u,
+    RCM_SRS0 = 0x4007f000u,
+    RCM_SRS1 = 0x4007f001u,
 };
 
 static KinetisK22* create_device(TestState* test_state) {
@@ -56,6 +59,19 @@ static void test_data_api(TestState* state, KinetisK22* device) {
            "loaded_value == seed_value");
     expect(state, !kinetis_k22_seed(NULL, 0u, &seed_value, sizeof(seed_value)),
            "!kinetis_k22_seed(NULL, 0u, &seed_value, sizeof(seed_value))");
+
+    expect(state, kinetis_k22_set_reset_state(device, 0x91u, true),
+           "kinetis_k22_set_reset_state(device, 0x91u, true)");
+    uint8_t reset_status = 0u;
+    expect(state, kinetis_k22_read(device, RCM_SRS0, &reset_status, 1u) && reset_status == 0x81u,
+           "kinetis_k22_read(device, RCM_SRS0, &reset_status, 1u) && reset_status == 0x81u");
+    expect(state, kinetis_k22_read(device, RCM_SRS1, &reset_status, 1u) && reset_status == 0u,
+           "kinetis_k22_read(device, RCM_SRS1, &reset_status, 1u) && reset_status == 0u");
+    expect(state,
+           kinetis_k22_read(device, PMC_REGSC, &reset_status, 1u) && (reset_status & 8u) != 0u,
+           "kinetis_k22_read(device, PMC_REGSC, &reset_status, 1u) && (reset_status & 8u) != 0u");
+    expect(state, !kinetis_k22_set_reset_state(NULL, 0u, false),
+           "!kinetis_k22_set_reset_state(NULL, 0u, false)");
 
     expect(state, kinetis_k22_set_adc_channel(device, 0u, 31u, 0x1234u),
            "kinetis_k22_set_adc_channel(device, 0u, 31u, 0x1234u)");
@@ -236,7 +252,7 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
     uint8_t uart_received_value = 0u;
     uint16_t spi_received_value = 0u;
     expect(state,
-           !kinetis_k22_uart1_receive(NULL, 0u, 0u) &&
+           !kinetis_k22_uart1_receive(NULL, 0u, 0u) && !kinetis_k22_uart1_error(NULL, 0u) &&
                !kinetis_k22_uart1_transmit(NULL, &uart_received_value) &&
                !kinetis_k22_uart1_transmit(device, NULL) && !kinetis_k22_spi0_receive(NULL, 0u) &&
                !kinetis_k22_spi0_transmit(NULL, &spi_received_value) &&

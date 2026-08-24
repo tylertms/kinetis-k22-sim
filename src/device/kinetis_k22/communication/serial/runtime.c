@@ -322,6 +322,32 @@ bool k22_serial_i2c_set_acknowledge(K22Serial* serial, K22SerialEndpoint endpoin
     return true;
 }
 
+static K22SerialI2c* enabled_i2c(K22Serial* serial, K22SerialEndpoint endpoint) {
+    if (serial == NULL)
+        return NULL;
+    K22SerialI2c* i2c = endpoint_i2c(serial, endpoint);
+    if (i2c == NULL || !i2c->present || !i2c->clock_enabled ||
+        (i2c->registers[I2C_C1] & 0x80u) == 0)
+        return NULL;
+    return i2c;
+}
+
+bool k22_serial_i2c_detect_start(K22Serial* serial, K22SerialEndpoint endpoint) {
+    K22SerialI2c* i2c = enabled_i2c(serial, endpoint);
+    if (i2c == NULL)
+        return false;
+    i2c->registers[I2C_FLT] |= 0x10u;
+    return true;
+}
+
+bool k22_serial_i2c_detect_stop(K22Serial* serial, K22SerialEndpoint endpoint) {
+    K22SerialI2c* i2c = enabled_i2c(serial, endpoint);
+    if (i2c == NULL)
+        return false;
+    i2c->registers[I2C_FLT] |= 0x40u;
+    return true;
+}
+
 bool k22_serial_i2c_lose_arbitration(K22Serial* serial, K22SerialEndpoint endpoint) {
     if (serial == NULL)
         return false;
@@ -417,8 +443,9 @@ bool k22_serial_irq(const K22Serial* serial, K22SerialIrq irq) {
     case K22_SERIAL_IRQ_I2C1:
     case K22_SERIAL_IRQ_I2C2: {
         const K22SerialI2c* i2c = &serial->i2c[irq - K22_SERIAL_IRQ_I2C0];
-        return i2c->present && (i2c->registers[I2C_C1] & 0x40u) != 0 &&
-               (i2c->registers[I2C_S] & 0x12u) != 0;
+        return i2c->present &&
+               (((i2c->registers[I2C_C1] & 0x40u) != 0 && (i2c->registers[I2C_S] & 0x12u) != 0) ||
+                ((i2c->registers[I2C_FLT] & 0x20u) != 0 && (i2c->registers[I2C_FLT] & 0x50u) != 0));
     }
     case K22_SERIAL_IRQ_UART0:
     case K22_SERIAL_IRQ_UART1:

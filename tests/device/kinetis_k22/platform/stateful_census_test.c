@@ -157,7 +157,7 @@ int main(void) {
     }
     const bool census_matches = census.read_successes == 35164u &&
                                 census.write_successes == 35910u && census.signal_count == 89803u &&
-                                census.fingerprint == UINT64_C(1308970153178113273);
+                                census.fingerprint == UINT64_C(16146922478742010809);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32

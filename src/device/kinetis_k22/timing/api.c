@@ -23,6 +23,14 @@ void k22_timing_internal_update_llwu_irq(const K22Timing* timing) {
                                     has_pending_filter_wakeup);
 }
 
+bool k22_timing_set_reset_state(K22Timing* timing, uint8_t srs0, bool ackiso) {
+    if (timing == NULL)
+        return false;
+    timing->rcm[0] = srs0 & 0xefu;
+    timing->pmc[2] = (timing->pmc[2] & 0xf7u) | (ackiso ? 8u : 0u);
+    return true;
+}
+
 void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t request_source) {
     if (timing->signals.dma != NULL) {
         timing->signals.dma(timing->signals.context, request_source);

@@ -183,6 +183,8 @@ bool kinetis_k22_i2c_transfer(KinetisK22* device, KinetisK22SerialEndpoint endpo
                               KinetisK22I2cTransfer* transfer);
 bool kinetis_k22_i2c_acknowledge(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
                                  bool acknowledge);
+bool kinetis_k22_i2c_detect_start(KinetisK22* device, KinetisK22SerialEndpoint endpoint);
+bool kinetis_k22_i2c_detect_stop(KinetisK22* device, KinetisK22SerialEndpoint endpoint);
 bool kinetis_k22_i2c_lose_arbitration(KinetisK22* device, KinetisK22SerialEndpoint endpoint);
 bool kinetis_k22_i2c_receive(KinetisK22* device, KinetisK22SerialEndpoint endpoint, uint8_t value);
 bool kinetis_k22_usb_token(KinetisK22* device, uint8_t endpoint, uint8_t token, bool transmit);
@@ -201,7 +203,9 @@ bool kinetis_k22_flexbus_read(const KinetisK22* device, size_t window_offset, vo
                               size_t read_size);
 bool kinetis_k22_set_usb_charger(KinetisK22* device, KinetisK22UsbCharger charger);
 bool kinetis_k22_set_usb_pullup(KinetisK22* device, bool enabled);
+bool kinetis_k22_set_reset_state(KinetisK22* device, uint8_t srs0, bool ackiso);
 bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t value, uint8_t status);
+bool kinetis_k22_uart1_error(KinetisK22* device, uint8_t status);
 bool kinetis_k22_uart1_transmit(KinetisK22* device, uint8_t* output_value);
 bool kinetis_k22_spi0_receive(KinetisK22* device, uint16_t value);
 bool kinetis_k22_spi0_transmit(KinetisK22* device, uint16_t* output_value);

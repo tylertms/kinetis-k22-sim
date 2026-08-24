@@ -39,6 +39,13 @@ static void test_immediate_and_high_register(Fixture* fixture) {
     expect(fixture->state, (cortex_m4_get_xpsr(fixture->cpu) & (1u << 30u)) != 0u,
            "(cortex_m4_get_xpsr(fixture->cpu) & (1u << 30u)) != 0u");
 
+    cortex_m4_set_register(fixture->cpu, 3u, UINT8_MAX);
+    execute(fixture, 0x2b05u);
+    expect(fixture->state, (cortex_m4_get_xpsr(fixture->cpu) & CORTEX_M4_XPSR_C) != 0u,
+           "(cortex_m4_get_xpsr(fixture->cpu) & CORTEX_M4_XPSR_C) != 0u");
+    expect(fixture->state, (cortex_m4_get_xpsr(fixture->cpu) & CORTEX_M4_XPSR_Z) == 0u,
+           "(cortex_m4_get_xpsr(fixture->cpu) & CORTEX_M4_XPSR_Z) == 0u");
+
     cortex_m4_set_register(fixture->cpu, 0u, 0x12345678u);
     execute(fixture, 0x4680u);
     expect(fixture->state, reg(fixture, 8u) == 0x12345678u, "reg(fixture, 8u) == 0x12345678u");

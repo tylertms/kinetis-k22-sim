@@ -556,8 +556,8 @@ bool k22_serial_internal_write_i2c(K22Serial* serial, K22SerialI2c* i2c, uint32_
     } else if (register_offset == I2C_S) {
         i2c->registers[I2C_S] &= (uint8_t)~(register_value & 0x12u);
     } else if (register_offset == I2C_FLT) {
-        i2c->registers[I2C_FLT] = (register_value & 0x1fu) |
-                                  (i2c->registers[I2C_FLT] & (uint8_t)~(register_value & 0xe0u));
+        i2c->registers[I2C_FLT] =
+            (register_value & 0xafu) | (i2c->registers[I2C_FLT] & (uint8_t)~register_value & 0x50u);
     } else if (register_offset == I2C_D) {
         i2c->registers[I2C_D] = register_value;
         if ((i2c->registers[I2C_C1] & 0x30u) == 0x30u) {

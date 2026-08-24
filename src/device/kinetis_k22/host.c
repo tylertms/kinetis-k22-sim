@@ -127,6 +127,12 @@ bool kinetis_k22_set_usb_pullup(KinetisK22* device, bool enabled) {
     return k22_usbdcd_set_pullup(&device->usbdcd, enabled);
 }
 
+bool kinetis_k22_set_reset_state(KinetisK22* device, uint8_t srs0, bool ackiso) {
+    if (device == NULL)
+        return false;
+    return k22_timing_set_reset_state(&device->timing, srs0, ackiso);
+}
+
 void kinetis_k22_rng_seed(KinetisK22* device, uint32_t seed_value) {
     if (device != NULL) {
         k22_data_rng_seed(device->data, seed_value);
@@ -242,6 +248,27 @@ bool kinetis_k22_i2c_acknowledge(KinetisK22* device, KinetisK22SerialEndpoint en
     return acknowledge_accepted;
 }
 
+static bool i2c_detect_bus_event(KinetisK22* device, KinetisK22SerialEndpoint endpoint,
+                                 bool start) {
+    if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) ||
+        endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
+        return false;
+    }
+    const bool detected =
+        start ? k22_serial_i2c_detect_start(&device->serial, (K22SerialEndpoint)endpoint)
+              : k22_serial_i2c_detect_stop(&device->serial, (K22SerialEndpoint)endpoint);
+    kinetis_k22_internal_refresh_serial_signals(device);
+    return detected;
+}
+
+bool kinetis_k22_i2c_detect_start(KinetisK22* device, KinetisK22SerialEndpoint endpoint) {
+    return i2c_detect_bus_event(device, endpoint, true);
+}
+
+bool kinetis_k22_i2c_detect_stop(KinetisK22* device, KinetisK22SerialEndpoint endpoint) {
+    return i2c_detect_bus_event(device, endpoint, false);
+}
+
 bool kinetis_k22_i2c_lose_arbitration(KinetisK22* device, KinetisK22SerialEndpoint endpoint) {
     if (!kinetis_k22_internal_serial_endpoint_available(device, endpoint) ||
         endpoint < KINETIS_K22_SERIAL_I2C0 || endpoint > KINETIS_K22_SERIAL_I2C2) {
@@ -339,6 +366,22 @@ bool kinetis_k22_uart1_receive(KinetisK22* device, uint8_t received_value, uint8
     uart->receive.count++;
     (void)k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART1, true);
     (void)k22_serial_read(&device->serial, uart->base + 4u, 1, &(uint32_t){0});
+    kinetis_k22_internal_refresh_serial_signals(device);
+    kinetis_k22_sync_clock_gates(device);
+    return true;
+}
+
+bool kinetis_k22_uart1_error(KinetisK22* device, uint8_t receive_status) {
+    enum { UART_STATUS_1_OFFSET = 4u };
+    if (device == NULL) {
+        return false;
+    }
+    K22SerialUart* uart = &device->serial.uart[1];
+    if (!uart->present) {
+        return false;
+    }
+    uart->registers[UART_STATUS_1_OFFSET] |= receive_status & 0x0fu;
+    (void)k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART1, true);
     kinetis_k22_internal_refresh_serial_signals(device);
     kinetis_k22_sync_clock_gates(device);
     return true;

@@ -8,6 +8,7 @@ enum {
     I2C0_C1 = 0x40066002u,
     I2C0_S = 0x40066003u,
     I2C0_D = 0x40066004u,
+    I2C0_FLT = 0x40066006u,
     I2C0_C1_RSTA = 0x42cc0048u,
     I2C0_C1_TXAK = 0x42cc004cu,
     I2C0_IRQ = 24,
@@ -117,6 +118,23 @@ int main(void) {
            "(read_register8(&state, device, I2C0_S) & 0x12u) == 0x12u");
     expect(&state, (read_register8(&state, device, I2C0_C1) & 0x20u) == 0,
            "(read_register8(&state, device, I2C0_C1) & 0x20u) == 0");
+    write_register8(&state, device, I2C0_FLT, 0x2au);
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
+           "read_register8(&state, device, I2C0_FLT) == 0x2au");
+    expect(&state, kinetis_k22_i2c_detect_start(device, KINETIS_K22_SERIAL_I2C0),
+           "kinetis_k22_i2c_detect_start(device, KINETIS_K22_SERIAL_I2C0)");
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x3au,
+           "read_register8(&state, device, I2C0_FLT) == 0x3au");
+    write_register8(&state, device, I2C0_FLT, 0x3au);
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
+           "read_register8(&state, device, I2C0_FLT) == 0x2au");
+    expect(&state, kinetis_k22_i2c_detect_stop(device, KINETIS_K22_SERIAL_I2C0),
+           "kinetis_k22_i2c_detect_stop(device, KINETIS_K22_SERIAL_I2C0)");
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x6au,
+           "read_register8(&state, device, I2C0_FLT) == 0x6au");
+    write_register8(&state, device, I2C0_FLT, 0x6au);
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
+           "read_register8(&state, device, I2C0_FLT) == 0x2au");
     kinetis_k22_destroy(device);
     return test_finish(&state);
 }

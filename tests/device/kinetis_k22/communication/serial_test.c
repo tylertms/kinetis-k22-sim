@@ -327,6 +327,41 @@ static void test_i2c_master_events_timing_irq_and_dma(TestState* state) {
     expect_event(state, &serial, K22_SERIAL_I2C0, K22_SERIAL_EVENT_I2C_STOP, 0);
 }
 
+static void test_i2c_start_stop_detection(TestState* state) {
+    K22Serial serial = create_serial(state, K22_PROFILE_MK22FN51212);
+
+    expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true),
+           "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true)");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x2au);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
+
+    expect(state, k22_serial_i2c_detect_start(&serial, K22_SERIAL_I2C0),
+           "k22_serial_i2c_detect_start(&serial, K22_SERIAL_I2C0)");
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au");
+    expect(state, k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0),
+           "k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
+    expect(state, !k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0),
+           "!k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0)");
+
+    expect(state, k22_serial_i2c_detect_stop(&serial, K22_SERIAL_I2C0),
+           "k22_serial_i2c_detect_stop(&serial, K22_SERIAL_I2C0)");
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au");
+    expect(state, k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0),
+           "k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
+    expect(state, !k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0),
+           "!k22_serial_irq(&serial, K22_SERIAL_IRQ_I2C0)");
+}
+
 static void test_i2c_arbitration_disable_slave_and_reset(TestState* state) {
     K22Serial serial = create_serial(state, K22_PROFILE_MK22FN1M012);
 
@@ -464,8 +499,8 @@ static void test_register_edge_paths(TestState* state) {
     expect(state, k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true),
            "k22_serial_set_clock_gate(&serial, K22_PERIPHERAL_I2C0, true)");
     write_register(state, &serial, I2C0_BASE + 6, 1, 0xffu);
-    expect(state, (read_register(state, &serial, I2C0_BASE + 6, 1) & 0x1fu) == 0x1fu,
-           "(read_register(state, &serial, I2C0_BASE + 6, 1) & 0x1fu) == 0x1fu");
+    expect(state, read_register(state, &serial, I2C0_BASE + 6, 1) == 0xafu,
+           "read_register(state, &serial, I2C0_BASE + 6, 1) == 0xafu");
     expect(state, !k22_serial_read(&serial, I2C0_BASE, 2, &ignored_value),
            "!k22_serial_read(&serial, I2C0_BASE, 2, &ignored_value)");
     expect(state, !k22_serial_write(&serial, I2C0_BASE, 4, 0),
@@ -602,6 +637,10 @@ static void test_invalid_operations(TestState* state) {
            "!k22_serial_pop_event(NULL, &serial_event)");
     expect(state, !k22_serial_i2c_set_acknowledge(NULL, K22_SERIAL_I2C0, true),
            "!k22_serial_i2c_set_acknowledge(NULL, K22_SERIAL_I2C0, true)");
+    expect(state, !k22_serial_i2c_detect_start(NULL, K22_SERIAL_I2C0),
+           "!k22_serial_i2c_detect_start(NULL, K22_SERIAL_I2C0)");
+    expect(state, !k22_serial_i2c_detect_stop(NULL, K22_SERIAL_I2C0),
+           "!k22_serial_i2c_detect_stop(NULL, K22_SERIAL_I2C0)");
     expect(state, !k22_serial_i2c_lose_arbitration(NULL, K22_SERIAL_I2C0),
            "!k22_serial_i2c_lose_arbitration(NULL, K22_SERIAL_I2C0)");
     expect(state, !k22_serial_i2c_slave_address(NULL, K22_SERIAL_I2C0, 0, false),
@@ -632,6 +671,8 @@ static void test_invalid_operations(TestState* state) {
            "unavailable_serial SPI has no transfers");
     expect(state,
            !k22_serial_i2c_set_acknowledge(&unavailable_serial, K22_SERIAL_I2C0, true) &&
+               !k22_serial_i2c_detect_start(&unavailable_serial, K22_SERIAL_I2C0) &&
+               !k22_serial_i2c_detect_stop(&unavailable_serial, K22_SERIAL_I2C0) &&
                !k22_serial_i2c_lose_arbitration(&unavailable_serial, K22_SERIAL_I2C0) &&
                !k22_serial_i2c_slave_address(&unavailable_serial, K22_SERIAL_I2C0, 0u, false),
            "unavailable_serial I2C rejects bus events");
@@ -646,6 +687,7 @@ int main(void) {
     test_spi_transfer_fifo_interrupt_dma_and_errors(&state);
     test_spi_profile_presence(&state);
     test_i2c_master_events_timing_irq_and_dma(&state);
+    test_i2c_start_stop_detection(&state);
     test_i2c_arbitration_disable_slave_and_reset(&state);
     test_register_edge_paths(&state);
     test_event_capacity(&state);
