@@ -5,7 +5,7 @@ C simulator for the 100 MHz and 120 MHz NXP Kinetis K22F microcontroller familie
 ## Features
 
 - CPU Core: Armv7E-M instruction set (Thumb, Thumb-2, DSP, FPv4-SP-D16 floating-point unit).
-- Core Peripherals: NVIC, SCB, SysTick, bit-band operations, MPU, breakpoints, and cycle-accurate execution.
+- Core Peripherals: NVIC, SCB, SysTick, bit-band operations, MPU, breakpoints, and cycle-counted execution.
 - Kinetis K22 Peripherals: Flash/SRAM, eDMA, DMAMUX, SIM, MCG, WDOG, PIT, LPTMR, ADC, UART, SPI, I2C, USB, GPIO.
 - Device Profiles: MK22F12810, MK22FN12812, MK22FN25612, MK22FN51212, MK22FN1M012, and MK22FX51212.
 - Device Packages: AK, LH, MP, AH, LK, AP, BP, FX, LL, DC, MC, LQ, and MD variants supported by each profile.
@@ -69,3 +69,9 @@ cmake --build build/simulator --target test-coverage
 ```
 
 The coverage target requires GCC and gcov. It prints the summary after all tests pass.
+
+### Verification Scope
+
+The suite covers core, device, image, and runner behavior. It exhaustively fingerprints all Thumb encodings in three processor states and checks that earlier Thumb-2 decoder groups cannot claim branch encodings.
+
+The fingerprints detect regressions in this simulator. They are not an independent Arm or NXP conformance oracle, and they do not prove exact silicon timing or electrical behavior.

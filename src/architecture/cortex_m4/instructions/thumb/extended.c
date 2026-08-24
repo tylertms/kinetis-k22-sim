@@ -7,7 +7,7 @@ static uint32_t immediate12(uint16_t first, uint16_t second) {
 
 static bool execute_wide_add_subtract(CortexM4* cpu, uint16_t first, uint16_t second) {
     const uint16_t operation = first & 0xfbf0u;
-    if (operation != 0xf200u && operation != 0xf2a0u) {
+    if ((operation != 0xf200u && operation != 0xf2a0u) || (second & 0x8000u) != 0u) {
         return false;
     }
     const uint8_t source = (uint8_t)(first & 15u);

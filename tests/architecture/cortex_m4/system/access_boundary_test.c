@@ -1,5 +1,8 @@
 #include "architecture/cortex_m4/internal.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "test.h"
 
 #define ITM_PORT UINT32_C(0xe0000000)
@@ -127,11 +130,10 @@ static void access_census(TestState* state, CortexM4* cpu) {
                 for (uint8_t access = CORTEX_M4_ACCESS_INSTRUCTION;
                      access <= CORTEX_M4_ACCESS_DEBUG; access++) {
                     uint32_t value = UINT32_C(0xa5a55a5a);
-                    record_access(&census,
-                                  cortex_m4_system_read(cpu, addresses[address_index] + offset,
-                                                        sizes[size_index], (CortexM4Access)access,
-                                                        &value),
-                                  value);
+                    const CortexM4SystemAccess read_result =
+                        cortex_m4_system_read(cpu, addresses[address_index] + offset,
+                                              sizes[size_index], (CortexM4Access)access, &value);
+                    record_access(&census, read_result, value);
                     record_access(&census,
                                   cortex_m4_system_write(cpu, addresses[address_index] + offset,
                                                          sizes[size_index], (CortexM4Access)access,
@@ -141,10 +143,16 @@ static void access_census(TestState* state, CortexM4* cpu) {
             }
         }
     }
-    expect(state,
-           census.accepted == 134u && census.rejected == 6970u && census.outside == 576u &&
-               census.fingerprint == UINT64_C(17579825366673452793),
-           "system access census matches");
+    const bool census_matches = census.accepted == 134u && census.rejected == 6970u &&
+                                census.outside == 576u &&
+                                census.fingerprint == UINT64_C(2045753942671157353);
+    if (!census_matches) {
+        fprintf(stderr,
+                "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " outside=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.accepted, census.rejected, census.outside, census.fingerprint);
+    }
+    expect(state, census_matches, "system access census matches");
 }
 
 int main(void) {

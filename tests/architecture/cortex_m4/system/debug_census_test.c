@@ -1,5 +1,7 @@
 #include "architecture/cortex_m4/internal.h"
 
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "test.h"
@@ -58,7 +60,9 @@ static void register_census(CortexM4* cpu, DebugCensus* census) {
                     for (uint8_t size = 0u; size <= 5u; size++) {
                         const uint32_t address = bases[base_index] + offset + byte;
                         uint32_t value = UINT32_C(0xa5a55a5a);
-                        record(census, cortex_m4_debug_read(cpu, address, size, &value), value);
+                        const CortexM4SystemAccess read_result =
+                            cortex_m4_debug_read(cpu, address, size, &value);
+                        record(census, read_result, value);
                         record(census,
                                cortex_m4_debug_write(cpu, address, size,
                                                      UINT32_C(0x5aa5a55a) ^ address ^ state),
@@ -106,9 +110,15 @@ int main(void) {
     DebugCensus census = {UINT32_C(0x9e3779b9), 0u, 0u, 0u, UINT64_C(14695981039346656037)};
     register_census(&cpu, &census);
     event_census(&cpu, &census);
-    expect(&state,
-           census.accepted == 44580u && census.rejected == 1532508u && census.outside == 8064u &&
-               census.fingerprint == UINT64_C(10725639757196505340),
-           "debug census matches");
+    const bool census_matches = census.accepted == 44580u && census.rejected == 1532508u &&
+                                census.outside == 8064u &&
+                                census.fingerprint == UINT64_C(14090337132364234977);
+    if (!census_matches) {
+        fprintf(stderr,
+                "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " outside=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.accepted, census.rejected, census.outside, census.fingerprint);
+    }
+    expect(&state, census_matches, "debug census matches");
     return test_finish(&state);
 }

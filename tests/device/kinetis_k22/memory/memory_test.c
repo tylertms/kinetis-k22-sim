@@ -34,15 +34,14 @@ static Census census_bit_band(KinetisK22* device) {
         }
     }
     uint32_t value = 0u;
-    record(&census,
-           bus->read(bus->context, K22_BIT_BAND_BASE + 1u, 4u, CORTEX_M4_ACCESS_DEBUG, &value),
-           value);
+    bool read_accepted =
+        bus->read(bus->context, K22_BIT_BAND_BASE + 1u, 4u, CORTEX_M4_ACCESS_DEBUG, &value);
+    record(&census, read_accepted, value);
     record(&census,
            bus->write(bus->context, K22_BIT_BAND_BASE + 1u, 4u, CORTEX_M4_ACCESS_DEBUG, 0u), value);
-    record(&census,
-           bus->read(bus->context, K22_BIT_BAND_BASE + K22_BIT_BAND_SIZE - 4u, 4u,
-                     CORTEX_M4_ACCESS_DEBUG, &value),
-           value);
+    read_accepted = bus->read(bus->context, K22_BIT_BAND_BASE + K22_BIT_BAND_SIZE - 4u, 4u,
+                              CORTEX_M4_ACCESS_DEBUG, &value);
+    record(&census, read_accepted, value);
     return census;
 }
 

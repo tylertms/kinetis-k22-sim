@@ -34,6 +34,35 @@ static void test_branches(Fixture* fixture) {
     execute(fixture, 0xf000u, 0x8002u);
     expect(fixture->state, fixture->cpu->registers[15] == 0x104u,
            "fixture->cpu->registers[15] == 0x104u");
+    fixture->cpu->xpsr = CORTEX_M4_XPSR_T | CORTEX_M4_XPSR_C;
+    execute(fixture, 0xf200u, 0x8097u);
+    expect(fixture->state, fixture->cpu->registers[15] == 0x232u,
+           "fixture->cpu->registers[15] == 0x232u");
+}
+
+static void test_branch_decode_precedence(Fixture* fixture) {
+    uint64_t branch_count = 0u;
+    bool overlap = false;
+    for (uint32_t first = 0xf000u; first <= 0xf7ffu && !overlap; first++) {
+        const uint32_t condition = (first >> 6u) & 15u;
+        for (uint32_t second = 0u; second <= UINT16_MAX; second++) {
+            const uint32_t branch = second & 0xd000u;
+            if (branch != 0xd000u && branch != 0x9000u && (branch != 0x8000u || condition >= 14u)) {
+                continue;
+            }
+            branch_count++;
+            overlap =
+                cortex_m4_execute_remaining(fixture->cpu, (uint16_t)first, (uint16_t)second) ||
+                cortex_m4_execute_thumb32_extra(fixture->cpu, (uint16_t)first, (uint16_t)second) ||
+                cortex_m4_execute_dsp(fixture->cpu, (uint16_t)first, (uint16_t)second);
+            if (overlap) {
+                break;
+            }
+        }
+    }
+    expect(fixture->state, branch_count == UINT64_C(48234496),
+           "branch_count == UINT64_C(48234496)");
+    expect(fixture->state, !overlap, "no earlier decoder accepts a branch encoding");
 }
 
 static void test_special_registers(Fixture* fixture) {
@@ -288,6 +317,7 @@ int main(void) {
     expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
     Fixture fixture = {&state, device, kinetis_k22_cpu(device)};
     test_branches(&fixture);
+    test_branch_decode_precedence(&fixture);
     test_special_registers(&fixture);
     test_immediates(&fixture);
     test_arithmetic(&fixture);

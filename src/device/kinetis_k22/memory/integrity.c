@@ -46,10 +46,15 @@ static uint32_t crc_result(const K22Data* data) {
     return wide_crc ? crc_value : stored_high_bits | (crc_value & 0xffffu);
 }
 
+static bool crc_valid_access(uint32_t register_offset, uint8_t byte_count) {
+    return k22_data_internal_valid_access(register_offset, byte_count, 12u) &&
+           (register_offset & 3u) + byte_count <= 4u;
+}
+
 bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_count,
                                 uint32_t* output_value) {
     const uint32_t register_offset = address - CRC_BASE;
-    if (!k22_data_internal_valid_access(register_offset, byte_count, 12u))
+    if (!crc_valid_access(register_offset, byte_count))
         return false;
     if (register_offset < 4u) {
         *output_value = crc_result(data) >> (register_offset * 8u);
@@ -65,7 +70,7 @@ bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_co
 bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t byte_count,
                                  uint32_t write_value) {
     const uint32_t register_offset = address - CRC_BASE;
-    if (!k22_data_internal_valid_access(register_offset, byte_count, 12u))
+    if (!crc_valid_access(register_offset, byte_count))
         return false;
     if (register_offset < 4u) {
         if ((data->crc_control & 0x02000000u) != 0) {

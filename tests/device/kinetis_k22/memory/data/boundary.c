@@ -98,6 +98,14 @@ void k22_data_test_test_api_boundaries(TestState* state) {
            !k22_data_internal_crc_read(first, CRC + 12u, 4u, &word) &&
                !k22_data_internal_crc_write(first, CRC + 12u, 4u, 0u),
            "CRC rejects out-of-range registers");
+    for (uint32_t register_offset = 0u; register_offset < 12u; register_offset += 4u) {
+        expect(state,
+               !k22_data_internal_crc_read(first, CRC + register_offset + 3u, 2u, &word) &&
+                   !k22_data_internal_crc_write(first, CRC + register_offset + 3u, 2u, 0u) &&
+                   !k22_data_internal_crc_read(first, CRC + register_offset + 1u, 4u, &word) &&
+                   !k22_data_internal_crc_write(first, CRC + register_offset + 1u, 4u, 0u),
+               "CRC rejects accesses across register boundaries");
+    }
     expect(state, k22_data_internal_rng_next(0u) == 0x6d2b79f5u,
            "zero RNG state recovers to the default seed");
     for (uint32_t offset = 0u; offset < 16u; offset += 4u)

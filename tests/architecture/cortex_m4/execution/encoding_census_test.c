@@ -1,6 +1,8 @@
 #include "kinetis_k22.h"
 
+#include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "architecture/cortex_m4/internal.h"
@@ -129,7 +131,7 @@ int main(int argc, char** argv) {
     };
     static const uint64_t expected_executed[24] = {
         11165931u, 18487135u, 11515392u, 10687488u, 320256u,   2486784u,  2891040u,  0u,
-        25994022u, 25650462u, 19546112u, 17231371u, 26013696u, 25669632u, 19546112u, 15302656u,
+        25994022u, 25650462u, 18776064u, 17231371u, 26013696u, 25669632u, 18776064u, 15302656u,
         16672624u, 7687072u,  1104264u,  3482136u,  0u,        0u,        0u,        0u,
     };
     static const uint64_t expected_fingerprints[24] = {
@@ -138,9 +140,9 @@ int main(int argc, char** argv) {
         UINT64_C(229153025585920568),   UINT64_C(8806714289990595429),
         UINT64_C(5579980413187923948),  UINT64_C(13945169685019501349),
         UINT64_C(14429519315073962497), UINT64_C(9360902978296142409),
-        UINT64_C(948640740039792421),   UINT64_C(8930834599203716791),
+        UINT64_C(3022176430939378469),  UINT64_C(8930834599203716791),
         UINT64_C(14938244973230212133), UINT64_C(18390324586635231269),
-        UINT64_C(2073469691219679013),  UINT64_C(14976156243861903901),
+        UINT64_C(18404655547084280613), UINT64_C(14976156243861903901),
         UINT64_C(4316239447711128326),  UINT64_C(5857029729619730063),
         UINT64_C(4570402664723792546),  UINT64_C(14807501672243050140),
         UINT64_C(2258742799113528101),  UINT64_C(12554654631497704229),
@@ -163,12 +165,18 @@ int main(int argc, char** argv) {
                thumb16.executed_count == 146023u &&
                thumb16.fingerprint == UINT64_C(14300317076329787867),
            "thumb16 census matches");
-    expect(&test_state,
-           thumb32.examined_count == 50331648u &&
-               thumb32.permitted_count == expected_permitted[shard] &&
-               thumb32.executed_count == expected_executed[shard] &&
-               thumb32.fingerprint == expected_fingerprints[shard],
-           "thumb32 census matches");
+    const bool thumb32_matches = thumb32.examined_count == 50331648u &&
+                                 thumb32.permitted_count == expected_permitted[shard] &&
+                                 thumb32.executed_count == expected_executed[shard] &&
+                                 thumb32.fingerprint == expected_fingerprints[shard];
+    if (!thumb32_matches) {
+        fprintf(stderr,
+                "[census] shard=%u examined=%" PRIu64 " permitted=%" PRIu64 " executed=%" PRIu64
+                " fingerprint=%" PRIu64 "\n",
+                shard, thumb32.examined_count, thumb32.permitted_count, thumb32.executed_count,
+                thumb32.fingerprint);
+    }
+    expect(&test_state, thumb32_matches, "thumb32 census matches");
     kinetis_k22_destroy(device);
     return test_finish(&test_state);
 }

@@ -1,5 +1,8 @@
 #include "device/kinetis_k22/internal.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "test.h"
 
 typedef struct {
@@ -122,10 +125,15 @@ int main(void) {
         mix_fingerprint(&census, access_results);
         mix_fingerprint(&census, (uint32_t)device->cmt_cycles ^ device->timing.sim_scgc6);
     }
-    expect(&state,
-           census.accepted_accesses == 411772u && census.rejected_accesses == 288228u &&
-               census.fingerprint == UINT64_C(1118456075959424554),
-           "peripheral state census matches");
+    const bool census_matches = census.accepted_accesses == 411294u &&
+                                census.rejected_accesses == 288706u &&
+                                census.fingerprint == UINT64_C(585895875121782539);
+    if (!census_matches) {
+        fprintf(stderr,
+                "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " fingerprint=%" PRIu64 "\n",
+                census.accepted_accesses, census.rejected_accesses, census.fingerprint);
+    }
+    expect(&state, census_matches, "peripheral state census matches");
     kinetis_k22_destroy(device);
     return test_finish(&state);
 }
