@@ -44,7 +44,7 @@ if(PROJECT_IS_TOP_LEVEL AND NOT KINETIS_K22_ENABLE_COVERAGE)
               "${kinetis_k22_coverage_build_directory}" --parallel
       COMMAND
         "${CMAKE_CTEST_COMMAND}" --test-dir
-        "${kinetis_k22_coverage_build_directory}" --output-on-failure --parallel
+        "${kinetis_k22_coverage_build_directory}" --output-on-failure --parallel 1
       COMMAND
         "${CMAKE_COMMAND}"
         "-DCOVERAGE_BUILD_DIRECTORY=${kinetis_k22_coverage_build_directory}"

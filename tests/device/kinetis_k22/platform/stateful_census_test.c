@@ -1,5 +1,8 @@
 #include "kinetis_k22.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "device/kinetis_k22/internal.h"
 #include "test.h"
 
@@ -152,9 +155,16 @@ int main(void) {
          profile < KINETIS_K22_PROFILE_COUNT; profile++) {
         exercise_profile(&state, &census, profile);
     }
-    expect(&state,
-           census.read_successes == 35164u && census.write_successes == 35910u &&
-               census.signal_count == 89803u && census.fingerprint == UINT64_C(1308970153178113273),
-           "stateful census matches");
+    const bool census_matches = census.read_successes == 35164u &&
+                                census.write_successes == 35910u && census.signal_count == 89803u &&
+                                census.fingerprint == UINT64_C(1308970153178113273);
+    if (!census_matches) {
+        fprintf(stderr,
+                "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.read_successes, census.write_successes, census.signal_count,
+                census.fingerprint);
+    }
+    expect(&state, census_matches, "stateful census matches");
     return test_finish(&state);
 }

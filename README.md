@@ -69,9 +69,3 @@ cmake --build build/simulator --target test-coverage
 ```
 
 The coverage target requires GCC and gcov. It prints the summary after all tests pass.
-
-### Verification Scope
-
-The suite covers core, device, image, and runner behavior. It exhaustively fingerprints all Thumb encodings in three processor states and checks that earlier Thumb-2 decoder groups cannot claim branch encodings.
-
-The fingerprints detect regressions in this simulator. They are not an independent Arm or NXP conformance oracle, and they do not prove exact silicon timing or electrical behavior.
