@@ -161,6 +161,26 @@ static void test_symbol(TestState* state) {
            "!cortex_m4_elf_symbol_data(image, sizeof(image), missing, &address)");
     expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address),
            "!cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address)");
+
+    image[0] = 0u;
+    expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),
+           "symbol lookup rejects invalid ELF identity");
+    initialize_symbol_image(image);
+    write16(image, 46u, ELF_SECTION_SIZE - 1u);
+    expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),
+           "symbol lookup rejects a short section entry");
+    initialize_symbol_image(image);
+    write32(image, ELF_HEADER_SIZE + ELF_SECTION_SIZE + 36u, 0u);
+    expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),
+           "symbol lookup skips an invalid symbol table entry size");
+    initialize_symbol_image(image);
+    write32(image, ELF_HEADER_SIZE + 2u * ELF_SECTION_SIZE + 16u, UINT32_MAX);
+    expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),
+           "symbol lookup skips an out-of-range string table");
+    initialize_symbol_image(image);
+    write32(image, SYMBOL_OFFSET, 6u);
+    expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),
+           "symbol lookup skips an out-of-range symbol name");
 }
 
 int main(void) {
@@ -174,6 +194,10 @@ int main(void) {
     test_files(&state, device);
 
     uint32_t entry_address = 0;
+    expect(&state, !cortex_m4_load_elf_data(NULL, image, sizeof(image), &entry_address),
+           "ELF loading requires a device");
+    expect(&state, !cortex_m4_load_elf_data(device, NULL, sizeof(image), &entry_address),
+           "ELF loading requires image data");
     expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), &entry_address),
            "cortex_m4_load_elf_data(device, image, sizeof(image), &entry_address)");
     expect(&state, entry_address == 0x101u, "entry_address == 0x101u");
@@ -218,6 +242,10 @@ int main(void) {
            "out-of-range segment is rejected");
     expect(&state, !cortex_m4_load_elf_data(device, image, ELF_HEADER_SIZE - 1u, NULL),
            "truncated ELF header is rejected");
+    initialize_image(image);
+    write32(image, ELF_HEADER_SIZE, 0u);
+    expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), NULL),
+           "non-load program headers are skipped");
 
     kinetis_k22_destroy(device);
     return test_finish(&state);

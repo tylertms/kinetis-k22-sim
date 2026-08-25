@@ -152,6 +152,12 @@ static void test_gpio_mux_pull_open_drain_and_lock(TestState* state) {
            "read_value(state, &io, bit_band_address(GPIOA, 2), 4) == 1u");
     expect(state, (read_value(state, &io, GPIOA, 4) & 4u) != 0,
            "(read_value(state, &io, GPIOA, 4) & 4u) != 0");
+    uint32_t invalid_alias_value = 0u;
+    const uint32_t invalid_alias = bit_band_address(0x400fffffu, 0u);
+    expect(state, !k22_io_read(&io, invalid_alias, 4u, &invalid_alias_value),
+           "bit-band read rejects an unmapped source byte");
+    expect(state, !k22_io_write(&io, invalid_alias, 4u, 1u),
+           "bit-band write rejects an unmapped source byte");
     expect(state, !k22_io_drive_pin(&io, 0, 7, true), "!k22_io_drive_pin(&io, 0, 7, true)");
     expect(state, !k22_io_release_pin(&io, 6, 0), "!k22_io_release_pin(&io, 6, 0)");
 }

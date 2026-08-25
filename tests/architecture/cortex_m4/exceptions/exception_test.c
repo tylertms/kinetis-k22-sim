@@ -25,6 +25,10 @@ int main(void) {
            "kinetis_k22_load(device, 0x200, handler, sizeof(handler))");
     expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
     CortexM4* cpu = kinetis_k22_cpu(device);
+    cortex_m4_set_irq_level(NULL, 0u, true);
+    cortex_m4_set_irq_level(cpu, 64u, true);
+    expect(&state, !cortex_m4_get_irq_active(NULL, 0u), "null processor has no active IRQ");
+    expect(&state, !cortex_m4_get_irq_active(cpu, 64u), "out-of-range IRQ is not active");
     expect(&state, cortex_m4_write_memory(cpu, 0xe000e100u, 4, 1),
            "cortex_m4_write_memory(cpu, 0xe000e100u, 4, 1)");
     cortex_m4_set_irq(cpu, 0, true);

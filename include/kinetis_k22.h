@@ -143,6 +143,12 @@ bool kinetis_k22_read(const KinetisK22* device, uint32_t address, void* output_d
 bool kinetis_k22_write(KinetisK22* device, uint32_t address, const void* input_data,
                        size_t data_size);
 bool kinetis_k22_copy(KinetisK22* destination, const KinetisK22* source);
+uint64_t kinetis_k22_get_uninitialized_sram_read_count(const KinetisK22* device);
+uint32_t kinetis_k22_get_first_uninitialized_sram_read(const KinetisK22* device);
+void kinetis_k22_clear_uninitialized_sram_reads(KinetisK22* device);
+bool kinetis_k22_register_state_equal(KinetisK22* first, KinetisK22* second,
+                                      uint32_t* first_difference, uint32_t* first_value,
+                                      uint32_t* second_value);
 void kinetis_k22_advance(KinetisK22* device, uint32_t cycle_count);
 void kinetis_k22_watchdog_advance(KinetisK22* device, uint32_t ticks);
 uint32_t kinetis_k22_core_clock_hz(const KinetisK22* device);

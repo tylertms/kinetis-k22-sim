@@ -112,6 +112,13 @@ set(kinetis_k22_simulator_sources
     src/device/kinetis_k22/platform/peripherals.c
     src/device/kinetis_k22/platform/registers.c)
 
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  set_source_files_properties(
+    src/device/kinetis_k22/platform/peripherals.c
+    src/device/kinetis_k22/platform/registers.c
+    PROPERTIES COMPILE_OPTIONS -fno-strict-aliasing)
+endif()
+
 add_library(kinetis_k22_simulator STATIC ${kinetis_k22_simulator_sources})
 add_library(kinetis_k22::simulator ALIAS kinetis_k22_simulator)
 

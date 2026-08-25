@@ -163,6 +163,8 @@ static void test_data_api(TestState* state, KinetisK22* device) {
 }
 
 static void test_serial_api(TestState* state, KinetisK22* device) {
+    expect(state, !k22_serial_set_clock_gate(NULL, K22_PERIPHERAL_UART0, true),
+           "null serial state rejects clock-gate changes");
     expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true),
            "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true)");
     serial_write(state, device, UART0 + 3u, 1u, 0x08u);
@@ -240,6 +242,10 @@ static void test_serial_api(TestState* state, KinetisK22* device) {
            "kinetis_k22_i2c_acknowledge(device, KINETIS_K22_SERIAL_I2C0, false)");
     expect(state, !kinetis_k22_i2c_acknowledge(device, KINETIS_K22_SERIAL_UART0, true),
            "!kinetis_k22_i2c_acknowledge(device, KINETIS_K22_SERIAL_UART0, true)");
+    expect(state, !kinetis_k22_i2c_detect_start(device, KINETIS_K22_SERIAL_UART0),
+           "I2C start rejects a non-I2C endpoint");
+    expect(state, !kinetis_k22_i2c_detect_stop(NULL, KINETIS_K22_SERIAL_I2C0),
+           "I2C stop rejects a null device");
     expect(state, kinetis_k22_i2c_lose_arbitration(device, KINETIS_K22_SERIAL_I2C0),
            "kinetis_k22_i2c_lose_arbitration(device, KINETIS_K22_SERIAL_I2C0)");
     expect(state, !kinetis_k22_i2c_lose_arbitration(device, KINETIS_K22_SERIAL_UART0),
@@ -402,6 +408,9 @@ static void test_guards(TestState* state, KinetisK22* device) {
            "!kinetis_k22_next_event(device, &event)");
     expect(state, !kinetis_k22_next_event(NULL, &event), "!kinetis_k22_next_event(NULL, &event)");
     expect(state, !kinetis_k22_next_event(device, NULL), "!kinetis_k22_next_event(device, NULL)");
+    uint8_t card_byte = 0u;
+    expect(state, !kinetis_k22_sdhc_read_card(NULL, 0u, &card_byte, sizeof(card_byte)),
+           "SDHC card reads require a device");
 }
 
 #ifdef K22_TEST_ALLOCATION_FAILURE

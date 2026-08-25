@@ -189,6 +189,19 @@ bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, ui
     return true;
 }
 
+bool k22_timing_projected_watchdog_read(const K22Timing* timing, uint32_t address, uint8_t size,
+                                        uint32_t* output_value) {
+    if (timing == NULL || output_value == NULL) {
+        return false;
+    }
+    if (!timing->wdog_update_open || !timing->wdog_update_written) {
+        return k22_timing_internal_read_wdog(timing, address, size, output_value);
+    }
+    K22Timing projected = *timing;
+    apply_watchdog_update(&projected);
+    return k22_timing_internal_read_wdog(&projected, address, size, output_value);
+}
+
 static bool is_valid_sequence_byte(uint8_t lane, uint8_t byte_value, uint16_t first,
                                    uint16_t second) {
     const uint8_t shift = lane * 8u;

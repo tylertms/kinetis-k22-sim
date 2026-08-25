@@ -196,6 +196,8 @@ typedef struct {
 bool k22_timing_init(K22Timing* timing, const K22Profile* profile, uint32_t external_oscillator_hz,
                      uint32_t rtc_oscillator_hz, K22TimingSignals signals);
 bool k22_timing_read(K22Timing* timing, uint32_t address, uint8_t size, uint32_t* value);
+bool k22_timing_projected_watchdog_read(const K22Timing* timing, uint32_t address, uint8_t size,
+                                        uint32_t* value);
 bool k22_timing_write(K22Timing* timing, uint32_t address, uint8_t size, uint32_t value);
 bool k22_timing_set_reset_state(K22Timing* timing, uint8_t srs0, bool ackiso);
 void k22_timing_advance(K22Timing* timing, uint32_t core_cycles);

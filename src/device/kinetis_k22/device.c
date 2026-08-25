@@ -219,6 +219,17 @@ static bool memory_read_unprotected(KinetisK22* device, uint32_t address, uint8_
     }
     if (valid_memory_range(address, access_size, device->sram_base,
                            device->configuration.sram_size)) {
+        const uint32_t offset = address - device->sram_base;
+        if (access != CORTEX_M4_ACCESS_DEBUG) {
+            for (uint8_t byte_index = 0u; byte_index < access_size; byte_index++) {
+                if (device->sram_initialized[offset + byte_index] == 0u) {
+                    if (device->uninitialized_sram_read_count == 0u) {
+                        device->first_uninitialized_sram_read = address + byte_index;
+                    }
+                    device->uninitialized_sram_read_count++;
+                }
+            }
+        }
         *output_value = read_little_endian(device->sram + address - device->sram_base, access_size);
         return true;
     }
@@ -277,7 +288,9 @@ static bool memory_write_unprotected(KinetisK22* device, uint32_t address, uint8
     }
     if (valid_memory_range(address, access_size, device->sram_base,
                            device->configuration.sram_size)) {
-        write_little_endian(device->sram + address - device->sram_base, access_size, write_value);
+        const uint32_t offset = address - device->sram_base;
+        write_little_endian(device->sram + offset, access_size, write_value);
+        memset(device->sram_initialized + offset, 1, access_size);
         return true;
     }
     if (device->profile->flexnvm_size != 0u &&
@@ -535,6 +548,7 @@ static void destroy_partial_device(KinetisK22* device) {
     free(device->flexbus_memory);
     free(device->flash);
     free(device->sram);
+    free(device->sram_initialized);
     free(device->peripheral);
     free(device);
 }
@@ -559,6 +573,7 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
         return NULL;
     }
     device->configuration = configuration;
+    device->first_uninitialized_sram_read = UINT32_MAX;
     device->profile = profile;
     device->package = package_selection;
     device->manifest = manifest;
@@ -568,8 +583,10 @@ KinetisK22* kinetis_k22_create(KinetisK22Configuration configuration) {
                             : K22_SRAM_CENTER - (uint32_t)(configuration.sram_size / 2u);
     device->flash = malloc(configuration.flash_size);
     device->sram = calloc(1, configuration.sram_size);
+    device->sram_initialized = calloc(1, configuration.sram_size);
     device->peripheral = calloc(1, K22_PERIPHERAL_SIZE);
-    if (device->flash == NULL || device->sram == NULL || device->peripheral == NULL) {
+    if (device->flash == NULL || device->sram == NULL || device->sram_initialized == NULL ||
+        device->peripheral == NULL) {
         destroy_partial_device(device);
         return NULL;
     }
@@ -623,6 +640,9 @@ bool kinetis_k22_reset(KinetisK22* device) {
         return false;
     }
     memset(device->sram, 0, device->configuration.sram_size);
+    memset(device->sram_initialized, 0, device->configuration.sram_size);
+    device->uninitialized_sram_read_count = 0u;
+    device->first_uninitialized_sram_read = UINT32_MAX;
     device->cycles = 0;
     device->timing.elapsed_core_cycles = 0;
     sync_flash_configuration(device);
@@ -639,6 +659,8 @@ void kinetis_k22_warm_reset(KinetisK22* device, uint8_t reset_cause_0, uint8_t r
     if (device == NULL) {
         return;
     }
+    device->uninitialized_sram_read_count = 0u;
+    device->first_uninitialized_sram_read = UINT32_MAX;
     uint8_t retained_vbat[0x20];
     memcpy(retained_vbat, device->peripheral + 0x3e000u, sizeof(retained_vbat));
     sync_flash_configuration(device);
@@ -666,6 +688,7 @@ bool kinetis_k22_load(KinetisK22* device, uint32_t address, const void* input_da
         (uint64_t)address + data_size <=
             (uint64_t)device->sram_base + device->configuration.sram_size) {
         memcpy(device->sram + address - device->sram_base, input_data, data_size);
+        memset(device->sram_initialized + address - device->sram_base, 1, data_size);
         return true;
     }
     return false;
@@ -732,8 +755,12 @@ bool kinetis_k22_copy(KinetisK22* destination, const KinetisK22* source) {
     }
     memcpy(destination->flash, source->flash, source->configuration.flash_size);
     memcpy(destination->sram, source->sram, source->configuration.sram_size);
+    memcpy(destination->sram_initialized, source->sram_initialized,
+           source->configuration.sram_size);
     memcpy(destination->peripheral, source->peripheral, K22_PERIPHERAL_SIZE);
     destination->configuration = source->configuration;
+    destination->uninitialized_sram_read_count = source->uninitialized_sram_read_count;
+    destination->first_uninitialized_sram_read = source->first_uninitialized_sram_read;
     destination->cycles = source->cycles;
     destination->cmt_cycles = source->cmt_cycles;
     destination->cmt_bus_remainder = source->cmt_bus_remainder;
@@ -779,6 +806,77 @@ bool kinetis_k22_copy(KinetisK22* destination, const KinetisK22* source) {
         kinetis_k22_flexbus_detach(destination);
     }
     return cortex_m4_copy(destination->cpu, source->cpu);
+}
+
+uint64_t kinetis_k22_get_uninitialized_sram_read_count(const KinetisK22* device) {
+    return device == NULL ? 0u : device->uninitialized_sram_read_count;
+}
+
+uint32_t kinetis_k22_get_first_uninitialized_sram_read(const KinetisK22* device) {
+    return device == NULL ? UINT32_MAX : device->first_uninitialized_sram_read;
+}
+
+void kinetis_k22_clear_uninitialized_sram_reads(KinetisK22* device) {
+    if (device == NULL) {
+        return;
+    }
+    device->uninitialized_sram_read_count = 0u;
+    device->first_uninitialized_sram_read = UINT32_MAX;
+}
+
+static bool is_live_timing_register(uint32_t address) {
+    const bool pit_state = address >= 0x40037104u && address <= 0x4003713cu &&
+                           ((address - 0x40037104u) % 0x10u == 0u ||
+                            (address - 0x4003710cu) % 0x10u == 0u);
+    return pit_state || address == 0x40052010u || address == 0x40052012u;
+}
+
+static bool read_comparable_register(KinetisK22* device, uint32_t address, uint8_t size,
+                                     uint32_t* value) {
+    if (address >= 0x40052000u && address < 0x40052018u) {
+        return k22_timing_projected_watchdog_read(&device->timing, address, size, value);
+    }
+    return kinetis_k22_memory_read(device, address, size, CORTEX_M4_ACCESS_DEBUG, value);
+}
+
+bool kinetis_k22_register_state_equal(KinetisK22* first, KinetisK22* second,
+                                      uint32_t* first_difference, uint32_t* first_value,
+                                      uint32_t* second_value) {
+    if (first == NULL || second == NULL || first->profile != second->profile ||
+        first_difference == NULL || first_value == NULL || second_value == NULL) {
+        return false;
+    }
+    for (size_t index = 0u; index < first->manifest->register_count; ++index) {
+        const K22RegisterDescriptor* descriptor = &first->manifest->registers[index];
+        const bool fmc_cache_state =
+            descriptor->address >= K22_FMC + 0x100u && descriptor->address < K22_FMC + 0x300u;
+        const bool dma_address = descriptor->address >= 0x40009000u &&
+                                 descriptor->address < 0x40009200u &&
+                                 ((descriptor->address - 0x40009000u) % 32u == 0u ||
+                                  (descriptor->address - 0x40009000u) % 32u == 16u);
+        if (fmc_cache_state || dma_address || is_live_timing_register(descriptor->address)) {
+            continue;
+        }
+        const uint32_t mask = descriptor->implemented_mask & descriptor->read_mask;
+        if ((descriptor->access & K22_REGISTER_ACCESS_READ) == 0u || mask == 0u) {
+            continue;
+        }
+        const uint8_t size = (uint8_t)(descriptor->width / 8u);
+        uint32_t first_register = 0u;
+        uint32_t second_register = 0u;
+        const bool first_read =
+            read_comparable_register(first, descriptor->address, size, &first_register);
+        const bool second_read =
+            read_comparable_register(second, descriptor->address, size, &second_register);
+        if (first_read != second_read ||
+            (first_read && (first_register & mask) != (second_register & mask))) {
+            *first_difference = descriptor->address;
+            *first_value = first_register & mask;
+            *second_value = second_register & mask;
+            return false;
+        }
+    }
+    return true;
 }
 
 bool kinetis_k22_flexbus_attach(KinetisK22* device, uint32_t address, const void* input_data,

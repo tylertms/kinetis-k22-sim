@@ -41,12 +41,15 @@ struct KinetisK22 {
     CortexM4* cpu;
     uint8_t* flash;
     uint8_t* sram;
+    uint8_t* sram_initialized;
     uint8_t* peripheral;
     uint8_t* flexbus_memory;
     uint32_t flexbus_address;
     size_t flexbus_size;
     bool flexbus_read_only;
     uint32_t sram_base;
+    uint64_t uninitialized_sram_read_count;
+    uint32_t first_uninitialized_sram_read;
     uint64_t cycles;
     uint64_t cmt_cycles;
     uint64_t cmt_bus_remainder;

@@ -9,6 +9,10 @@ enum {
     ADC0_CFG1 = 0x4003b008u,
     ADC0_RA = 0x4003b010u,
     ADC0_SC3 = 0x4003b024u,
+    ADC0_PG = 0x4003b02cu,
+    ADC0_MG = 0x4003b030u,
+    ADC0_CLPD = 0x4003b034u,
+    ADC0_CLPS = 0x4003b038u,
     ADC0_IRQ = 39,
     SIM_SCGC6 = 0x4004803cu,
 };
@@ -49,6 +53,14 @@ int main(void) {
     write32(&state, device, ADC0_SC3, 0x80u);
     expect(&state, (read32(&state, device, ADC0_SC3) & 0x80u) == 0,
            "(read32(&state, device, ADC0_SC3) & 0x80u) == 0");
+    expect(&state, read32(&state, device, ADC0_PG) == 0x8200u,
+           "read32(&state, device, ADC0_PG) == 0x8200u");
+    expect(&state, read32(&state, device, ADC0_MG) == 0x8200u,
+           "read32(&state, device, ADC0_MG) == 0x8200u");
+    expect(&state, read32(&state, device, ADC0_CLPD) == 0x0au,
+           "read32(&state, device, ADC0_CLPD) == 0x0au");
+    expect(&state, read32(&state, device, ADC0_CLPS) == 0x20u,
+           "read32(&state, device, ADC0_CLPS) == 0x20u");
     kinetis_k22_destroy(device);
     return test_finish(&state);
 }

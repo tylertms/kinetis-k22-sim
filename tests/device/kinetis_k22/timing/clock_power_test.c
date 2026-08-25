@@ -62,5 +62,17 @@ int main(void) {
            "read_register(&state, device, SIM_SCGC5, 4) == 0x00040382u");
 
     kinetis_k22_destroy(device);
+
+    KinetisK22Configuration missing_oscillator = kinetis_k22_default_configuration();
+    missing_oscillator.external_oscillator_hz = 0u;
+    device = kinetis_k22_create(missing_oscillator);
+    expect(&state, device != NULL, "missing-oscillator device is created");
+    write_register(&state, device, MCG_C1, 1u, 0u);
+    expect(&state, kinetis_k22_core_clock_hz(device) == 32768u * 640u,
+           "external-reference FLL falls back to the slow internal clock");
+    write_register(&state, device, MCG_C6, 1u, 0x40u);
+    expect(&state, kinetis_k22_core_clock_hz(device) == 32768u,
+           "PLL without an external oscillator falls back to the slow internal clock");
+    kinetis_k22_destroy(device);
     return test_finish(&state);
 }

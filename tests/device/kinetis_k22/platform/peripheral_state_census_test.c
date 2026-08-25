@@ -127,7 +127,7 @@ int main(void) {
     }
     const bool census_matches = census.accepted_accesses == 411294u &&
                                 census.rejected_accesses == 288706u &&
-                                census.fingerprint == UINT64_C(9435133280393599419);
+                                census.fingerprint == UINT64_C(353094686012427594);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " fingerprint=%" PRIu64 "\n",

@@ -203,6 +203,8 @@ static void expect_manifest(TestState* state, K22ProfileId profile,
            "k22_register_manifest_lookup(profile, first->address, 0u) == NULL");
     expect(state, k22_register_manifest_lookup(profile, first->address, 64u) == NULL,
            "k22_register_manifest_lookup(profile, first->address, 64u) == NULL");
+    expect(state, k22_register_manifest_lookup(profile, UINT32_MAX, 32u) == NULL,
+           "register lookup rejects an address above the manifest");
     expect(state, !k22_register_manifest_reset(profile, first->address, first->width, NULL, &mask),
            "!k22_register_manifest_reset(profile, first->address, first->width, NULL, &mask)");
     expect(state, !k22_register_manifest_reset(profile, first->address, first->width, &value, NULL),

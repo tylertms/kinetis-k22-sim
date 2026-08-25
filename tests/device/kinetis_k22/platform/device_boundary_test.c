@@ -86,6 +86,45 @@ static void copy_guard_cases(TestState* state, KinetisK22* destination, KinetisK
     expect(state, kinetis_k22_copy(destination, source), "compatible devices copy");
 }
 
+static void uninitialized_sram_cases(TestState* state, KinetisK22* destination,
+                                     KinetisK22* source) {
+    const uint32_t address = source->sram_base;
+    uint32_t value = 0u;
+    expect(state,
+           kinetis_k22_memory_read(source, address, 4u, CORTEX_M4_ACCESS_DATA, &value) &&
+               kinetis_k22_get_uninitialized_sram_read_count(source) == 4u &&
+               kinetis_k22_get_first_uninitialized_sram_read(source) == address,
+           "data access reports each uninitialized SRAM byte");
+    expect(state,
+           kinetis_k22_memory_read(source, address, 4u, CORTEX_M4_ACCESS_DEBUG, &value) &&
+               kinetis_k22_get_uninitialized_sram_read_count(source) == 4u,
+           "debug access does not report uninitialized SRAM");
+
+    kinetis_k22_clear_uninitialized_sram_reads(source);
+    kinetis_k22_clear_uninitialized_sram_reads(NULL);
+    expect(state,
+           kinetis_k22_get_uninitialized_sram_read_count(source) == 0u &&
+               kinetis_k22_get_first_uninitialized_sram_read(source) == UINT32_MAX,
+           "uninitialized SRAM diagnostics clear");
+    expect(state,
+           kinetis_k22_memory_write(source, address, 2u, CORTEX_M4_ACCESS_DATA, 0x1234u) &&
+               kinetis_k22_memory_read(source, address, 4u, CORTEX_M4_ACCESS_DATA, &value) &&
+               kinetis_k22_get_uninitialized_sram_read_count(source) == 2u &&
+               kinetis_k22_get_first_uninitialized_sram_read(source) == address + 2u,
+           "SRAM writes initialize only the written bytes");
+    expect(state,
+           kinetis_k22_copy(destination, source) &&
+               kinetis_k22_get_uninitialized_sram_read_count(destination) == 2u &&
+               kinetis_k22_get_first_uninitialized_sram_read(destination) == address + 2u,
+           "device copy preserves SRAM initialization diagnostics");
+    const uint32_t vectors[2] = {address + 0x1000u, 0x101u};
+    expect(state,
+           kinetis_k22_load(source, 0u, vectors, sizeof(vectors)) && kinetis_k22_reset(source) &&
+               kinetis_k22_get_uninitialized_sram_read_count(source) == 0u &&
+               kinetis_k22_get_first_uninitialized_sram_read(source) == UINT32_MAX,
+           "cold reset clears SRAM initialization diagnostics");
+}
+
 static void flexbus_cases(TestState* state, KinetisK22* device) {
     static const uint8_t window_data[] = {1u, 2u, 3u, 4u};
     uint8_t read_data[4] = {0u};
@@ -99,6 +138,53 @@ static void flexbus_cases(TestState* state, KinetisK22* device) {
     expect(state, !kinetis_k22_flexbus_read(device, sizeof(window_data), read_data, 1u),
            "FlexBus read rejects a range beyond the window");
     kinetis_k22_flexbus_detach(device);
+}
+
+static void register_state_cases(TestState* state, KinetisK22* first, KinetisK22* second) {
+    uint32_t address = 0u;
+    uint32_t first_value = 0u;
+    uint32_t second_value = 0u;
+    expect(state,
+           !kinetis_k22_register_state_equal(NULL, second, &address, &first_value, &second_value),
+           "register comparison rejects a null device");
+    expect(state, !kinetis_k22_register_state_equal(first, second, NULL, &first_value, &second_value),
+           "register comparison requires difference outputs");
+    expect(state, kinetis_k22_reset(first) && kinetis_k22_reset(second),
+           "reset devices for register comparison");
+    expect(state,
+           kinetis_k22_register_state_equal(first, second, &address, &first_value, &second_value),
+           "equal register state agrees");
+    expect(state,
+           kinetis_k22_memory_write(first, 0x40048038u, 4u, CORTEX_M4_ACCESS_DEBUG, 0x200u) &&
+               !kinetis_k22_register_state_equal(first, second, &address, &first_value,
+                                                  &second_value) &&
+               address == 0x40048038u && first_value == 0x200u && second_value == 0u,
+           "register comparison reports a configured-state difference");
+    expect(state, kinetis_k22_copy(second, first), "restore matching register state");
+
+    first->timing.pit[0].current = 10u;
+    second->timing.pit[0].current = 20u;
+    first->timing.pit[0].flag = true;
+    second->timing.pit[0].flag = false;
+    expect(state,
+           kinetis_k22_register_state_equal(first, second, &address, &first_value, &second_value),
+           "register comparison ignores live timer position");
+
+    expect(state,
+           kinetis_k22_memory_write(first, 0x4005200eu, 2u, CORTEX_M4_ACCESS_DEBUG, 0xc520u) &&
+               kinetis_k22_memory_write(first, 0x4005200eu, 2u, CORTEX_M4_ACCESS_DEBUG, 0xd928u) &&
+               kinetis_k22_memory_write(first, 0x40052000u, 2u, CORTEX_M4_ACCESS_DEBUG, 0x40d7u) &&
+               kinetis_k22_memory_write(second, 0x4005200eu, 2u, CORTEX_M4_ACCESS_DEBUG,
+                                        0xc520u) &&
+               kinetis_k22_memory_write(second, 0x4005200eu, 2u, CORTEX_M4_ACCESS_DEBUG,
+                                        0xd928u) &&
+               kinetis_k22_memory_write(second, 0x40052000u, 2u, CORTEX_M4_ACCESS_DEBUG,
+                                        0x40d7u),
+           "stage matching watchdog updates");
+    kinetis_k22_advance(first, 600u);
+    expect(state,
+           kinetis_k22_register_state_equal(first, second, &address, &first_value, &second_value),
+           "register comparison projects a committed watchdog update");
 }
 
 #ifdef K22_TEST_ALLOCATION_FAILURE
@@ -131,8 +217,10 @@ int main(void) {
     KinetisK22* destination_device = create_device(&state);
     KinetisK22* source_device = create_device(&state);
     if (destination_device != NULL && source_device != NULL) {
+        uninitialized_sram_cases(&state, destination_device, source_device);
         access_census(destination_device, &census);
         copy_guard_cases(&state, destination_device, source_device);
+        register_state_cases(&state, destination_device, source_device);
 #ifdef K22_TEST_ALLOCATION_FAILURE
         copy_allocation_cases(&state, destination_device, source_device);
 #endif

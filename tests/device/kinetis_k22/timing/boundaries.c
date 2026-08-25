@@ -37,6 +37,10 @@ static void test_invalid_state(TestState* state, K22Timing* timing) {
     k22_timing_watchdog_advance(NULL, 1u);
     k22_timing_watchdog_advance(&invalid, 1u);
     k22_timing_watchdog_advance(timing, 0u);
+    expect(state, !k22_timing_projected_watchdog_read(NULL, 0u, 2u, &value),
+           "projected watchdog reads reject a null state");
+    expect(state, !k22_timing_projected_watchdog_read(timing, 0u, 2u, NULL),
+           "projected watchdog reads require a destination");
     expect(state, !k22_timing_copy(&destination, NULL, k22_timing_test_signals(NULL)),
            "timing copy rejects a null source");
     expect(state, !k22_timing_copy(&destination, &invalid, k22_timing_test_signals(NULL)),
