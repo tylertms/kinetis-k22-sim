@@ -413,6 +413,11 @@ test_definitions = [
     'suite': ['device', 'integration'],
   },
   {
+    'name': 'device_low_power_retention',
+    'sources': ['device/kinetis/platform/low_power_retention_test.c'],
+    'suite': ['device', 'integration'],
+  },
+  {
     'name': 'device_gpio',
     'sources': ['device/kinetis/platform/gpio_test.c'],
     'suite': ['device', 'integration'],

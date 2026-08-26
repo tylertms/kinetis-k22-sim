@@ -114,6 +114,8 @@ typedef struct {
     uint32_t sram_lower_size;
     uint32_t sram_upper_address;
     uint32_t sram_upper_size;
+    uint32_t vlls2_sram_upper_size;
+    uint32_t vlls2_sram_upper_size_with_ram2;
     uint32_t flexnvm_address;
     uint32_t flexnvm_size;
     uint32_t flexram_address;

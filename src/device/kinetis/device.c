@@ -657,6 +657,66 @@ static void sync_flash_configuration(Kinetis* device) {
     memcpy(device->io.configuration.flash_configuration, device->flash + block.address, block.size);
 }
 
+static void clear_sram_range(Kinetis* device, size_t offset, size_t size) {
+    memset(device->sram + offset, 0, size);
+    memset(device->sram_initialized + offset, 0, size);
+}
+
+static void apply_vlls_sram_retention(Kinetis* device) {
+    if (device->timing.smc[3] != 0x40u)
+        return;
+
+    uint32_t retained_size;
+    switch (device->timing.smc[2] & 7u) {
+    case 0u:
+    case 1u:
+        retained_size = 0u;
+        break;
+    case 2u:
+        retained_size = (device->timing.smc[2] & 0x10u) != 0u
+                            ? device->profile->vlls2_sram_upper_size_with_ram2
+                            : device->profile->vlls2_sram_upper_size;
+        break;
+    case 3u:
+        return;
+    default:
+        return;
+    }
+
+    const uint64_t device_begin = device->sram_base;
+    const uint64_t device_end = device_begin + device->configuration.sram_size;
+    const uint64_t retained_begin = device->profile->sram_upper_address;
+    const uint64_t retained_end = retained_begin + retained_size;
+    const uint64_t overlap_begin = device_begin > retained_begin ? device_begin : retained_begin;
+    const uint64_t overlap_end = device_end < retained_end ? device_end : retained_end;
+    if (overlap_begin >= overlap_end) {
+        clear_sram_range(device, 0u, device->configuration.sram_size);
+        return;
+    }
+
+    const size_t prefix_size = (size_t)(overlap_begin - device_begin);
+    const size_t suffix_offset = (size_t)(overlap_end - device_begin);
+    clear_sram_range(device, 0u, prefix_size);
+    clear_sram_range(device, suffix_offset, device->configuration.sram_size - suffix_offset);
+}
+
+static bool save_register_file(const Kinetis* device, KinetisPeripheralId id,
+                               uint8_t register_file[0x20]) {
+    KinetisPeripheralBlock block;
+    if (!kinetis_profile_peripheral_block(device->profile, id, &block) || block.size != 0x20u)
+        return false;
+    memcpy(register_file, device->peripheral + block.address - KINETIS_PERIPHERAL_BASE, block.size);
+    return true;
+}
+
+static void restore_register_file(Kinetis* device, KinetisPeripheralId id,
+                                  const uint8_t register_file[0x20]) {
+    KinetisPeripheralBlock block;
+    if (kinetis_profile_peripheral_block(device->profile, id, &block) && block.size == 0x20u)
+        memcpy(device->peripheral + block.address - KINETIS_PERIPHERAL_BASE, register_file,
+               block.size);
+}
+
 bool kinetis_reset(Kinetis* device) {
     if (device == NULL) {
         return false;
@@ -683,11 +743,18 @@ void kinetis_warm_reset(Kinetis* device, uint8_t reset_cause_0, uint8_t reset_ca
     }
     device->uninitialized_sram_read_count = 0u;
     device->first_uninitialized_sram_read = UINT32_MAX;
+    apply_vlls_sram_retention(device);
     uint8_t retained_vbat[0x20];
-    memcpy(retained_vbat, device->peripheral + 0x3e000u, sizeof(retained_vbat));
+    uint8_t retained_system_registers[0x20];
+    const bool has_vbat = save_register_file(device, KINETIS_PERIPHERAL_RFVBAT, retained_vbat);
+    const bool has_system_registers =
+        save_register_file(device, KINETIS_PERIPHERAL_RFSYS, retained_system_registers);
     sync_flash_configuration(device);
     kinetis_peripheral_reset(device);
-    memcpy(device->peripheral + 0x3e000u, retained_vbat, sizeof(retained_vbat));
+    if (has_vbat)
+        restore_register_file(device, KINETIS_PERIPHERAL_RFVBAT, retained_vbat);
+    if (has_system_registers)
+        restore_register_file(device, KINETIS_PERIPHERAL_RFSYS, retained_system_registers);
     kinetis_timing_warm_reset(&device->timing, reset_cause_0, reset_cause_1);
     kinetis_sync_clock_gates(device);
     (void)cortex_m4_reset(device->cpu, device->configuration.vector_table_address);

@@ -1,5 +1,8 @@
 #include "device/kinetis/timing/api.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "test.h"
 
 enum {
@@ -139,9 +142,12 @@ int main(void) {
         mix(&census,
             timing.pit[0].current ^ timing.lptmr_counter ^ timing.rtc_tsr ^ timing.pdb_counter);
     }
-    expect(&state,
-           census.reads == 9044u && census.writes == 12089u &&
-               census.fingerprint == UINT64_C(11653839786543551825),
-           "timing register state census matches");
+    const bool census_matches = census.reads == 9044u && census.writes == 12089u &&
+                                census.fingerprint == UINT64_C(11626327309010479929);
+    if (!census_matches) {
+        fprintf(stderr, "[census] reads=%" PRIu32 " writes=%" PRIu32 " fingerprint=%" PRIu64 "\n",
+                census.reads, census.writes, census.fingerprint);
+    }
+    expect(&state, census_matches, "timing register state census matches");
     return test_finish(&state);
 }

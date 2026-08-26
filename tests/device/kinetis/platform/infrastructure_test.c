@@ -319,13 +319,16 @@ static void test_fmc_geometry(TestState* state, Kinetis* device) {
 }
 
 static void test_retention(TestState* state, Kinetis* device) {
+    write32(state, device, device->sram_base, 0xc33c5aa5u);
     write32(state, device, RFVBAT_REG0, 0x12345678u);
     write32(state, device, RFSYS_REG0, 0xa5a55a5au);
     kinetis_warm_reset(device, 0u, 4u);
+    expect(state, read32(state, device, device->sram_base) == 0xc33c5aa5u,
+           "read32(state, device, device->sram_base) == 0xc33c5aa5u");
     expect(state, read32(state, device, RFVBAT_REG0) == 0x12345678u,
            "read32(state, device, RFVBAT_REG0) == 0x12345678u");
-    expect(state, read32(state, device, RFSYS_REG0) == 0u,
-           "read32(state, device, RFSYS_REG0) == 0u");
+    expect(state, read32(state, device, RFSYS_REG0) == 0xa5a55a5au,
+           "read32(state, device, RFSYS_REG0) == 0xa5a55a5au");
     expect(state, kinetis_reset(device), "kinetis_reset(device)");
     expect(state, read32(state, device, RFVBAT_REG0) == 0u,
            "read32(state, device, RFVBAT_REG0) == 0u");
