@@ -55,13 +55,13 @@ static uint32_t uart_frame_cycles(const KinetisSerialUart* uart, bool is_lpuart)
     return thirty_second_cycles == 0 ? 1u : (thirty_second_cycles * 10u + 31u) / 32u;
 }
 
-static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint32_t cycles) {
+static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint64_t cycles) {
     uint32_t control = is_lpuart ? kinetis_serial_internal_load32(&uart->registers[LPUART_CTRL])
                                  : uart->registers[UART_C2];
     uint32_t receive_enable = is_lpuart ? 1u << 18 : 0x04u;
     uint32_t transmit_enable = is_lpuart ? 1u << 19 : 0x08u;
     while (cycles != 0 && uart->clock_enabled) {
-        uint32_t elapsed = cycles;
+        uint64_t elapsed = cycles;
         if ((control & receive_enable) != 0 && uart->wire_receive.count != 0) {
             if (uart->receive_cycles == 0)
                 uart->receive_cycles = uart_frame_cycles(uart, is_lpuart);
@@ -130,12 +130,12 @@ static uint32_t spi_frame_cycles(const KinetisSerialSpi* spi) {
     return cycles * frame_bits;
 }
 
-static void advance_spi(KinetisSerialSpi* spi, uint32_t cycles) {
+static void advance_spi(KinetisSerialSpi* spi, uint64_t cycles) {
     while (cycles != 0 && spi->clock_enabled && spi->transmit.count != 0 &&
            (spi->registers[SPI_MCR / 4] & 0x00004001u) == 0) {
         if (spi->transfer_cycles == 0)
             spi->transfer_cycles = spi_frame_cycles(spi);
-        uint32_t elapsed = cycles < spi->transfer_cycles ? cycles : spi->transfer_cycles;
+        uint64_t elapsed = cycles < spi->transfer_cycles ? cycles : spi->transfer_cycles;
         cycles -= elapsed;
         spi->transfer_cycles -= elapsed;
         if (spi->transfer_cycles == 0) {
@@ -169,7 +169,7 @@ static uint32_t i2c_transfer_cycles(const KinetisSerialI2c* i2c) {
     return (uint32_t)dividers[i2c->registers[I2C_F] & 0x3fu] * multiplier * 9u;
 }
 
-static void advance_i2c(KinetisSerialI2c* i2c, uint32_t cycles) {
+static void advance_i2c(KinetisSerialI2c* i2c, uint64_t cycles) {
     if (!i2c->clock_enabled || !i2c->transfer_pending)
         return;
     if (i2c->transfer_cycles == 0)
@@ -192,16 +192,24 @@ static void advance_i2c(KinetisSerialI2c* i2c, uint32_t cycles) {
         i2c->registers[I2C_S] |= 0x01u;
 }
 
-void kinetis_serial_advance(KinetisSerial* serial, uint32_t bus_cycles) {
+void kinetis_serial_advance(KinetisSerial* serial, uint32_t core_cycles) {
     if (serial == NULL)
         return;
-    advance_uart(&serial->lpuart0, true, bus_cycles);
-    for (size_t index = 0; index < 6; index++)
-        advance_uart(&serial->uart[index], false, bus_cycles);
+    const uint64_t scaled_bus_cycles =
+        serial->bus_cycle_remainder + (uint64_t)core_cycles * serial->bus_clock_hz;
+    const uint64_t peripheral_cycles =
+        serial->core_clock_hz == 0u ? 0u : scaled_bus_cycles / serial->core_clock_hz;
+    serial->bus_cycle_remainder =
+        serial->core_clock_hz == 0u ? 0u : scaled_bus_cycles % serial->core_clock_hz;
+    for (size_t index = 0; index < 2; index++)
+        advance_uart(&serial->uart[index], false, core_cycles);
+    advance_uart(&serial->lpuart0, true, core_cycles);
+    for (size_t index = 2; index < 6; index++)
+        advance_uart(&serial->uart[index], false, peripheral_cycles);
     for (size_t index = 0; index < 3; index++)
-        advance_spi(&serial->spi[index], bus_cycles);
+        advance_spi(&serial->spi[index], peripheral_cycles);
     for (size_t index = 0; index < 3; index++)
-        advance_i2c(&serial->i2c[index], bus_cycles);
+        advance_i2c(&serial->i2c[index], peripheral_cycles);
 }
 
 static KinetisSerialUart* endpoint_uart(KinetisSerial* serial, KinetisSerialEndpoint endpoint,

@@ -46,6 +46,34 @@ static void expect_serial_dma_sources(TestState* state) {
     kinetis_destroy(device);
 }
 
+static void expect_bus_clocked_serial_timing(TestState* state) {
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
+    configuration.package = KINETIS_PACKAGE_FM_32_QFN;
+    Kinetis* device = kinetis_create(configuration);
+    expect(state, device != NULL, "KV30 device is available");
+    CortexM4* cpu = kinetis_cpu(device);
+    uint32_t clock_gates = 0u;
+    expect(state, kinetis_integration_test_read32(device, SIM_SCGC6, &clock_gates),
+           "SPI clock gates are readable");
+    expect(state, cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gates | (1u << 12u)),
+           "SPI0 clock can be enabled");
+    expect(state, cortex_m4_write_memory(cpu, SIM_CLKDIV1, 4u, 1u << 24u),
+           "bus clock can be divided by two");
+    expect(state, cortex_m4_write_memory(cpu, SPI0_MCR, 4u, UINT32_C(0x80000000)),
+           "SPI0 can leave halt mode");
+    expect(state, cortex_m4_write_memory(cpu, SPI0_PUSHR, 4u, 0x98030055u), "SPI0 accepts a frame");
+
+    KinetisSpiTransfer transfer;
+    kinetis_advance(device, 127u);
+    expect(state, !kinetis_spi_transfer(device, KINETIS_SERIAL_SPI0, &transfer),
+           "SPI0 waits for 64 bus clocks");
+    kinetis_advance(device, 1u);
+    expect(state, kinetis_spi_transfer(device, KINETIS_SERIAL_SPI0, &transfer),
+           "SPI0 completes after 128 core clocks");
+    expect(state, transfer.data == 0x55u, "SPI0 preserves the transmitted byte");
+    kinetis_destroy(device);
+}
+
 static void expect_periodic_dma_trigger(TestState* state) {
     Kinetis* device = kinetis_integration_test_create_device(state, KINETIS_PACKAGE_DC_121_XFBGA);
     CortexM4* cpu = kinetis_cpu(device);
@@ -585,6 +613,7 @@ int main(void) {
     kinetis_integration_test_expect_package_selection(&state);
     kinetis_integration_test_expect_package_serial_extensions(&state);
     expect_serial_dma_sources(&state);
+    expect_bus_clocked_serial_timing(&state);
     expect_periodic_dma_trigger(&state);
     kinetis_integration_test_expect_can_irq_level(&state);
     expect_sdhc_integration(&state);

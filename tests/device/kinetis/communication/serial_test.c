@@ -377,6 +377,59 @@ static void test_i2c_master_events_timing_irq_and_dma(TestState* state) {
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
 }
 
+static void test_clock_domains(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MK22FN1M012);
+    kinetis_serial_set_clocks(&serial, 120000000u, 60000000u);
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true),
+           "system-clocked UART gate is available");
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART2, true),
+           "bus-clocked UART gate is available");
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_SPI0, true),
+           "SPI gate is available");
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_I2C0, true),
+           "I2C gate is available");
+
+    for (size_t uart_index = 0u; uart_index <= 2u; uart_index += 2u) {
+        const uint32_t uart_base = serial.uart[uart_index].base;
+        write_register(state, &serial, uart_base, 1u, 0u);
+        write_register(state, &serial, uart_base + 1u, 1u, 1u);
+        write_register(state, &serial, uart_base + 3u, 1u, 0x08u);
+        write_register(state, &serial, uart_base + 7u, 1u, (uint32_t)(0x40u + uart_index));
+    }
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80000000));
+    write_register(state, &serial, SPI0_BASE + 0x34u, 4u, 0x98030055u);
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xf0u);
+    write_register(state, &serial, I2C0_BASE + 4u, 1u, 0x52u);
+
+    uint16_t transmitted_value = 0u;
+    KinetisSerialSpiTransfer spi_transfer;
+    kinetis_serial_advance(&serial, 127u);
+    expect(state, !kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &spi_transfer),
+           "SPI waits for 64 bus clocks");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &spi_transfer),
+           "SPI completes after 128 core clocks");
+    kinetis_serial_advance(&serial, 31u);
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "system-clocked UART waits for its final core clock");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "system-clocked UART advances at the core rate");
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART remains in progress");
+    kinetis_serial_advance(&serial, 159u);
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART waits for its final bus clock");
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) == 0u,
+           "I2C waits for its final bus clock");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART advances at the bus rate");
+    kinetis_serial_advance(&serial, 40u);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
+           "I2C completes after 180 bus clocks");
+}
+
 static void test_i2c_start_stop_detection(TestState* state) {
     KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MK22FN51212);
 
@@ -506,6 +559,7 @@ static void test_register_edge_paths(TestState* state) {
     expect(state, serial.core_clock_hz == 96000000u, "serial.core_clock_hz == 96000000u");
     expect(state, serial.bus_clock_hz == 48000000u, "serial.bus_clock_hz == 48000000u");
     kinetis_serial_set_clocks(NULL, 0, 0);
+    kinetis_serial_set_clocks(&serial, 96000000u, 96000000u);
     kinetis_serial_reset(NULL);
     kinetis_serial_advance(NULL, 1);
 
@@ -794,6 +848,7 @@ int main(void) {
     test_spi_transfer_fifo_interrupt_dma_and_errors(&state);
     test_spi_profile_presence(&state);
     test_i2c_master_events_timing_irq_and_dma(&state);
+    test_clock_domains(&state);
     test_i2c_start_stop_detection(&state);
     test_i2c_arbitration_disable_slave_and_reset(&state);
     test_register_edge_paths(&state);

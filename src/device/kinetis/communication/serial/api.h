@@ -150,6 +150,7 @@ typedef struct {
     const KinetisDeviceProfile* profile;
     uint32_t core_clock_hz;
     uint32_t bus_clock_hz;
+    uint64_t bus_cycle_remainder;
     KinetisSerialUart lpuart0;
     KinetisSerialUart uart[6];
     KinetisSerialSpi spi[3];
@@ -171,7 +172,7 @@ bool kinetis_serial_read(KinetisSerial* serial, uint32_t address, uint8_t byte_c
                          uint32_t* output_value);
 bool kinetis_serial_write(KinetisSerial* serial, uint32_t address, uint8_t byte_count,
                           uint32_t write_value);
-void kinetis_serial_advance(KinetisSerial* serial, uint32_t bus_cycles);
+void kinetis_serial_advance(KinetisSerial* serial, uint32_t core_cycles);
 void kinetis_serial_advance_endpoint(KinetisSerial* serial, KinetisSerialEndpoint endpoint);
 bool kinetis_serial_push_receive(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
                                  uint16_t value, uint8_t errors);
