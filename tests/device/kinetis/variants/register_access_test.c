@@ -31,6 +31,11 @@ static const uint8_t flash_configuration[16] = {
     0x81u, 0x82u, 0x84u, 0x88u, 0xfeu, 0x5au, 0xc3u, 0x3cu,
 };
 
+static const uint32_t sim_fcfg1_reset_values[KINETIS_PROFILE_COUNT] = {
+    0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u,
+    0x090f0f00u, 0x0f0f0f00u, 0xff0f0f00u, 0xff0f0f00u,
+};
+
 static const uint32_t sim_fcfg2_reset_values[KINETIS_PROFILE_COUNT] = {
     0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u,
     0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
@@ -108,6 +113,9 @@ static uint32_t expected_reset_value(const ProfileFixture* fixture,
         const KinetisPackageSelection* package = kinetis_package_select(profile, fixture->package);
         return (profile->sim_sdid_reset & ~15u) | kinetis_package_pin_id(package);
     }
+    if (descriptor->address == 0x4004804cu) {
+        return sim_fcfg1_reset_values[fixture->profile];
+    }
     if (descriptor->address == 0x40048050u) {
         return sim_fcfg2_reset_values[fixture->profile];
     }
@@ -161,8 +169,9 @@ static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFi
     }
     actual &= width_mask(descriptor->width);
     const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
-    const bool semantic_reset =
-        descriptor->address == 0x40048024u || descriptor->address == 0x40048050u;
+    const bool semantic_reset = descriptor->address == 0x40048024u ||
+                                descriptor->address == 0x4004804cu ||
+                                descriptor->address == 0x40048050u;
     const uint32_t reset_mask =
         uses_flash_configuration(descriptor) || semantic_reset
             ? width_mask(descriptor->width)
