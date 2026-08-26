@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -6,16 +6,16 @@
 
 int main(void) {
     TestState state = {0};
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
-    expect(&state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
-    expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    expect(&state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
+    CortexM4* cpu = kinetis_cpu(device);
     expect(&state, cortex_m4_get_register(cpu, 13) == 0x20001000u,
            "cortex_m4_get_register(cpu, 13) == 0x20001000u");
     expect(&state, cortex_m4_get_register(cpu, 14) == 0xffffffffu,
@@ -30,6 +30,6 @@ int main(void) {
     expect(&state, ccr == 0x00000200u, "ccr == 0x00000200u");
     expect(&state, cortex_m4_get_stop(cpu) == CORTEX_M4_STOP_RUNNING,
            "cortex_m4_get_stop(cpu) == CORTEX_M4_STOP_RUNNING");
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

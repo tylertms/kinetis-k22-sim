@@ -1,0 +1,170 @@
+#include "kinetis.h"
+
+#include <stdint.h>
+
+#include "k22_test.h"
+#include "test.h"
+
+static const uint32_t WDOG_STCTRLH = 0x40052000u, WDOG_TOVALH = 0x40052004u,
+                      WDOG_TOVALL = 0x40052006u, WDOG_REFRESH = 0x4005200cu,
+                      WDOG_UNLOCK = 0x4005200eu, RCM_SRS0 = 0x4007f000u, RCM_SRS1 = 0x4007f001u,
+                      RTC_TSR = 0x4003d000u, SIM_REGISTER = 0x40047000u, PORTA_PCR0 = 0x40049000u,
+                      GPIOA_PDIR = 0x400ff010u, PIT0_LDVAL = 0x40037100u, ADC0_CFG1 = 0x4003b008u,
+                      DMA_TCD0_SADDR = 0x40009000u, UART1_C2 = 0x4006b003u, SPI0_MCR = 0x4002c000u,
+                      I2C0_C1 = 0x40066002u, SCB_AIRCR = 0xe000ed0cu;
+
+static void write_u16(TestState* state, Kinetis* device, uint32_t address, uint16_t value) {
+    expect(state, kinetis_write(device, address, &value, sizeof(value)),
+           "kinetis_write(device, address, &value, sizeof(value))");
+}
+
+static uint8_t read_u8(TestState* state, Kinetis* device, uint32_t address) {
+    uint8_t output_value = 0;
+    expect(state, kinetis_read(device, address, &output_value, sizeof(output_value)),
+           "kinetis_read(device, address, &output_value, sizeof(output_value))");
+    return output_value;
+}
+
+static uint16_t read_u16(TestState* state, Kinetis* device, uint32_t address) {
+    uint16_t output_value = 0;
+    expect(state, kinetis_read(device, address, &output_value, sizeof(output_value)),
+           "kinetis_read(device, address, &output_value, sizeof(output_value))");
+    return output_value;
+}
+
+static uint32_t read_u32(TestState* state, Kinetis* device, uint32_t address) {
+    uint32_t output_value = 0;
+    expect(state, kinetis_read(device, address, &output_value, sizeof(output_value)),
+           "kinetis_read(device, address, &output_value, sizeof(output_value))");
+    return output_value;
+}
+
+static void write_u32(TestState* state, Kinetis* device, uint32_t address, uint32_t value) {
+    expect(state, kinetis_write(device, address, &value, sizeof(value)),
+           "kinetis_write(device, address, &value, sizeof(value))");
+}
+
+static void dirty_peripherals(TestState* state, Kinetis* device) {
+    write_u32(state, device, SIM_REGISTER, 0x11223344u);
+    write_u32(state, device, PORTA_PCR0, 0x01090300u);
+    write_u32(state, device, PIT0_LDVAL, 0x55667788u);
+    write_u32(state, device, ADC0_CFG1, 0x99aabbccu);
+    write_u32(state, device, DMA_TCD0_SADDR, 0xddeeff00u);
+    const uint8_t peripheral_byte = 0xffu;
+    expect(state, kinetis_write(device, UART1_C2, &peripheral_byte, sizeof(peripheral_byte)),
+           "kinetis_write(device, UART1_C2, &peripheral_byte, sizeof(peripheral_byte))");
+    expect(state, kinetis_write(device, I2C0_C1, &peripheral_byte, sizeof(peripheral_byte)),
+           "kinetis_write(device, I2C0_C1, &peripheral_byte, sizeof(peripheral_byte))");
+    write_u32(state, device, SPI0_MCR, 0);
+}
+
+static void expect_reset_peripherals(TestState* state, Kinetis* device) {
+    expect(state, read_u32(state, device, SIM_REGISTER) == 0x80000000u,
+           "read_u32(state, device, SIM_REGISTER) == 0x80000000u");
+    expect(state, read_u32(state, device, PORTA_PCR0) == 0x702u,
+           "read_u32(state, device, PORTA_PCR0) == 0x702u");
+    expect(state, read_u32(state, device, PIT0_LDVAL) == 0,
+           "read_u32(state, device, PIT0_LDVAL) == 0");
+    expect(state, read_u32(state, device, ADC0_CFG1) == 0,
+           "read_u32(state, device, ADC0_CFG1) == 0");
+    expect(state, read_u32(state, device, DMA_TCD0_SADDR) == 0,
+           "read_u32(state, device, DMA_TCD0_SADDR) == 0");
+    expect(state, read_u8(state, device, UART1_C2) == 0, "read_u8(state, device, UART1_C2) == 0");
+    expect(state, read_u8(state, device, I2C0_C1) == 0, "read_u8(state, device, I2C0_C1) == 0");
+    expect(state, read_u32(state, device, SPI0_MCR) == 0x00004001u,
+           "read_u32(state, device, SPI0_MCR) == 0x00004001u");
+    expect(state, (read_u32(state, device, GPIOA_PDIR) & 1u) != 0,
+           "(read_u32(state, device, GPIOA_PDIR) & 1u) != 0");
+}
+
+static void configure_watchdog(TestState* state, Kinetis* device, uint16_t timeout_value,
+                               bool enabled) {
+    write_u16(state, device, WDOG_UNLOCK, 0xc520u);
+    write_u16(state, device, WDOG_UNLOCK, 0xd928u);
+    write_u16(state, device, WDOG_TOVALH, 0);
+    write_u16(state, device, WDOG_TOVALL, timeout_value);
+    write_u16(state, device, WDOG_STCTRLH, enabled ? 1u : 0u);
+    kinetis_advance(device, k22_test_core_cycles_for_bus_cycles(device, 260u));
+}
+
+int main(void) {
+    TestState state = {0};
+    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    expect(&state, device != NULL, "device != NULL");
+    const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
+    const uint16_t nop = 0xbf00u;
+    expect(&state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
+    expect(&state, kinetis_load(device, 0x100, &nop, sizeof(nop)),
+           "kinetis_load(device, 0x100, &nop, sizeof(nop))");
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0x82u,
+           "read_u8(&state, device, RCM_SRS0) == 0x82u");
+    expect(&state, read_u8(&state, device, RCM_SRS1) == 0,
+           "read_u8(&state, device, RCM_SRS1) == 0");
+    expect(&state, read_u16(&state, device, WDOG_STCTRLH) == 0x01d3u,
+           "read_u16(&state, device, WDOG_STCTRLH) == 0x01d3u");
+    expect(&state, read_u16(&state, device, WDOG_TOVALH) == 0x004cu,
+           "read_u16(&state, device, WDOG_TOVALH) == 0x004cu");
+    expect(&state, read_u16(&state, device, WDOG_TOVALL) == 0x4b4cu,
+           "read_u16(&state, device, WDOG_TOVALL) == 0x4b4cu");
+    const uint32_t retained_memory_address = 0x20000040u;
+    const uint32_t sentinel = 0xa55ac33cu;
+    expect(&state, kinetis_write(device, retained_memory_address, &sentinel, sizeof(sentinel)),
+           "kinetis_write(device, retained_memory_address, &sentinel, sizeof(sentinel))");
+    kinetis_gpio_drive(device, 0, 0, true);
+    dirty_peripherals(&state, device);
+    write_u32(&state, device, RTC_TSR, 0x12345678u);
+
+    configure_watchdog(&state, device, 3, true);
+    kinetis_watchdog_advance(device, 2);
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0x82u,
+           "read_u8(&state, device, RCM_SRS0) == 0x82u");
+    write_u16(&state, device, WDOG_REFRESH, 0xa602u);
+    write_u16(&state, device, WDOG_REFRESH, 0xb480u);
+    kinetis_watchdog_advance(device, 2);
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0x82u,
+           "read_u8(&state, device, RCM_SRS0) == 0x82u");
+    kinetis_watchdog_advance(device, 1);
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0x20u,
+           "read_u8(&state, device, RCM_SRS0) == 0x20u");
+    expect(&state, read_u8(&state, device, RCM_SRS1) == 0,
+           "read_u8(&state, device, RCM_SRS1) == 0");
+    uint32_t retained_value = 0;
+    expect(&state,
+           kinetis_read(device, retained_memory_address, &retained_value, sizeof(retained_value)),
+           "kinetis_read(device, retained_memory_address, &retained_value, "
+           "sizeof(retained_value))");
+    expect(&state, retained_value == sentinel, "retained_value == sentinel");
+    expect(&state, cortex_m4_get_register(kinetis_cpu(device), 15) == 0x100u,
+           "cortex_m4_get_register(kinetis_cpu(device), 15) == 0x100u");
+    expect_reset_peripherals(&state, device);
+    expect(&state, read_u32(&state, device, RTC_TSR) == 0x12345678u,
+           "read_u32(&state, device, RTC_TSR) == 0x12345678u");
+
+    dirty_peripherals(&state, device);
+    expect(&state, cortex_m4_write_memory(kinetis_cpu(device), SCB_AIRCR, 4, 0x05fa0004u),
+           "cortex_m4_write_memory(kinetis_cpu(device), SCB_AIRCR, 4, 0x05fa0004u)");
+    cortex_m4_step(kinetis_cpu(device));
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0,
+           "read_u8(&state, device, RCM_SRS0) == 0");
+    expect(&state, read_u8(&state, device, RCM_SRS1) == 0x04u,
+           "read_u8(&state, device, RCM_SRS1) == 0x04u");
+    expect_reset_peripherals(&state, device);
+    expect(&state, read_u32(&state, device, RTC_TSR) == 0x12345678u,
+           "read_u32(&state, device, RTC_TSR) == 0x12345678u");
+    expect(&state,
+           kinetis_read(device, retained_memory_address, &retained_value, sizeof(retained_value)),
+           "kinetis_read(device, retained_memory_address, &retained_value, "
+           "sizeof(retained_value))");
+    expect(&state, retained_value == sentinel, "retained_value == sentinel");
+
+    configure_watchdog(&state, device, 1, false);
+    kinetis_watchdog_advance(device, UINT32_MAX);
+    expect(&state, read_u8(&state, device, RCM_SRS0) == 0,
+           "read_u8(&state, device, RCM_SRS0) == 0");
+    expect(&state, read_u8(&state, device, RCM_SRS1) == 0x04u,
+           "read_u8(&state, device, RCM_SRS1) == 0x04u");
+    kinetis_destroy(device);
+    return test_finish(&state);
+}

@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -6,11 +6,11 @@
 
 static const uint32_t SCB_SHCSR = 0xe000ed24u;
 
-static KinetisK22* create_device(TestState* state) {
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+static Kinetis* create_device(TestState* state) {
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
     uint32_t vectors[7] = {0};
     vectors[0] = 0x20001000u;
@@ -21,28 +21,28 @@ static KinetisK22* create_device(TestState* state) {
     const uint16_t hard_fault[] = {0x2455u, 0x4770u};
     const uint16_t bus_fault[] = {0x2466u, 0x4770u};
     const uint16_t usage_fault[] = {0x2477u, 0x4770u};
-    expect(state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
-    expect(state, kinetis_k22_load(device, 0x200, hard_fault, sizeof(hard_fault)),
-           "kinetis_k22_load(device, 0x200, hard_fault, sizeof(hard_fault))");
-    expect(state, kinetis_k22_load(device, 0x220, bus_fault, sizeof(bus_fault)),
-           "kinetis_k22_load(device, 0x220, bus_fault, sizeof(bus_fault))");
-    expect(state, kinetis_k22_load(device, 0x240, usage_fault, sizeof(usage_fault)),
-           "kinetis_k22_load(device, 0x240, usage_fault, sizeof(usage_fault))");
+    expect(state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0x200, hard_fault, sizeof(hard_fault)),
+           "kinetis_load(device, 0x200, hard_fault, sizeof(hard_fault))");
+    expect(state, kinetis_load(device, 0x220, bus_fault, sizeof(bus_fault)),
+           "kinetis_load(device, 0x220, bus_fault, sizeof(bus_fault))");
+    expect(state, kinetis_load(device, 0x240, usage_fault, sizeof(usage_fault)),
+           "kinetis_load(device, 0x240, usage_fault, sizeof(usage_fault))");
     return device;
 }
 
-static void load_main(TestState* state, KinetisK22* device, uint16_t opcode) {
+static void load_main(TestState* state, Kinetis* device, uint16_t opcode) {
     const uint16_t program[] = {opcode, 0xbe00u};
-    expect(state, kinetis_k22_load(device, 0x100, program, sizeof(program)),
-           "kinetis_k22_load(device, 0x100, program, sizeof(program))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
+    expect(state, kinetis_load(device, 0x100, program, sizeof(program)),
+           "kinetis_load(device, 0x100, program, sizeof(program))");
+    expect(state, kinetis_reset(device), "kinetis_reset(device)");
 }
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = create_device(&state);
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    Kinetis* device = create_device(&state);
+    CortexM4* cpu = kinetis_cpu(device);
 
     load_main(&state, device, 0x6808u);
     expect(&state, cortex_m4_write_memory(cpu, SCB_SHCSR, 4, 1u << 17),
@@ -83,6 +83,6 @@ int main(void) {
     expect(&state, cortex_m4_get_register(cpu, 4) == 0x77u,
            "cortex_m4_get_register(cpu, 4) == 0x77u");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

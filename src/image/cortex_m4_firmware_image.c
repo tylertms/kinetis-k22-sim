@@ -46,7 +46,7 @@ static bool load_file(const char* path, uint8_t** file_data, size_t* file_size) 
     return true;
 }
 
-bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t image_size,
+bool cortex_m4_load_elf_data(Kinetis* device, const void* image_data, size_t image_size,
                              uint32_t* entry_address) {
     if (device == NULL || image_data == NULL) {
         return false;
@@ -80,7 +80,7 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
         if (file_size > memory_size ||
             (file_size != 0u &&
              ((uint64_t)file_offset + file_size > image_size ||
-              !kinetis_k22_load(device, load_address, bytes + file_offset, file_size)))) {
+              !kinetis_load(device, load_address, bytes + file_offset, file_size)))) {
             loaded = false;
             break;
         }
@@ -90,7 +90,7 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
             uint32_t zero_address = load_address + file_size;
             while (loaded && remaining != 0) {
                 const size_t chunk = remaining < sizeof(zeros) ? remaining : sizeof(zeros);
-                loaded = kinetis_k22_load(device, zero_address, zeros, chunk);
+                loaded = kinetis_load(device, zero_address, zeros, chunk);
                 zero_address += (uint32_t)chunk;
                 remaining -= (uint32_t)chunk;
             }
@@ -102,10 +102,10 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
     return loaded;
 }
 
-bool cortex_m4_load_binary_data(KinetisK22* device, const void* image_data, size_t image_size,
+bool cortex_m4_load_binary_data(Kinetis* device, const void* image_data, size_t image_size,
                                 uint32_t load_address, uint32_t* entry_address) {
     if (device == NULL || image_data == NULL || image_size == 0u ||
-        !kinetis_k22_load(device, load_address, image_data, image_size)) {
+        !kinetis_load(device, load_address, image_data, image_size)) {
         return false;
     }
     if (entry_address != NULL) {
@@ -179,7 +179,7 @@ bool cortex_m4_elf_symbol_data(const void* image_data, size_t image_size,
     return false;
 }
 
-bool cortex_m4_load_elf(KinetisK22* device, const char* path, uint32_t* entry_address) {
+bool cortex_m4_load_elf(Kinetis* device, const char* path, uint32_t* entry_address) {
     uint8_t* image_data = NULL;
     size_t image_size = 0;
     if (!load_file(path, &image_data, &image_size)) {
@@ -190,7 +190,7 @@ bool cortex_m4_load_elf(KinetisK22* device, const char* path, uint32_t* entry_ad
     return loaded;
 }
 
-bool cortex_m4_load_binary(KinetisK22* device, const char* path, uint32_t load_address) {
+bool cortex_m4_load_binary(Kinetis* device, const char* path, uint32_t load_address) {
     uint8_t* image_data = NULL;
     size_t image_size = 0;
     if (!load_file(path, &image_data, &image_size)) {

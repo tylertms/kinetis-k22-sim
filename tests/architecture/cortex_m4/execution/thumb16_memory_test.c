@@ -1,38 +1,38 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
 #include "test.h"
 
-static KinetisK22* create_device(TestState* state) {
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+static Kinetis* create_device(TestState* state) {
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
-    expect(state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
     return device;
 }
 
-static void execute(TestState* state, KinetisK22* device, uint16_t opcode) {
-    expect(state, kinetis_k22_load(device, 0x100, &opcode, sizeof(opcode)),
-           "kinetis_k22_load(device, 0x100, &opcode, sizeof(opcode))");
-    cortex_m4_set_register(kinetis_k22_cpu(device), 15, 0x100);
-    const CortexM4Result result = cortex_m4_step(kinetis_k22_cpu(device));
+static void execute(TestState* state, Kinetis* device, uint16_t opcode) {
+    expect(state, kinetis_load(device, 0x100, &opcode, sizeof(opcode)),
+           "kinetis_load(device, 0x100, &opcode, sizeof(opcode))");
+    cortex_m4_set_register(kinetis_cpu(device), 15, 0x100);
+    const CortexM4Result result = cortex_m4_step(kinetis_cpu(device));
     expect(state, result.stop == CORTEX_M4_STOP_RUNNING, "result.stop == CORTEX_M4_STOP_RUNNING");
 }
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = create_device(&state);
-    expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    Kinetis* device = create_device(&state);
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
+    CortexM4* cpu = kinetis_cpu(device);
     const uint32_t address = 0x20000040u;
     const uint32_t initial = 0x80ff7f01u;
-    expect(&state, kinetis_k22_write(device, address, &initial, sizeof(initial)),
-           "kinetis_k22_write(device, address, &initial, sizeof(initial))");
+    expect(&state, kinetis_write(device, address, &initial, sizeof(initial)),
+           "kinetis_write(device, address, &initial, sizeof(initial))");
     cortex_m4_set_register(cpu, 1, address);
     cortex_m4_set_register(cpu, 2, 0);
     cortex_m4_set_register(cpu, 0, 0xa55ac33cu);
@@ -51,8 +51,8 @@ int main(void) {
            "cortex_m4_get_register(cpu, 0) == 0xffffffffu");
     const int16_t negative_halfword = -128;
     expect(&state,
-           kinetis_k22_write(device, address + 4, &negative_halfword, sizeof(negative_halfword)),
-           "kinetis_k22_write(device, address + 4, &negative_halfword, "
+           kinetis_write(device, address + 4, &negative_halfword, sizeof(negative_halfword)),
+           "kinetis_write(device, address + 4, &negative_halfword, "
            "sizeof(negative_halfword))");
     cortex_m4_set_register(cpu, 2, 4);
     execute(&state, device, 0x5e88u);
@@ -63,21 +63,21 @@ int main(void) {
     cortex_m4_set_register(cpu, 0, 0x11223344u);
     execute(&state, device, 0x5088u);
     uint32_t stored = 0;
-    expect(&state, kinetis_k22_read(device, address + 4, &stored, sizeof(stored)),
-           "kinetis_k22_read(device, address + 4, &stored, sizeof(stored))");
+    expect(&state, kinetis_read(device, address + 4, &stored, sizeof(stored)),
+           "kinetis_read(device, address + 4, &stored, sizeof(stored))");
     expect(&state, stored == 0x11223344u, "stored == 0x11223344u");
     cortex_m4_set_register(cpu, 2, 6);
     cortex_m4_set_register(cpu, 0, 0xabcd1234u);
     execute(&state, device, 0x5288u);
     uint16_t halfword = 0;
-    expect(&state, kinetis_k22_read(device, address + 6, &halfword, sizeof(halfword)),
-           "kinetis_k22_read(device, address + 6, &halfword, sizeof(halfword))");
+    expect(&state, kinetis_read(device, address + 6, &halfword, sizeof(halfword)),
+           "kinetis_read(device, address + 6, &halfword, sizeof(halfword))");
     expect(&state, halfword == 0x1234u, "halfword == 0x1234u");
     cortex_m4_set_register(cpu, 2, 8);
     execute(&state, device, 0x5488u);
     uint8_t byte = 0;
-    expect(&state, kinetis_k22_read(device, address + 8, &byte, sizeof(byte)),
-           "kinetis_k22_read(device, address + 8, &byte, sizeof(byte))");
+    expect(&state, kinetis_read(device, address + 8, &byte, sizeof(byte)),
+           "kinetis_read(device, address + 8, &byte, sizeof(byte))");
     expect(&state, byte == 0x34u, "byte == 0x34u");
 
     cortex_m4_set_register(cpu, 1, address);
@@ -124,6 +124,6 @@ int main(void) {
     expect(&state, cortex_m4_get_register(cpu, 13) == original_stack - 4,
            "cortex_m4_get_register(cpu, 13) == original_stack - 4");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

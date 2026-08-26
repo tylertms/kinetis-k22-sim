@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -18,26 +18,26 @@ static uint32_t read_value(TestState* state, CortexM4* cpu, uint32_t address, ui
     return value;
 }
 
-static KinetisK22* create_device(TestState* state) {
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+static Kinetis* create_device(TestState* state) {
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
     const uint16_t nop = 0xbf00u;
-    expect(state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
-    expect(state, kinetis_k22_load(device, 0x100, &nop, sizeof(nop)),
-           "kinetis_k22_load(device, 0x100, &nop, sizeof(nop))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
+    expect(state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0x100, &nop, sizeof(nop)),
+           "kinetis_load(device, 0x100, &nop, sizeof(nop))");
+    expect(state, kinetis_reset(device), "kinetis_reset(device)");
     return device;
 }
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = create_device(&state);
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    Kinetis* device = create_device(&state);
+    CortexM4* cpu = kinetis_cpu(device);
 
     expect(&state, read_value(&state, cpu, SCB_CPUID, 4) == 0x410fc241u,
            "read_value(&state, cpu, SCB_CPUID, 4) == 0x410fc241u");
@@ -88,8 +88,8 @@ int main(void) {
            "(read_value(&state, cpu, SCB_AIRCR, 4) & 0x00000700u) == 0x300u");
 
     const uint32_t retained = 0x6d345abcu;
-    expect(&state, kinetis_k22_write(device, 0x20000000u, &retained, sizeof(retained)),
-           "kinetis_k22_write(device, 0x20000000u, &retained, sizeof(retained))");
+    expect(&state, kinetis_write(device, 0x20000000u, &retained, sizeof(retained)),
+           "kinetis_write(device, 0x20000000u, &retained, sizeof(retained))");
     expect(&state, cortex_m4_write_memory(cpu, SCB_AIRCR, 4, 0x05fa0004u),
            "cortex_m4_write_memory(cpu, SCB_AIRCR, 4, 0x05fa0004u)");
     cortex_m4_step(cpu);
@@ -102,6 +102,6 @@ int main(void) {
     expect(&state, read_value(&state, cpu, 0x20000000u, 4) == retained,
            "read_value(&state, cpu, 0x20000000u, 4) == retained");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

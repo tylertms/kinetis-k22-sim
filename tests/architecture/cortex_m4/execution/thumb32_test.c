@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -7,7 +7,7 @@
 
 typedef struct {
     TestState* state;
-    KinetisK22* device;
+    Kinetis* device;
     CortexM4* cpu;
 } Fixture;
 
@@ -206,10 +206,10 @@ static void test_memory_and_exclusive(Fixture* fixture) {
     const uint32_t address = 0x20000100u;
     uint16_t halfword = 0x1234u;
     uint8_t byte = 0x5au;
-    expect(fixture->state, kinetis_k22_write(fixture->device, address, &halfword, sizeof(halfword)),
-           "kinetis_k22_write(fixture->device, address, &halfword, sizeof(halfword))");
-    expect(fixture->state, kinetis_k22_write(fixture->device, address + 2u, &byte, sizeof(byte)),
-           "kinetis_k22_write(fixture->device, address + 2u, &byte, sizeof(byte))");
+    expect(fixture->state, kinetis_write(fixture->device, address, &halfword, sizeof(halfword)),
+           "kinetis_write(fixture->device, address, &halfword, sizeof(halfword))");
+    expect(fixture->state, kinetis_write(fixture->device, address + 2u, &byte, sizeof(byte)),
+           "kinetis_write(fixture->device, address + 2u, &byte, sizeof(byte))");
     fixture->cpu->registers[1] = address + 2u;
     execute(fixture, 0xe8d1u, 0x0f4fu);
     expect(fixture->state, fixture->cpu->registers[0] == byte,
@@ -217,13 +217,13 @@ static void test_memory_and_exclusive(Fixture* fixture) {
     fixture->cpu->registers[2] = 0xa5u;
     execute(fixture, 0xe8c1u, 0x2f40u);
     expect(fixture->state, fixture->cpu->registers[0] == 0u, "fixture->cpu->registers[0] == 0u");
-    expect(fixture->state, kinetis_k22_read(fixture->device, address + 2u, &byte, sizeof(byte)),
-           "kinetis_k22_read(fixture->device, address + 2u, &byte, sizeof(byte))");
+    expect(fixture->state, kinetis_read(fixture->device, address + 2u, &byte, sizeof(byte)),
+           "kinetis_read(fixture->device, address + 2u, &byte, sizeof(byte))");
     expect(fixture->state, byte == 0xa5u, "byte == 0xa5u");
 
     const uint32_t branch = 0x121u;
-    expect(fixture->state, kinetis_k22_load(fixture->device, 0x104u, &branch, sizeof(branch)),
-           "kinetis_k22_load(fixture->device, 0x104u, &branch, sizeof(branch))");
+    expect(fixture->state, kinetis_load(fixture->device, 0x104u, &branch, sizeof(branch)),
+           "kinetis_load(fixture->device, 0x104u, &branch, sizeof(branch))");
     execute(fixture, 0xf8dfu, 0xf000u);
     expect(fixture->state, fixture->cpu->registers[15] == 0x120u,
            "fixture->cpu->registers[15] == 0x120u");
@@ -232,8 +232,8 @@ static void test_memory_and_exclusive(Fixture* fixture) {
     fixture->cpu->registers[0] = 0x11223344u;
     execute(fixture, 0xf8c1u, 0x0000u);
     uint32_t word = 0u;
-    expect(fixture->state, kinetis_k22_read(fixture->device, address, &word, sizeof(word)),
-           "kinetis_k22_read(fixture->device, address, &word, sizeof(word))");
+    expect(fixture->state, kinetis_read(fixture->device, address, &word, sizeof(word)),
+           "kinetis_read(fixture->device, address, &word, sizeof(word))");
     expect(fixture->state, word == 0x11223344u, "word == 0x11223344u");
     fixture->cpu->registers[1] = address + 3u;
     execute(fixture, 0xf991u, 0x0000u);
@@ -241,8 +241,8 @@ static void test_memory_and_exclusive(Fixture* fixture) {
            "fixture->cpu->registers[0] == 0x11u");
 
     byte = 0x80u;
-    expect(fixture->state, kinetis_k22_write(fixture->device, address + 1u, &byte, sizeof(byte)),
-           "kinetis_k22_write(fixture->device, address + 1u, &byte, sizeof(byte))");
+    expect(fixture->state, kinetis_write(fixture->device, address + 1u, &byte, sizeof(byte)),
+           "kinetis_write(fixture->device, address + 1u, &byte, sizeof(byte))");
     fixture->cpu->registers[1] = address;
     execute(fixture, 0xf911u, 0x0701u);
     expect(fixture->state, fixture->cpu->registers[0] == 0xffffff80u,
@@ -287,9 +287,8 @@ static void test_memory_and_exclusive(Fixture* fixture) {
 
     fixture->cpu->registers[1] = address;
     const uint32_t target = 0x181u;
-    expect(fixture->state,
-           kinetis_k22_write(fixture->device, address + 4u, &target, sizeof(target)),
-           "kinetis_k22_write(fixture->device, address + 4u, &target, sizeof(target))");
+    expect(fixture->state, kinetis_write(fixture->device, address + 4u, &target, sizeof(target)),
+           "kinetis_write(fixture->device, address + 4u, &target, sizeof(target))");
     execute(fixture, 0xf851u, 0xf704u);
     expect(fixture->state, fixture->cpu->registers[15] == 0x180u,
            "fixture->cpu->registers[15] == 0x180u");
@@ -306,22 +305,22 @@ static void test_memory_and_exclusive(Fixture* fixture) {
 
 int main(void) {
     TestState state = {0};
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x101u};
-    expect(&state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0u, vectors, sizeof(vectors))");
-    expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    Fixture fixture = {&state, device, kinetis_k22_cpu(device)};
+    expect(&state, kinetis_load(device, 0u, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0u, vectors, sizeof(vectors))");
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
+    Fixture fixture = {&state, device, kinetis_cpu(device)};
     test_branches(&fixture);
     test_branch_decode_precedence(&fixture);
     test_special_registers(&fixture);
     test_immediates(&fixture);
     test_arithmetic(&fixture);
     test_memory_and_exclusive(&fixture);
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

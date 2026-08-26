@@ -103,10 +103,10 @@ static bool write_file(const char* path, const void* data, size_t size) {
     return fclose(file) == 0 && written;
 }
 
-static void test_files(TestState* state, KinetisK22* device) {
-    static const char elf_path[] = "kinetis_k22_firmware_image_test.elf";
-    static const char binary_path[] = "kinetis_k22_firmware_image_test.bin";
-    static const char missing_path[] = "kinetis_k22_missing_firmware_image.bin";
+static void test_files(TestState* state, Kinetis* device) {
+    static const char elf_path[] = "kinetis_firmware_image_test.elf";
+    static const char binary_path[] = "kinetis_firmware_image_test.bin";
+    static const char missing_path[] = "kinetis_missing_firmware_image.bin";
     uint8_t elf[IMAGE_SIZE];
     const uint8_t binary[] = {0x78u, 0x56u, 0x34u, 0x12u};
     initialize_image(elf);
@@ -131,7 +131,7 @@ static void test_files(TestState* state, KinetisK22* device) {
     (void)remove(binary_path);
 }
 
-static void test_binary(TestState* state, KinetisK22* device) {
+static void test_binary(TestState* state, Kinetis* device) {
     const uint8_t image[] = {0x78, 0x56, 0x34, 0x12};
     uint32_t entry_address = UINT32_MAX;
     expect(state,
@@ -139,8 +139,8 @@ static void test_binary(TestState* state, KinetisK22* device) {
            "cortex_m4_load_binary_data(device, image, sizeof(image), address, &entry_address)");
     expect(state, entry_address == 0x20000010u, "entry_address == 0x20000010u");
     uint32_t value = 0;
-    expect(state, kinetis_k22_read(device, 0x20000010u, &value, sizeof(value)),
-           "kinetis_k22_read(device, 0x20000010u, &value, sizeof(value))");
+    expect(state, kinetis_read(device, 0x20000010u, &value, sizeof(value)),
+           "kinetis_read(device, 0x20000010u, &value, sizeof(value))");
     expect(state, value == 0x12345678u, "value == 0x12345678u");
     expect(state, cortex_m4_load_binary_data(device, image, sizeof(image), 0x20000014u, NULL),
            "cortex_m4_load_binary_data(device, image, sizeof(image), address, NULL)");
@@ -185,7 +185,7 @@ static void test_symbol(TestState* state) {
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = kinetis_k22_create(kinetis_k22_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_default_configuration());
     expect(&state, device != NULL, "device != NULL");
     uint8_t image[IMAGE_SIZE];
     initialize_image(image);
@@ -202,14 +202,14 @@ int main(void) {
            "cortex_m4_load_elf_data(device, image, sizeof(image), &entry_address)");
     expect(&state, entry_address == 0x101u, "entry_address == 0x101u");
     uint32_t value = 0;
-    expect(&state, kinetis_k22_read(device, 0x100u, &value, sizeof(value)),
-           "kinetis_k22_read(device, 0x100u, &value, sizeof(value))");
+    expect(&state, kinetis_read(device, 0x100u, &value, sizeof(value)),
+           "kinetis_read(device, 0x100u, &value, sizeof(value))");
     expect(&state, value == 0xbe00bf00u, "value == 0xbe00bf00u");
-    expect(&state, kinetis_k22_read(device, 0x20000000u, &value, sizeof(value)),
-           "kinetis_k22_read(device, 0x20000000u, &value, sizeof(value))");
+    expect(&state, kinetis_read(device, 0x20000000u, &value, sizeof(value)),
+           "kinetis_read(device, 0x20000000u, &value, sizeof(value))");
     expect(&state, value == 0x12345678u, "value == 0x12345678u");
-    expect(&state, kinetis_k22_read(device, 0x20000004u, &value, sizeof(value)),
-           "kinetis_k22_read(device, 0x20000004u, &value, sizeof(value))");
+    expect(&state, kinetis_read(device, 0x20000004u, &value, sizeof(value)),
+           "kinetis_read(device, 0x20000004u, &value, sizeof(value))");
     expect(&state, value == 0, "value == 0");
 
     initialize_image(image);
@@ -253,6 +253,6 @@ int main(void) {
     expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), NULL),
            "non-load program headers are skipped");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

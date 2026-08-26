@@ -1,5 +1,5 @@
 #include "cortex_m4.h"
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -40,8 +40,8 @@ int main(int argc, char** argv) {
     bool binary_image_loaded = false;
     uint64_t stop_address = 0;
     bool stop_address_set = false;
-    KinetisK22Profile profile = KINETIS_K22_PROFILE_MK22FN51212;
-    KinetisK22Package package = KINETIS_K22_PACKAGE_DEFAULT;
+    KinetisProfile profile = KINETIS_PROFILE_MK22FN51212;
+    KinetisPackage package = KINETIS_PACKAGE_DEFAULT;
     CortexM4RunLimits limits = {1000000, 10000000};
     for (int argument_index = 2; argument_index < argc; argument_index += 2) {
         if (argument_index + 1 >= argc) {
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
         if (strcmp(argv[argument_index], "--profile") == 0) {
-            if (!kinetis_k22_profile_from_name(argv[argument_index + 1], &profile)) {
+            if (!kinetis_profile_from_name(argv[argument_index + 1], &profile)) {
                 fprintf(stderr, "unknown K22 profile: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
         }
 
         if (strcmp(argv[argument_index], "--package") == 0) {
-            if (!kinetis_k22_package_from_code(argv[argument_index + 1], &package)) {
+            if (!kinetis_package_from_code(argv[argument_index + 1], &package)) {
                 fprintf(stderr, "unknown K22 package: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
@@ -95,10 +95,10 @@ int main(int argc, char** argv) {
         fprintf(stderr, "an address is too large\n");
         return EXIT_FAILURE;
     }
-    KinetisK22Configuration configuration = kinetis_k22_configuration(profile);
+    KinetisConfiguration configuration = kinetis_configuration(profile);
     configuration.package = package;
     configuration.vector_table_address = (uint32_t)reset_address;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     if (device == NULL) {
         fprintf(stderr, "failed to create the device\n");
         return EXIT_FAILURE;
@@ -109,32 +109,32 @@ int main(int argc, char** argv) {
                             : cortex_m4_load_elf(device, argv[1], &entry_address);
     if (!loaded) {
         fprintf(stderr, "failed to load the firmware image\n");
-        kinetis_k22_destroy(device);
+        kinetis_destroy(device);
         return EXIT_FAILURE;
     }
-    if (!kinetis_k22_reset(device)) {
+    if (!kinetis_reset(device)) {
         fprintf(stderr, "failed to reset the device\n");
-        kinetis_k22_destroy(device);
+        kinetis_destroy(device);
         return EXIT_FAILURE;
     }
     if (stop_address_set &&
-        !cortex_m4_set_breakpoint(kinetis_k22_cpu(device), 0, (uint32_t)stop_address, true)) {
+        !cortex_m4_set_breakpoint(kinetis_cpu(device), 0, (uint32_t)stop_address, true)) {
         fprintf(stderr, "the stop address is invalid\n");
-        kinetis_k22_destroy(device);
+        kinetis_destroy(device);
         return EXIT_FAILURE;
     }
-    const CortexM4Result result = cortex_m4_run(kinetis_k22_cpu(device), limits);
-    const uint32_t fault_status = cortex_m4_get_fault_status(kinetis_k22_cpu(device));
+    const CortexM4Result result = cortex_m4_run(kinetis_cpu(device), limits);
+    const uint32_t fault_status = cortex_m4_get_fault_status(kinetis_cpu(device));
     printf("stop=%u pc=0x%08" PRIx32 " opcode=0x%08" PRIx32 " instructions=%" PRIu64
            " cycles=%" PRIu64 " entry=0x%08" PRIx32 " cfsr=0x%08" PRIx32 " bfar=0x%08" PRIx32 "\n",
            result.stop, result.pc, result.opcode, result.instructions, result.cycles, entry_address,
-           fault_status, cortex_m4_get_fault_address(kinetis_k22_cpu(device)));
+           fault_status, cortex_m4_get_fault_address(kinetis_cpu(device)));
     for (uint8_t register_index = 0; register_index < 16; register_index++) {
         printf("r%u=0x%08" PRIx32 "%c", register_index,
-               cortex_m4_get_register(kinetis_k22_cpu(device), register_index),
+               cortex_m4_get_register(kinetis_cpu(device), register_index),
                register_index == 15 ? '\n' : ' ');
     }
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     const bool failed = fault_status != 0 || result.stop == CORTEX_M4_STOP_UNSUPPORTED ||
                         result.stop == CORTEX_M4_STOP_BUS_FAULT ||
                         result.stop == CORTEX_M4_STOP_USAGE_FAULT ||

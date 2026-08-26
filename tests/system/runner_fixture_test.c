@@ -21,7 +21,7 @@ int main(void) {
         0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xdeu, 0x00u, 0xbfu, 0xfeu, 0xe7u,
     };
     TestState state = {0};
-    write_image(&state, KINETIS_K22_RUNNER_SMOKE_IMAGE, smoke_image, sizeof(smoke_image));
-    write_image(&state, KINETIS_K22_RUNNER_FAULT_IMAGE, fault_image, sizeof(fault_image));
+    write_image(&state, KINETIS_RUNNER_SMOKE_IMAGE, smoke_image, sizeof(smoke_image));
+    write_image(&state, KINETIS_RUNNER_FAULT_IMAGE, fault_image, sizeof(fault_image));
     return test_finish(&state);
 }

@@ -213,260 +213,260 @@ test_definitions = [
   },
   {
     'name': 'device_memory',
-    'sources': ['device/kinetis_k22/memory/memory_test.c'],
+    'sources': ['device/kinetis/memory/memory_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_profile',
-    'sources': ['device/kinetis_k22/variants/profile_test.c'],
+    'sources': ['device/kinetis/variants/profile_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_boundary_census',
-    'sources': ['device/kinetis_k22/platform/device_boundary_test.c'],
+    'sources': ['device/kinetis/platform/device_boundary_test.c'],
     'suite': ['device', 'unit'],
     'allocation_failure': true,
   },
   {
     'name': 'device_register_manifest',
-    'sources': ['device/kinetis_k22/variants/manifest_test.c'],
+    'sources': ['device/kinetis/variants/manifest_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_register_access',
-    'sources': ['device/kinetis_k22/variants/register_access_test.c'],
+    'sources': ['device/kinetis/variants/register_access_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_peripheral_census',
-    'sources': ['device/kinetis_k22/variants/peripheral_census_test.c'],
+    'sources': ['device/kinetis/variants/peripheral_census_test.c'],
     'suite': ['device', 'unit', 'integration'],
   },
   {
     'name': 'device_stateful_census',
-    'sources': ['device/kinetis_k22/platform/stateful_census_test.c'],
+    'sources': ['device/kinetis/platform/stateful_census_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_peripheral_state_census',
     'sources': [
-      'device/kinetis_k22/platform/peripheral_state_census_test.c',
+      'device/kinetis/platform/peripheral_state_census_test.c',
     ],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_data_complete',
     'sources': [
-      'device/kinetis_k22/memory/data/core.c',
-      'device/kinetis_k22/memory/data/flash.c',
-      'device/kinetis_k22/memory/data/swap.c',
-      'device/kinetis_k22/memory/data/boundary.c',
-      'device/kinetis_k22/memory/data/command_census.c',
-      'device/kinetis_k22/memory/data/flash_state_census.c',
-      'device/kinetis_k22/memory/data/state_census.c',
+      'device/kinetis/memory/data/core.c',
+      'device/kinetis/memory/data/flash.c',
+      'device/kinetis/memory/data/swap.c',
+      'device/kinetis/memory/data/boundary.c',
+      'device/kinetis/memory/data/command_census.c',
+      'device/kinetis/memory/data/flash_state_census.c',
+      'device/kinetis/memory/data/state_census.c',
     ],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_fmc_complete',
-    'sources': ['device/kinetis_k22/memory/fmc_test.c'],
+    'sources': ['device/kinetis/memory/fmc_test.c'],
     'suite': ['device', 'unit', 'integration'],
   },
   {
     'name': 'device_dma_faults',
-    'sources': ['device/kinetis_k22/memory/dma_fault_test.c'],
+    'sources': ['device/kinetis/memory/dma_fault_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_flash_faults',
-    'sources': ['device/kinetis_k22/memory/flash_fault_test.c'],
+    'sources': ['device/kinetis/memory/flash_fault_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_io_complete',
     'sources': [
-      'device/kinetis_k22/platform/io_test.c',
-      'device/kinetis_k22/platform/io_boundaries.c',
+      'device/kinetis/platform/io_test.c',
+      'device/kinetis/platform/io_boundaries.c',
     ],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_io_state_census',
-    'sources': ['device/kinetis_k22/platform/io_state_census_test.c'],
+    'sources': ['device/kinetis/platform/io_state_census_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_package',
-    'sources': ['device/kinetis_k22/variants/package_test.c'],
+    'sources': ['device/kinetis/variants/package_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_serial_complete',
-    'sources': ['device/kinetis_k22/communication/serial_test.c'],
+    'sources': ['device/kinetis/communication/serial_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_sdhc_complete',
-    'sources': ['device/kinetis_k22/communication/sdhc_test.c'],
+    'sources': ['device/kinetis/communication/sdhc_test.c'],
     'suite': ['device', 'integration'],
     'allocation_failure': true,
   },
   {
     'name': 'device_sdhc_state_census',
-    'sources': ['device/kinetis_k22/communication/sdhc_state_census_test.c'],
+    'sources': ['device/kinetis/communication/sdhc_state_census_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_timing_complete',
     'sources': [
-      'device/kinetis_k22/timing/core.c',
-      'device/kinetis_k22/timing/ftm.c',
-      'device/kinetis_k22/timing/surface.c',
-      'device/kinetis_k22/timing/boundaries.c',
-      'device/kinetis_k22/timing/ftm_census.c',
-      'device/kinetis_k22/timing/state_census.c',
+      'device/kinetis/timing/core.c',
+      'device/kinetis/timing/ftm.c',
+      'device/kinetis/timing/surface.c',
+      'device/kinetis/timing/boundaries.c',
+      'device/kinetis/timing/ftm_census.c',
+      'device/kinetis/timing/state_census.c',
     ],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_watchdog_complete',
-    'sources': ['device/kinetis_k22/timing/watchdog_api_test.c'],
+    'sources': ['device/kinetis/timing/watchdog_api_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_watchdog_state_census',
-    'sources': ['device/kinetis_k22/timing/watchdog_state_census_test.c'],
+    'sources': ['device/kinetis/timing/watchdog_state_census_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_timing_register_state_census',
-    'sources': ['device/kinetis_k22/timing/register_state_census_test.c'],
+    'sources': ['device/kinetis/timing/register_state_census_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_ftm_state_census',
-    'sources': ['device/kinetis_k22/timing/ftm_state_census_test.c'],
+    'sources': ['device/kinetis/timing/ftm_state_census_test.c'],
     'suite': ['device', 'unit'],
   },
   {
     'name': 'device_cmt_complete',
-    'sources': ['device/kinetis_k22/timing/cmt_test.c'],
+    'sources': ['device/kinetis/timing/cmt_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_usbdcd_complete',
-    'sources': ['device/kinetis_k22/communication/usb_dcd_test.c'],
+    'sources': ['device/kinetis/communication/usb_dcd_test.c'],
     'suite': ['device', 'unit', 'integration'],
   },
   {
     'name': 'device_ftm_synchronization',
-    'sources': ['device/kinetis_k22/control/ftm_synchronization_test.c'],
+    'sources': ['device/kinetis/control/ftm_synchronization_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_ftm_combine',
-    'sources': ['device/kinetis_k22/control/ftm_combine_test.c'],
+    'sources': ['device/kinetis/control/ftm_combine_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_ftm_deadtime',
-    'sources': ['device/kinetis_k22/control/ftm_deadtime_test.c'],
+    'sources': ['device/kinetis/control/ftm_deadtime_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_ftm_fault',
-    'sources': ['device/kinetis_k22/control/ftm_fault_test.c'],
+    'sources': ['device/kinetis/control/ftm_fault_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_ftm_quadrature',
-    'sources': ['device/kinetis_k22/control/ftm_quadrature_test.c'],
+    'sources': ['device/kinetis/control/ftm_quadrature_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_integration_complete',
     'sources': [
-      'device/kinetis_k22/platform/integration/platform.c',
-      'device/kinetis_k22/platform/integration/peripherals.c',
+      'device/kinetis/platform/integration/platform.c',
+      'device/kinetis/platform/integration/peripherals.c',
     ],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_host_api_complete',
-    'sources': ['device/kinetis_k22/platform/host_api_test.c'],
+    'sources': ['device/kinetis/platform/host_api_test.c'],
     'suite': ['device', 'integration'],
     'allocation_failure': true,
   },
   {
     'name': 'device_clock_gate_complete',
-    'sources': ['device/kinetis_k22/platform/clock_gate_test.c'],
+    'sources': ['device/kinetis/platform/clock_gate_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_sysmpu_integration',
-    'sources': ['device/kinetis_k22/platform/sysmpu_test.c'],
+    'sources': ['device/kinetis/platform/sysmpu_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_infrastructure',
-    'sources': ['device/kinetis_k22/platform/infrastructure_test.c'],
+    'sources': ['device/kinetis/platform/infrastructure_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_gpio',
-    'sources': ['device/kinetis_k22/platform/gpio_test.c'],
+    'sources': ['device/kinetis/platform/gpio_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_pit',
-    'sources': ['device/kinetis_k22/timing/pit_test.c'],
+    'sources': ['device/kinetis/timing/pit_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_adc',
-    'sources': ['device/kinetis_k22/analog/adc_test.c'],
+    'sources': ['device/kinetis/analog/adc_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_uart',
-    'sources': ['device/kinetis_k22/communication/uart_test.c'],
+    'sources': ['device/kinetis/communication/uart_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_spi',
-    'sources': ['device/kinetis_k22/communication/spi_test.c'],
+    'sources': ['device/kinetis/communication/spi_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_dma',
-    'sources': ['device/kinetis_k22/memory/dma_test.c'],
+    'sources': ['device/kinetis/memory/dma_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_i2c',
-    'sources': ['device/kinetis_k22/communication/i2c_test.c'],
+    'sources': ['device/kinetis/communication/i2c_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_watchdog',
-    'sources': ['device/kinetis_k22/timing/watchdog_test.c'],
+    'sources': ['device/kinetis/timing/watchdog_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'device_clock_power',
-    'sources': ['device/kinetis_k22/timing/clock_power_test.c'],
+    'sources': ['device/kinetis/timing/clock_power_test.c'],
     'suite': ['device', 'integration'],
   },
   {
     'name': 'firmware_image',
     'sources': ['system/firmware_image_test.c'],
     'suite': ['runner', 'system'],
-    'dependencies': [kinetis_k22_firmware_image_dependency],
+    'dependencies': [kinetis_firmware_image_dependency],
   },
 ]
 
 foreach definition : test_definitions
-  name = 'kinetis_k22_' + definition['name'] + '_test'
+  name = 'kinetis_' + definition['name'] + '_test'
   sources = definition['sources']
   c_args = []
   link_args = []
@@ -485,7 +485,7 @@ foreach definition : test_definitions
     c_args: c_args,
     dependencies: definition.get(
       'dependencies',
-      [kinetis_k22_simulator_dependency],
+      [kinetis_simulator_dependency],
     ),
     include_directories: test_include,
     link_args: link_args,
@@ -503,28 +503,28 @@ foreach definition : test_definitions
   endif
 endforeach
 
-smoke_image_name = 'kinetis_k22_firmware_runner_smoke.bin'
-fault_image_name = 'kinetis_k22_firmware_runner_fault.bin'
+smoke_image_name = 'kinetis_firmware_runner_smoke.bin'
+fault_image_name = 'kinetis_firmware_runner_fault.bin'
 smoke_image = meson.current_build_dir() / smoke_image_name
 fault_image = meson.current_build_dir() / fault_image_name
 fixture_generator = executable(
-  'kinetis_k22_firmware_runner_fixture',
+  'kinetis_firmware_runner_fixture',
   'system/runner_fixture_test.c',
   c_args: [
-    '-DKINETIS_K22_RUNNER_SMOKE_IMAGE="' + smoke_image + '"',
-    '-DKINETIS_K22_RUNNER_FAULT_IMAGE="' + fault_image + '"',
+    '-DKINETIS_RUNNER_SMOKE_IMAGE="' + smoke_image + '"',
+    '-DKINETIS_RUNNER_FAULT_IMAGE="' + fault_image + '"',
   ],
   include_directories: [test_include, public_include],
 )
 runner_images = custom_target(
-  'kinetis_k22_firmware_runner_images',
+  'kinetis_firmware_runner_images',
   command: fixture_generator,
   output: [smoke_image_name, fault_image_name],
 )
 
 test(
-  'kinetis_k22_firmware_runner_smoke_test',
-  kinetis_k22_firmware_runner,
+  'kinetis_firmware_runner_smoke_test',
+  kinetis_firmware_runner,
   args: [
     runner_images[0],
     '--reset-address',
@@ -539,8 +539,8 @@ test(
   suite: ['runner', 'system'],
 )
 test(
-  'kinetis_k22_firmware_runner_fault_test',
-  kinetis_k22_firmware_runner,
+  'kinetis_firmware_runner_fault_test',
+  kinetis_firmware_runner,
   args: [
     runner_images[1],
     '--reset-address',
@@ -615,8 +615,8 @@ runner_failure_cases = [
 ]
 foreach failure : runner_failure_cases
   test(
-    'kinetis_k22_firmware_runner_' + failure['name'] + '_test',
-    kinetis_k22_firmware_runner,
+    'kinetis_firmware_runner_' + failure['name'] + '_test',
+    kinetis_firmware_runner,
     args: failure['args'],
     expected_fail: true,
     suite: ['runner', 'system'],

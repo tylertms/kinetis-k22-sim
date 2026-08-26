@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -18,24 +18,24 @@ enum {
     FPSCR_AHP = 1u << 26,
 };
 
-static KinetisK22* create_device(TestState* state) {
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+static Kinetis* create_device(TestState* state) {
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x101u};
-    expect(state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0u, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0u, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0u, vectors, sizeof(vectors))");
     return device;
 }
 
-static CortexM4* prepare(TestState* state, KinetisK22* device, uint16_t first, uint16_t second) {
+static CortexM4* prepare(TestState* state, Kinetis* device, uint16_t first, uint16_t second) {
     const uint16_t program[] = {first, second, 0xbe00u};
-    expect(state, kinetis_k22_load(device, 0x100u, program, sizeof(program)),
-           "kinetis_k22_load(device, 0x100u, program, sizeof(program))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    expect(state, kinetis_load(device, 0x100u, program, sizeof(program)),
+           "kinetis_load(device, 0x100u, program, sizeof(program))");
+    expect(state, kinetis_reset(device), "kinetis_reset(device)");
+    CortexM4* cpu = kinetis_cpu(device);
     test_connect_debugger(state, cpu);
     expect(state, cortex_m4_write_memory(cpu, 0xe000ed88u, 4u, 0x00f00000u),
            "cortex_m4_write_memory(cpu, 0xe000ed88u, 4u, 0x00f00000u)");
@@ -48,7 +48,7 @@ static void run(TestState* state, CortexM4* cpu) {
            "result.stop == CORTEX_M4_STOP_BREAKPOINT");
 }
 
-static void test_nan_selection(TestState* state, KinetisK22* device) {
+static void test_nan_selection(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xee37u, 0x7a27u);
     cortex_m4_set_fp_register(cpu, 14u, 0x7fc00011u);
     cortex_m4_set_fp_register(cpu, 15u, 0x7f800022u);
@@ -73,7 +73,7 @@ static void test_nan_selection(TestState* state, KinetisK22* device) {
            "cortex_m4_get_fp_register(cpu, 14u) == 0x7fc00022u");
 }
 
-static uint32_t convert_rounded(TestState* state, KinetisK22* device, uint32_t source,
+static uint32_t convert_rounded(TestState* state, Kinetis* device, uint32_t source,
                                 uint32_t rounding) {
     CortexM4* cpu = prepare(state, device, 0xeebdu, 0x0a60u);
     cortex_m4_set_fp_register(cpu, 1u, source);
@@ -82,7 +82,7 @@ static uint32_t convert_rounded(TestState* state, KinetisK22* device, uint32_t s
     return cortex_m4_get_fp_register(cpu, 0u);
 }
 
-static void test_integer_rounding(TestState* state, KinetisK22* device) {
+static void test_integer_rounding(TestState* state, Kinetis* device) {
     expect(state, convert_rounded(state, device, 0x3f99999au, FPSCR_ROUND_PLUS_INFINITY) == 2u,
            "convert_rounded(state, device, 0x3f99999au, FPSCR_ROUND_PLUS_INFINITY) == 2u");
     expect(state, convert_rounded(state, device, 0x3fe66666u, FPSCR_ROUND_MINUS_INFINITY) == 1u,
@@ -99,8 +99,7 @@ static void test_integer_rounding(TestState* state, KinetisK22* device) {
            "convert_rounded(state, device, 0x40600000u, 0u) == 4u");
 }
 
-static uint32_t half_to_single(TestState* state, KinetisK22* device, uint16_t half,
-                               uint32_t fpscr) {
+static uint32_t half_to_single(TestState* state, Kinetis* device, uint16_t half, uint32_t fpscr) {
     CortexM4* cpu = prepare(state, device, 0xeeb2u, 0x0a60u);
     cortex_m4_set_fp_register(cpu, 1u, half);
     cortex_m4_set_fpscr(cpu, fpscr);
@@ -108,8 +107,7 @@ static uint32_t half_to_single(TestState* state, KinetisK22* device, uint16_t ha
     return cortex_m4_get_fp_register(cpu, 0u);
 }
 
-static uint16_t single_to_half(TestState* state, KinetisK22* device, uint32_t single,
-                               uint32_t fpscr) {
+static uint16_t single_to_half(TestState* state, Kinetis* device, uint32_t single, uint32_t fpscr) {
     CortexM4* cpu = prepare(state, device, 0xeeb3u, 0x2a62u);
     cortex_m4_set_fp_register(cpu, 5u, single);
     cortex_m4_set_fp_register(cpu, 4u, 0xa5a50000u);
@@ -118,7 +116,7 @@ static uint16_t single_to_half(TestState* state, KinetisK22* device, uint32_t si
     return (uint16_t)cortex_m4_get_fp_register(cpu, 4u);
 }
 
-static void test_half_precision(TestState* state, KinetisK22* device) {
+static void test_half_precision(TestState* state, Kinetis* device) {
     expect(state, half_to_single(state, device, 0u, 0u) == 0u,
            "half_to_single(state, device, 0u, 0u) == 0u");
     expect(state, half_to_single(state, device, 1u, 0u) == 0x33800000u,
@@ -176,7 +174,7 @@ static void test_half_precision(TestState* state, KinetisK22* device) {
            "single_to_half(state, device, 0x33000000u, 0u) == 0u");
 }
 
-static void multiply(TestState* state, KinetisK22* device, uint32_t left, uint32_t right,
+static void multiply(TestState* state, Kinetis* device, uint32_t left, uint32_t right,
                      uint32_t fpscr, uint32_t expected) {
     CortexM4* cpu = prepare(state, device, 0xee27u, 0x7a27u);
     cortex_m4_set_fp_register(cpu, 14u, left);
@@ -187,7 +185,7 @@ static void multiply(TestState* state, KinetisK22* device, uint32_t left, uint32
            "cortex_m4_get_fp_register(cpu, 14u) == expected");
 }
 
-static void add(TestState* state, KinetisK22* device, uint32_t left, uint32_t right, uint32_t fpscr,
+static void add(TestState* state, Kinetis* device, uint32_t left, uint32_t right, uint32_t fpscr,
                 uint32_t expected) {
     CortexM4* cpu = prepare(state, device, 0xee37u, 0x7a27u);
     cortex_m4_set_fp_register(cpu, 14u, left);
@@ -198,7 +196,7 @@ static void add(TestState* state, KinetisK22* device, uint32_t left, uint32_t ri
            "cortex_m4_get_fp_register(cpu, 14u) == expected");
 }
 
-static void fused_multiply_add(TestState* state, KinetisK22* device, uint32_t accumulator,
+static void fused_multiply_add(TestState* state, Kinetis* device, uint32_t accumulator,
                                uint32_t left, uint32_t right, uint32_t fpscr, uint32_t expected) {
     CortexM4* cpu = prepare(state, device, 0xeea1u, 0x0a02u);
     cortex_m4_set_fp_register(cpu, 0u, accumulator);
@@ -212,7 +210,7 @@ static void fused_multiply_add(TestState* state, KinetisK22* device, uint32_t ac
            "fused multiply-add rounds once and reports inexact");
 }
 
-static void test_float_rounding(TestState* state, KinetisK22* device) {
+static void test_float_rounding(TestState* state, Kinetis* device) {
     multiply(state, device, 0xff7fffffu, 0x40000000u, FPSCR_ROUND_PLUS_INFINITY, 0xff7fffffu);
     multiply(state, device, 1u, 0x3f000000u, FPSCR_ROUND_PLUS_INFINITY, 1u);
     multiply(state, device, 0x80000001u, 0x3f000000u, FPSCR_ROUND_MINUS_INFINITY, 0x80000001u);
@@ -222,7 +220,7 @@ static void test_float_rounding(TestState* state, KinetisK22* device) {
     fused_multiply_add(state, device, 0x00000001u, 0x3f800800u, 0x3f800800u, 0u, 0x3f801001u);
 }
 
-static void test_invalid_arithmetic(TestState* state, KinetisK22* device) {
+static void test_invalid_arithmetic(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xee27u, 0x7a27u);
     cortex_m4_set_fp_register(cpu, 14u, 0x7f800000u);
     cortex_m4_set_fp_register(cpu, 15u, 0u);
@@ -278,7 +276,7 @@ static void test_invalid_arithmetic(TestState* state, KinetisK22* device) {
            "cortex_m4_get_fp_register(cpu, 0u) == 0xc0a00000u");
 }
 
-static void test_unary_nan(TestState* state, KinetisK22* device) {
+static void test_unary_nan(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xeeb1u, 0x1a61u);
     cortex_m4_set_fp_register(cpu, 3u, 0x7f800011u);
     run(state, cpu);
@@ -292,7 +290,7 @@ static void test_unary_nan(TestState* state, KinetisK22* device) {
            "cortex_m4_get_fp_register(cpu, 4u) == 0x7fc00011u");
 }
 
-static void test_compare_edges(TestState* state, KinetisK22* device) {
+static void test_compare_edges(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xeeb4u, 0x0a60u);
     cortex_m4_set_fp_register(cpu, 0u, 0x3f800000u);
     cortex_m4_set_fp_register(cpu, 1u, 0x7f800001u);
@@ -308,7 +306,7 @@ static void test_compare_edges(TestState* state, KinetisK22* device) {
            "(cortex_m4_get_fpscr(cpu) & CORTEX_M4_XPSR_C) != 0u");
 }
 
-static void test_conversion_limits(TestState* state, KinetisK22* device) {
+static void test_conversion_limits(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xeebdu, 0x0ae0u);
     cortex_m4_set_fp_register(cpu, 1u, 0x7f800000u);
     run(state, cpu);
@@ -316,7 +314,7 @@ static void test_conversion_limits(TestState* state, KinetisK22* device) {
            "cortex_m4_get_fp_register(cpu, 0u) == 0x7fffffffu");
 }
 
-static void test_transfer_edges(TestState* state, KinetisK22* device) {
+static void test_transfer_edges(TestState* state, Kinetis* device) {
     CortexM4* cpu = prepare(state, device, 0xeef1u, 0x1a10u);
     cortex_m4_set_fpscr(cpu, 0xa0000000u);
     run(state, cpu);
@@ -349,7 +347,7 @@ static void test_transfer_edges(TestState* state, KinetisK22* device) {
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = create_device(&state);
+    Kinetis* device = create_device(&state);
     test_nan_selection(&state, device);
     test_integer_rounding(&state, device);
     test_half_precision(&state, device);
@@ -359,6 +357,6 @@ int main(void) {
     test_compare_edges(&state, device);
     test_conversion_limits(&state, device);
     test_transfer_edges(&state, device);
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

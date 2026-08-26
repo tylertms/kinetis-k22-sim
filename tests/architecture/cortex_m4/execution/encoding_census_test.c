@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <inttypes.h>
 #include <stdint.h>
@@ -148,16 +148,16 @@ int main(int argc, char** argv) {
         UINT64_C(2258742799113528101),  UINT64_C(12554654631497704229),
         UINT64_C(13714994920826217253), UINT64_C(2274096894812758821),
     };
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(&test_state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x101u};
-    expect(&test_state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0u, vectors, sizeof(vectors))");
-    expect(&test_state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    expect(&test_state, kinetis_load(device, 0u, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0u, vectors, sizeof(vectors))");
+    expect(&test_state, kinetis_reset(device), "kinetis_reset(device)");
+    CortexM4* cpu = kinetis_cpu(device);
     const Census thumb16 = census_thumb16(cpu);
     const Census thumb32 = census_thumb32(cpu, shard);
     expect(&test_state,
@@ -177,6 +177,6 @@ int main(int argc, char** argv) {
                 thumb32.fingerprint);
     }
     expect(&test_state, thumb32_matches, "thumb32 census matches");
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&test_state);
 }

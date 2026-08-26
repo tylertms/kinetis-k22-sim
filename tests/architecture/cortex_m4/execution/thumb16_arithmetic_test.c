@@ -1,18 +1,18 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
 #include "test.h"
 
-static void execute(TestState* state, KinetisK22* device, uint16_t opcode, uint32_t first,
+static void execute(TestState* state, Kinetis* device, uint16_t opcode, uint32_t first,
                     uint32_t second, uint32_t xpsr) {
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
-    expect(state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
-    expect(state, kinetis_k22_load(device, 0x100, &opcode, sizeof(opcode)),
-           "kinetis_k22_load(device, 0x100, &opcode, sizeof(opcode))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    expect(state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0x100, &opcode, sizeof(opcode)),
+           "kinetis_load(device, 0x100, &opcode, sizeof(opcode))");
+    expect(state, kinetis_reset(device), "kinetis_reset(device)");
+    CortexM4* cpu = kinetis_cpu(device);
     cortex_m4_set_register(cpu, 0, first);
     cortex_m4_set_register(cpu, 1, second);
     cortex_m4_set_xpsr(cpu, xpsr | (1u << 24));
@@ -20,16 +20,14 @@ static void execute(TestState* state, KinetisK22* device, uint16_t opcode, uint3
     expect(state, result.stop == CORTEX_M4_STOP_RUNNING, "result.stop == CORTEX_M4_STOP_RUNNING");
 }
 
-static uint32_t result(KinetisK22* device) {
-    return cortex_m4_get_register(kinetis_k22_cpu(device), 0);
-}
+static uint32_t result(Kinetis* device) { return cortex_m4_get_register(kinetis_cpu(device), 0); }
 
 int main(void) {
     TestState state = {0};
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");
 
     execute(&state, device, 0x0048u, 0, 0x80000001u, 0);
@@ -40,14 +38,14 @@ int main(void) {
     expect(&state, result(device) == 0xc0000000u, "result(device) == 0xc0000000u");
 
     execute(&state, device, 0x1888u, 0, 5, 0);
-    cortex_m4_set_register(kinetis_k22_cpu(device), 2, 7);
-    cortex_m4_set_register(kinetis_k22_cpu(device), 15, 0x100);
-    cortex_m4_step(kinetis_k22_cpu(device));
+    cortex_m4_set_register(kinetis_cpu(device), 2, 7);
+    cortex_m4_set_register(kinetis_cpu(device), 15, 0x100);
+    cortex_m4_step(kinetis_cpu(device));
     expect(&state, result(device) == 12, "result(device) == 12");
     execute(&state, device, 0x1a88u, 0, 9, 0);
-    cortex_m4_set_register(kinetis_k22_cpu(device), 2, 4);
-    cortex_m4_set_register(kinetis_k22_cpu(device), 15, 0x100);
-    cortex_m4_step(kinetis_k22_cpu(device));
+    cortex_m4_set_register(kinetis_cpu(device), 2, 4);
+    cortex_m4_set_register(kinetis_cpu(device), 15, 0x100);
+    cortex_m4_step(kinetis_cpu(device));
     expect(&state, result(device) == 5, "result(device) == 5");
     execute(&state, device, 0x1cc8u, 0, 9, 0);
     expect(&state, result(device) == 12, "result(device) == 12");
@@ -72,8 +70,8 @@ int main(void) {
     for (size_t index = 0; index < sizeof(register_shifts) / sizeof(register_shifts[0]); index++) {
         execute(&state, device, register_shifts[index], 0x81234567u, 0, 1u << 29);
         expect(&state, result(device) == 0x81234567u, "result(device) == 0x81234567u");
-        expect(&state, (cortex_m4_get_xpsr(kinetis_k22_cpu(device)) & (1u << 29)) != 0,
-               "(cortex_m4_get_xpsr(kinetis_k22_cpu(device)) & (1u << 29)) != 0");
+        expect(&state, (cortex_m4_get_xpsr(kinetis_cpu(device)) & (1u << 29)) != 0,
+               "(cortex_m4_get_xpsr(kinetis_cpu(device)) & (1u << 29)) != 0");
     }
 
     execute(&state, device, 0xb208u, 0, 0x00008001u, 0);
@@ -91,6 +89,6 @@ int main(void) {
     execute(&state, device, 0xbac8u, 0, 0x00008001u, 0);
     expect(&state, result(device) == 0x00000180u, "result(device) == 0x00000180u");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

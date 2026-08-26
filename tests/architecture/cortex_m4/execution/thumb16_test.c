@@ -1,4 +1,4 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
@@ -7,13 +7,13 @@
 
 typedef struct {
     TestState* state;
-    KinetisK22* device;
+    Kinetis* device;
     CortexM4* cpu;
 } Fixture;
 
 static void execute(Fixture* fixture, uint16_t opcode) {
-    expect(fixture->state, kinetis_k22_load(fixture->device, 0x100u, &opcode, sizeof(opcode)),
-           "kinetis_k22_load(fixture->device, 0x100u, &opcode, sizeof(opcode))");
+    expect(fixture->state, kinetis_load(fixture->device, 0x100u, &opcode, sizeof(opcode)),
+           "kinetis_load(fixture->device, 0x100u, &opcode, sizeof(opcode))");
     cortex_m4_set_register(fixture->cpu, 15u, 0x100u);
     const CortexM4Result result = cortex_m4_step(fixture->cpu);
     expect(fixture->state, result.stop == CORTEX_M4_STOP_RUNNING,
@@ -99,8 +99,8 @@ static void test_stack_and_addresses(Fixture* fixture) {
     expect(fixture->state, reg(fixture, 13u) == stack, "reg(fixture, 13u) == stack");
 
     const uint32_t literal = 0x76543210u;
-    expect(fixture->state, kinetis_k22_load(fixture->device, 0x104u, &literal, sizeof(literal)),
-           "kinetis_k22_load(fixture->device, 0x104u, &literal, sizeof(literal))");
+    expect(fixture->state, kinetis_load(fixture->device, 0x104u, &literal, sizeof(literal)),
+           "kinetis_load(fixture->device, 0x104u, &literal, sizeof(literal))");
     execute(fixture, 0x4800u);
     expect(fixture->state, reg(fixture, 0u) == literal, "reg(fixture, 0u) == literal");
 }
@@ -129,14 +129,14 @@ static void test_stack_lifecycle(Fixture* fixture) {
     fixture->cpu->ici_address = stack - 4u;
     execute(fixture, 0xb403u);
     uint32_t stored = 0u;
-    expect(fixture->state, kinetis_k22_read(fixture->device, stack - 4u, &stored, sizeof(stored)),
-           "kinetis_k22_read(fixture->device, stack - 4u, &stored, sizeof(stored))");
+    expect(fixture->state, kinetis_read(fixture->device, stack - 4u, &stored, sizeof(stored)),
+           "kinetis_read(fixture->device, stack - 4u, &stored, sizeof(stored))");
     expect(fixture->state, stored == 0x01020304u, "stored == 0x01020304u");
     expect(fixture->state, !fixture->cpu->ici_valid, "!fixture->cpu->ici_valid");
 
     stored = 0xcafebabeu;
-    expect(fixture->state, kinetis_k22_write(fixture->device, stack - 4u, &stored, sizeof(stored)),
-           "kinetis_k22_write(fixture->device, stack - 4u, &stored, sizeof(stored))");
+    expect(fixture->state, kinetis_write(fixture->device, stack - 4u, &stored, sizeof(stored)),
+           "kinetis_write(fixture->device, stack - 4u, &stored, sizeof(stored))");
     cortex_m4_set_register(fixture->cpu, 13u, stack - 8u);
     cortex_m4_set_register(fixture->cpu, 1u, 0u);
     fixture->cpu->ici_valid = true;
@@ -227,16 +227,16 @@ static void test_control(Fixture* fixture) {
 
 int main(void) {
     TestState state = {0};
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
-    expect(&state, kinetis_k22_load(device, 0u, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0u, vectors, sizeof(vectors))");
-    expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    Fixture fixture = {&state, device, kinetis_k22_cpu(device)};
+    expect(&state, kinetis_load(device, 0u, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0u, vectors, sizeof(vectors))");
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
+    Fixture fixture = {&state, device, kinetis_cpu(device)};
     test_immediate_and_high_register(&fixture);
     test_stack_and_addresses(&fixture);
     test_stack_lifecycle(&fixture);
@@ -245,6 +245,6 @@ int main(void) {
     test_control(&fixture);
     execute(&fixture, 0xdf00u);
     expect(&state, reg(&fixture, 15u) == 0x102u, "reg(&fixture, 15u) == 0x102u");
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }

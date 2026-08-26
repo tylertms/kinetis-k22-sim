@@ -1,41 +1,39 @@
-#include "kinetis_k22.h"
+#include "kinetis.h"
 
 #include <stdint.h>
 
 #include "test.h"
 
-static KinetisK22* create_device(TestState* state) {
-    KinetisK22Configuration configuration = kinetis_k22_default_configuration();
+static Kinetis* create_device(TestState* state) {
+    KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
-    KinetisK22* device = kinetis_k22_create(configuration);
+    Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
-    expect(state, kinetis_k22_load(device, 0, vectors, sizeof(vectors)),
-           "kinetis_k22_load(device, 0, vectors, sizeof(vectors))");
+    expect(state, kinetis_load(device, 0, vectors, sizeof(vectors)),
+           "kinetis_load(device, 0, vectors, sizeof(vectors))");
     return device;
 }
 
-static void load_instruction(TestState* state, KinetisK22* device, uint16_t first,
-                             uint16_t second) {
+static void load_instruction(TestState* state, Kinetis* device, uint16_t first, uint16_t second) {
     const uint16_t program[] = {first, second, 0xbe00u};
-    expect(state, kinetis_k22_load(device, 0x100, program, sizeof(program)),
-           "kinetis_k22_load(device, 0x100, program, sizeof(program))");
-    expect(state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
-    test_connect_debugger(state, kinetis_k22_cpu(device));
+    expect(state, kinetis_load(device, 0x100, program, sizeof(program)),
+           "kinetis_load(device, 0x100, program, sizeof(program))");
+    expect(state, kinetis_reset(device), "kinetis_reset(device)");
+    test_connect_debugger(state, kinetis_cpu(device));
 }
 
-static void execute(TestState* state, KinetisK22* device) {
-    const CortexM4Result result =
-        cortex_m4_run(kinetis_k22_cpu(device), (CortexM4RunLimits){2, 10});
+static void execute(TestState* state, Kinetis* device) {
+    const CortexM4Result result = cortex_m4_run(kinetis_cpu(device), (CortexM4RunLimits){2, 10});
     expect(state, result.stop == CORTEX_M4_STOP_BREAKPOINT,
            "result.stop == CORTEX_M4_STOP_BREAKPOINT");
 }
 
 int main(void) {
     TestState state = {0};
-    KinetisK22* device = create_device(&state);
-    CortexM4* cpu = kinetis_k22_cpu(device);
+    Kinetis* device = create_device(&state);
+    CortexM4* cpu = kinetis_cpu(device);
 
     load_instruction(&state, device, 0xfab1u, 0xf081u);
     cortex_m4_set_register(cpu, 1, 0x00001000u);
@@ -88,26 +86,26 @@ int main(void) {
 
     const uint32_t address = 0x20000020u;
     const uint16_t exclusive_program[] = {0xe851u, 0x0f00u, 0xe841u, 0x3200u, 0xbe00u};
-    expect(&state, kinetis_k22_load(device, 0x100, exclusive_program, sizeof(exclusive_program)),
-           "kinetis_k22_load(device, 0x100, exclusive_program, sizeof(exclusive_program))");
-    expect(&state, kinetis_k22_reset(device), "kinetis_k22_reset(device)");
+    expect(&state, kinetis_load(device, 0x100, exclusive_program, sizeof(exclusive_program)),
+           "kinetis_load(device, 0x100, exclusive_program, sizeof(exclusive_program))");
+    expect(&state, kinetis_reset(device), "kinetis_reset(device)");
     test_connect_debugger(&state, cpu);
     uint32_t memory = 0x11223344u;
-    expect(&state, kinetis_k22_write(device, address, &memory, sizeof(memory)),
-           "kinetis_k22_write(device, address, &memory, sizeof(memory))");
+    expect(&state, kinetis_write(device, address, &memory, sizeof(memory)),
+           "kinetis_write(device, address, &memory, sizeof(memory))");
     cortex_m4_set_register(cpu, 1, address);
     cortex_m4_set_register(cpu, 3, 0xa55ac33cu);
     CortexM4Result result = cortex_m4_run(cpu, (CortexM4RunLimits){3, 10});
     expect(&state, result.stop == CORTEX_M4_STOP_BREAKPOINT,
            "result.stop == CORTEX_M4_STOP_BREAKPOINT");
     expect(&state, cortex_m4_get_register(cpu, 2) == 0, "cortex_m4_get_register(cpu, 2) == 0");
-    expect(&state, kinetis_k22_read(device, address, &memory, sizeof(memory)),
-           "kinetis_k22_read(device, address, &memory, sizeof(memory))");
+    expect(&state, kinetis_read(device, address, &memory, sizeof(memory)),
+           "kinetis_read(device, address, &memory, sizeof(memory))");
     expect(&state, memory == 0xa55ac33cu, "memory == 0xa55ac33cu");
 
     const uint8_t table[] = {3, 7, 9};
-    expect(&state, kinetis_k22_load(device, 0x200, table, sizeof(table)),
-           "kinetis_k22_load(device, 0x200, table, sizeof(table))");
+    expect(&state, kinetis_load(device, 0x200, table, sizeof(table)),
+           "kinetis_load(device, 0x200, table, sizeof(table))");
     load_instruction(&state, device, 0xe8d0u, 0xf001u);
     cortex_m4_set_register(cpu, 0, 0x200u);
     cortex_m4_set_register(cpu, 1, 1);
@@ -117,6 +115,6 @@ int main(void) {
     expect(&state, cortex_m4_get_register(cpu, 15) == 0x112u,
            "cortex_m4_get_register(cpu, 15) == 0x112u");
 
-    kinetis_k22_destroy(device);
+    kinetis_destroy(device);
     return test_finish(&state);
 }
