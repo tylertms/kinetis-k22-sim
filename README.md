@@ -10,7 +10,7 @@ C simulator for NXP Kinetis K22F and KV30F microcontrollers and their Arm Cortex
 - Device Profiles: MK22F12810, MK22FN12812, MK22FN25612, MK22FN51212, MK22FN1M012, MK22FX51212, and MKV30F12810.
 - Device Packages: AK, FM, LF, LH, MP, AH, LK, AP, BP, FX, LL, DC, MC, LQ, and MD variants supported by each profile.
 
-The 50 MHz K22D5 devices use Cortex-M4 cores without floating-point units and a different peripheral map. They are outside this K22F simulator's scope.
+The 50 MHz K22D5 devices use Cortex-M4 cores without floating-point units and a different peripheral map. They are outside this simulator's scope.
 
 ## Build
 
