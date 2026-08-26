@@ -69,8 +69,10 @@ Run all tests with simulator source coverage:
 
 ```
 meson setup build/test-coverage --buildtype=debug -Db_coverage=true
-meson test -C build/test-coverage
+meson test -C build/test-coverage --num-processes 1 --no-suite census
 meson compile -C build/test-coverage coverage-text
 ```
 
-The coverage report requires GCC, gcov, and gcovr.
+The coverage report requires GCC, gcov, and gcovr. The coverage run excludes exhaustive census
+tests because their millions of instruction cases distort and can overflow GCC's coverage counters.
+Normal test runs still include them.

@@ -468,6 +468,10 @@ test_definitions = [
 foreach definition : test_definitions
   name = 'kinetis_' + definition['name'] + '_test'
   sources = definition['sources']
+  suites = definition['suite']
+  if definition['name'].contains('census')
+    suites += ['census']
+  endif
   c_args = []
   link_args = []
   if definition.get('allocation_failure', false)
@@ -490,14 +494,14 @@ foreach definition : test_definitions
     include_directories: test_include,
     link_args: link_args,
   )
-  test(name, target, suite: definition['suite'])
+  test(name, target, suite: suites)
   if definition['name'] == 'core_encoding_census'
     foreach shard : range(1, 24)
       test(
         name + '_shard_' + shard.to_string(),
         target,
         args: shard.to_string(),
-        suite: definition['suite'],
+        suite: suites,
       )
     endforeach
   endif
