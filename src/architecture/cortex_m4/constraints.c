@@ -120,9 +120,11 @@ static bool has_invalid_shifted_register(uint16_t first, uint16_t second) {
     const bool comparison =
         operation == 0u || operation == 4u || operation == 8u || operation == 13u;
     const bool source_alias = operation == 2u || operation == 3u;
+    const bool stack_pointer_add = source == 13u && operation == 8u && !set_flags;
     return is_stack_or_program_counter(shifted) || destination == 13u ||
            (destination == 15u && (!set_flags || !comparison)) ||
-           (is_stack_or_program_counter(source) && !(source == 15u && source_alias));
+           (is_stack_or_program_counter(source) && !(source == 15u && source_alias) &&
+            !stack_pointer_add);
 }
 
 static bool has_invalid_plain_register_operation(uint16_t first, uint16_t second) {
