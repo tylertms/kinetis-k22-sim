@@ -24,12 +24,12 @@ static void expect_serial_dma_sources(TestState* state) {
            "cortex_m4_write_memory(cpu, DMAMUX_CHCFG0, 1u, 0x80u | 10u)");
     expect(state, cortex_m4_write_memory(cpu, DMAMUX_CHCFG0 + 1u, 1u, 0x80u | 11u),
            "cortex_m4_write_memory(cpu, DMAMUX_CHCFG0 + 1u, 1u, 0x80u | 11u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400ea003u, 1u, 0x04u),
-           "cortex_m4_write_memory(cpu, 0x400ea003u, 1u, 0x04u)");
+    expect(state, cortex_m4_write_memory(cpu, 0x400ea003u, 1u, 0x24u),
+           "cortex_m4_write_memory(cpu, 0x400ea003u, 1u, 0x24u)");
     expect(state, cortex_m4_write_memory(cpu, 0x400ea00bu, 1u, 0x20u),
            "cortex_m4_write_memory(cpu, 0x400ea00bu, 1u, 0x20u)");
-    expect(state, cortex_m4_write_memory(cpu, 0x400eb003u, 1u, 0x04u),
-           "cortex_m4_write_memory(cpu, 0x400eb003u, 1u, 0x04u)");
+    expect(state, cortex_m4_write_memory(cpu, 0x400eb003u, 1u, 0x24u),
+           "cortex_m4_write_memory(cpu, 0x400eb003u, 1u, 0x24u)");
     expect(state, cortex_m4_write_memory(cpu, 0x400eb00bu, 1u, 0x20u),
            "cortex_m4_write_memory(cpu, 0x400eb00bu, 1u, 0x20u)");
     expect(state, kinetis_serial_receive(device, KINETIS_SERIAL_UART4, 0x44u, 0u),

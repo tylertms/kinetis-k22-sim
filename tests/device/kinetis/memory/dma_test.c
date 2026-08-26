@@ -48,7 +48,7 @@ int main(void) {
     write(&state, device, SIM_SCGC7, &scgc7, sizeof(scgc7));
     write(&state, device, SIM_SCGC6, &scgc6, sizeof(scgc6));
     write(&state, device, SIM_SCGC4, &scgc4, sizeof(scgc4));
-    const uint8_t transmitter_enable = 0x08u;
+    const uint8_t transmitter_enable = 0x88u;
     const uint8_t transmit_dma_enable = 0x80u;
     write(&state, device, UART1_C2, &transmitter_enable, sizeof(transmitter_enable));
     write(&state, device, UART1_C5, &transmit_dma_enable, sizeof(transmit_dma_enable));

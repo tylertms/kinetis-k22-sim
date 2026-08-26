@@ -6,6 +6,7 @@
 
 enum {
     SIM_SCGC6 = 0x4004803cu,
+    SPI0_MCR = 0x4002c000u,
     SPI0_SR = 0x4002c02cu,
     SPI0_RSER = 0x4002c030u,
     SPI0_PUSHR = 0x4002c034u,
@@ -43,8 +44,14 @@ int main(void) {
            "read_register(&state, device, SPI0_POPR) == 0x1234u");
     expect(&state, (read_register(&state, device, SPI0_SR) & (1u << 17)) == 0,
            "(read_register(&state, device, SPI0_SR) & (1u << 17)) == 0");
-    write_register(&state, device, SPI0_PUSHR, 0xabcdu);
     uint16_t transmitted_value = 0u;
+    write_register(&state, device, SPI0_PUSHR, 0xabcdu);
+    expect(&state, !kinetis_spi0_transmit(device, &transmitted_value),
+           "!kinetis_spi0_transmit(device, &transmitted_value)");
+    write_register(&state, device, SPI0_MCR, UINT32_C(0x80000000));
+    write_register(&state, device, SPI0_PUSHR, UINT32_C(0x9803abcd));
+    expect(&state, read_register(&state, device, SPI0_PUSHR) == UINT32_C(0x9803abcd),
+           "read_register(&state, device, SPI0_PUSHR) == UINT32_C(0x9803abcd)");
     expect(&state, kinetis_spi0_transmit(device, &transmitted_value),
            "kinetis_spi0_transmit(device, &transmitted_value)");
     expect(&state, transmitted_value == 0xabcdu, "transmitted_value == 0xabcdu");

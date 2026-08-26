@@ -185,7 +185,7 @@ static void test_serial_api(TestState* state, Kinetis* device) {
 
     expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI0, true),
            "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI0, true)");
-    serial_write(state, device, SPI0, 4u, 0u);
+    serial_write(state, device, SPI0, 4u, UINT32_C(0x80000000));
     serial_write(state, device, SPI0 + 0x34u, 4u, 0x98030055u);
     kinetis_serial_advance(&device->serial, 64u);
     KinetisSpiTransfer spi_transfer;

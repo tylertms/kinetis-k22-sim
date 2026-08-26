@@ -109,8 +109,8 @@ static void test_uart_transfer_status_interrupt_and_dma(TestState* state) {
     kinetis_serial_advance(&serial, 1);
     uint32_t status_register = read_register(state, &serial, UART0_BASE + 4, 1);
     expect(state, (status_register & 0x22u) == 0x22u, "(status_register & 0x22u) == 0x22u");
-    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0),
-           "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0)");
+    expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0),
+           "!kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0)");
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0_ERROR),
            "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0_ERROR)");
     expect(state, kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_UART0_RECEIVE),
@@ -215,6 +215,8 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_SPI0, true)");
     expect(state, read_register(state, &serial, SPI0_BASE, 4) == 0x00004001u,
            "read_register(state, &serial, SPI0_BASE, 4) == 0x00004001u");
+    write_register(state, &serial, SPI0_BASE + 0x34, 4, 0x1234u);
+    expect(state, serial.spi[0].transmit.count == 0, "serial.spi[0].transmit.count == 0");
     write_register(state, &serial, SPI0_BASE, 4, 0);
     write_register(state, &serial, SPI0_BASE + 0x30, 4, 3u << 16);
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0),
@@ -231,6 +233,8 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     write_register(state, &serial, SPI0_BASE + 0x36, 2, 0x9803u);
     write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x6au);
     write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x6bu);
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006au,
+           "read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006au");
     kinetis_serial_advance(&serial, 1024);
     KinetisSerialSpiTransfer byte_transfer;
     expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer),
@@ -245,6 +249,8 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer)");
     expect(state, byte_transfer.data == 0x6bu, "byte_transfer.data == 0x6bu");
     expect(state, byte_transfer.chip_selects == 3u, "byte_transfer.chip_selects == 3u");
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006bu,
+           "read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006bu");
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu,
            "read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu");
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu,
@@ -369,6 +375,19 @@ static void test_i2c_start_stop_detection(TestState* state) {
     write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x2au);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
+
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xe0u);
+    expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_START, 0);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au");
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
+    expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
+           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
 
     expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
            "kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0)");
@@ -581,8 +600,13 @@ static void test_signal_and_overflow_matrix(TestState* state) {
     expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true),
            "kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true)");
     write_register(state, &serial, UART0_BASE + 0x0b, 1, 0x80u);
+    expect(state, !kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_UART0_TRANSMIT),
+           "!kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_UART0_TRANSMIT)");
+    write_register(state, &serial, UART0_BASE + 3, 1, 0x80u);
     expect(state, kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_UART0_TRANSMIT),
            "kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_UART0_TRANSMIT)");
+    expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0),
+           "!kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_UART0)");
 
     expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_LPUART0, true),
            "kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_LPUART0, true)");

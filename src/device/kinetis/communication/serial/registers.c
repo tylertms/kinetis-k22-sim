@@ -466,6 +466,16 @@ bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_o
     if (!spi->clock_enabled)
         return false;
     kinetis_serial_internal_refresh_spi(spi);
+    if (register_offset == SPI_PUSHR && byte_count == 4u) {
+        if (spi->transmit.count != 0) {
+            uint16_t index = spi->transmit.read_index;
+            *output_value =
+                ((uint32_t)spi->transmit.metadata[index] << 16) | spi->transmit.values[index];
+        } else {
+            *output_value = spi->registers[SPI_PUSHR / 4];
+        }
+        return true;
+    }
     if (register_offset == SPI_POPR && (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
         uint16_t received = 0;
         if (kinetis_serial_internal_fifo_pop(&spi->receive, &received, NULL))
@@ -487,19 +497,31 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
                                        uint8_t byte_count, uint32_t write_value) {
     if (!spi->clock_enabled)
         return false;
+    bool push_data_access =
+        register_offset == SPI_PUSHR && (byte_count == 1u || byte_count == 2u || byte_count == 4u);
+    bool push_command_access = (register_offset == SPI_PUSHR + 2u && byte_count == 2u) ||
+                               (register_offset >= SPI_PUSHR + 2u &&
+                                register_offset <= SPI_PUSHR + 3u && byte_count == 1u);
+    if ((push_data_access || push_command_access) && (spi->registers[SPI_MCR / 4] & 1u) != 0u) {
+        kinetis_serial_internal_refresh_spi(spi);
+        return true;
+    }
     bool master = (spi->registers[SPI_MCR / 4] & (1u << 31)) != 0u;
     if (master && register_offset == SPI_PUSHR + 2u && byte_count == 2u) {
         spi->push_command = (uint16_t)write_value;
+        spi->registers[SPI_PUSHR / 4] = (uint32_t)spi->push_command << 16;
     } else if (master && register_offset >= SPI_PUSHR + 2u && register_offset <= SPI_PUSHR + 3u &&
                byte_count == 1u) {
         uint8_t shift = (uint8_t)((register_offset - SPI_PUSHR - 2u) * 8u);
         spi->push_command = (uint16_t)((spi->push_command & ~(UINT16_C(0xff) << shift)) |
                                        ((uint16_t)(write_value & UINT8_MAX) << shift));
+        spi->registers[SPI_PUSHR / 4] = (uint32_t)spi->push_command << 16;
     } else if (register_offset == SPI_PUSHR &&
                (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
         if (master && byte_count == 4u)
             spi->push_command = (uint16_t)(write_value >> 16);
         uint16_t command = master ? spi->push_command : 0u;
+        spi->registers[SPI_PUSHR / 4] = ((uint32_t)command << 16) | (uint16_t)write_value;
         if (!kinetis_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth,
                                                (uint16_t)write_value, command))
             spi->registers[SPI_SR / 4] |= 1u << 27;
@@ -550,6 +572,7 @@ bool kinetis_serial_internal_read_i2c(KinetisSerial* serial, KinetisSerialI2c* i
 
 static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
     i2c->registers[I2C_S] &= 0xdfu;
+    i2c->registers[I2C_FLT] |= 0x40u;
     i2c->transfer_pending = false;
     i2c->transfer_cycles = 0;
     push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
@@ -574,9 +597,11 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
             i2c->registers[I2C_S] = 0;
         } else if ((register_value & 0x20u) != 0 && (previous_control & 0x20u) == 0) {
             i2c->registers[I2C_S] |= 0x20u;
+            i2c->registers[I2C_FLT] |= 0x10u;
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_START, 0);
         } else if ((register_value & 0x04u) != 0 && (previous_control & 0x04u) == 0 &&
                    (register_value & 0x20u) != 0) {
+            i2c->registers[I2C_FLT] |= 0x10u;
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_REPEATED_START,
                        0);
         } else if ((register_value & 0x20u) == 0 && (previous_control & 0x20u) != 0) {

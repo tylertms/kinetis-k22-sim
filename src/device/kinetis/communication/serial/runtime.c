@@ -418,9 +418,10 @@ static bool uart_irq(const KinetisSerialUart* source_uart, bool is_lpuart,
     if (is_error_interrupt)
         return (status & uart->registers[UART_C3] & 0x0fu) != 0;
     uint8_t control = uart->registers[UART_C2];
-    return (((status & 0x20u) != 0 && (control & 0x20u) != 0) ||
+    uint8_t dma_select = uart->registers[UART_C5];
+    return (((status & 0x20u) != 0 && (control & 0x20u) != 0 && (dma_select & 0x20u) == 0) ||
             ((status & 0x40u) != 0 && (control & 0x40u) != 0) ||
-            ((status & 0x80u) != 0 && (control & 0x80u) != 0) ||
+            ((status & 0x80u) != 0 && (control & 0x80u) != 0 && (dma_select & 0x80u) == 0) ||
             ((status & 0x10u) != 0 && (control & 0x10u) != 0));
 }
 
@@ -481,8 +482,10 @@ static bool legacy_uart_dma(const KinetisSerialUart* source_uart, bool is_receiv
         return false;
     kinetis_serial_internal_refresh_uart(uart, false);
     if (is_receive)
-        return (uart->registers[UART_C5] & 0x20u) != 0 && (uart->registers[UART_S1] & 0x20u) != 0;
-    return (uart->registers[UART_C5] & 0x80u) != 0 && (uart->registers[UART_S1] & 0x80u) != 0;
+        return (uart->registers[UART_C2] & 0x20u) != 0 && (uart->registers[UART_C5] & 0x20u) != 0 &&
+               (uart->registers[UART_S1] & 0x20u) != 0;
+    return (uart->registers[UART_C2] & 0x80u) != 0 && (uart->registers[UART_C5] & 0x80u) != 0 &&
+           (uart->registers[UART_S1] & 0x80u) != 0;
 }
 
 bool kinetis_serial_dma_request(const KinetisSerial* serial, KinetisSerialDmaRequest request) {
