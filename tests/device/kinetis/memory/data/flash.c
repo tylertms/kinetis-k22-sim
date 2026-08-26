@@ -615,6 +615,11 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u");
+    kinetis_data_test_write_fccob(state, data, 1u, 0u);
+    kinetis_data_test_flash_command_without_address(state, data, 0x40u, 40u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 1u) != 0u,
+           "Read 1s All Blocks checks data flash IFR");
+    kinetis_data_test_clear_flash_status(state, data);
     kinetis_data_test_write_fccob(state, data, 4u, 0u);
     kinetis_data_test_flash_command(state, data, 0x00u, 0x800000u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,

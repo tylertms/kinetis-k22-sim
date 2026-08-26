@@ -185,6 +185,13 @@ static bool flash_range_erased(KinetisData* data, uint32_t start, uint32_t lengt
     return true;
 }
 
+static bool flash_buffer_erased(const uint8_t* buffer, size_t length) {
+    for (size_t index = 0u; index < length; index++)
+        if (buffer[index] != 0xffu)
+            return false;
+    return true;
+}
+
 static uint32_t flash_block_size(const KinetisData* data) {
     return data->profile->program_flash_size / data->profile->program_flash_block_count;
 }
@@ -571,7 +578,10 @@ static void flash_execute(KinetisData* data) {
         valid = margin <= 2u;
         verify_failure = valid && !flash_range_erased(data, 0, data->profile->program_flash_size);
         if (valid && !verify_failure && data->profile->flexnvm_size != 0u)
-            verify_failure = !flash_range_erased(data, 0x800000u, flash_data_size(data));
+            verify_failure =
+                !flash_range_erased(data, 0x800000u, flash_data_size(data)) ||
+                !flash_buffer_erased(data->flash_data_ifr, sizeof(data->flash_data_ifr)) ||
+                !flash_buffer_erased(data->eeprom, data->profile->flexram_size);
         if (valid && !verify_failure)
             data->flash[2] = (uint8_t)((data->flash[2] & 0xfcu) | 0x02u);
     } else if (command == 0x02u) {
