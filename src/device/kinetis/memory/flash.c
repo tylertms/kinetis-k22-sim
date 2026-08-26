@@ -475,6 +475,8 @@ static void flash_execute(KinetisData* data) {
     const bool ftfe = kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE);
     const uint32_t phrase_size = ftfe ? 16u : 8u;
     const uint32_t sector_size = ftfe ? 4096u : 2048u;
+    const uint32_t block_command_alignment = ftfe ? 16u : 4u;
+    const bool block_commands = ftfe || data->profile->ftfa_has_block_commands;
     const uint8_t program_command = ftfe ? 0x07u : 0x06u;
     const uint8_t program_words = ftfe ? 2u : 1u;
     bool valid = true;
@@ -506,10 +508,9 @@ static void flash_execute(KinetisData* data) {
         bool data_flash = false;
         uint32_t block_size = 0u;
         uint32_t start = 0u;
-        valid = (address & 0x0fu) == 0u &&
+        valid = address % block_command_alignment == 0u &&
                 flash_block_range(data, address, &start, &block_size, &data_flash) &&
-                (ftfe || data->profile->program_flash_size == 0x80000u) &&
-                !(data_flash && data->flexram_eeprom);
+                block_commands && !(data_flash && data->flexram_eeprom);
         protection_failure = valid && (flash_memory_range_protected(data, start, block_size) ||
                                        flash_swap_range_protected(data, start, block_size, true));
         if (valid && !protection_failure)
@@ -548,10 +549,9 @@ static void flash_execute(KinetisData* data) {
         const uint8_t margin = flash_fccob(data, 4u);
         uint32_t block_size = 0u;
         uint32_t start = 0u;
-        valid = margin <= 2u && (address & 0x0fu) == 0u &&
+        valid = margin <= 2u && address % block_command_alignment == 0u &&
                 flash_block_range(data, address, &start, &block_size, &data_flash) &&
-                (ftfe || data->profile->program_flash_size == 0x80000u) &&
-                !(data_flash && data->flexram_eeprom);
+                block_commands && !(data_flash && data->flexram_eeprom);
         verify_failure = valid && !flash_range_erased(data, start, block_size);
     } else if (command == 0x01u) {
         const uint32_t count = ((uint32_t)flash_fccob(data, 4u) << 8u) | flash_fccob(data, 5u);

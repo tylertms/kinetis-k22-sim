@@ -207,6 +207,18 @@ void kinetis_data_test_test_flash_controller_geometry(TestState* state) {
     expect(state, bus.flash[0x100u] == 0xffu, "single-block flash erases its lower half");
     expect(state, bus.flash[0x40000u] == 0xffu, "single-block flash erases its upper half");
     kinetis_data_destroy(data);
+
+    memset(&bus, 0, sizeof(bus));
+    memset(bus.flash, 0xff, sizeof(bus.flash));
+    data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN256CAP12);
+    bus.flash[0u] = 0u;
+    kinetis_data_test_flash_command(state, data, 0x08u, 4u, 2000u);
+    expect(state, bus.flash[0u] == 0xffu, "CAP flash accepts a longword-aligned block erase");
+    kinetis_data_test_write_fccob(state, data, 4u, 0u);
+    kinetis_data_test_flash_command(state, data, 0x00u, 4u, 40u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u,
+           "CAP flash accepts a longword-aligned block check");
+    kinetis_data_destroy(data);
 }
 
 void kinetis_data_test_flash_command(TestState* state, KinetisData* data, uint8_t command,

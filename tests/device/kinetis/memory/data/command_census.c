@@ -72,7 +72,7 @@ void kinetis_data_test_test_flash_command_census(TestState* state) {
         kinetis_data_destroy(data);
     }
     expect(state,
-           census.commands == 548u && census.errors == 446u &&
-               census.fingerprint == UINT64_C(1698437408402045197),
+           census.commands == 548u && census.errors == 445u &&
+               census.fingerprint == UINT64_C(10290113883012910816),
            "flash command census matches");
 }

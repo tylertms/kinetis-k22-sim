@@ -110,6 +110,7 @@ typedef struct {
     const char* name;
     uint32_t program_flash_size;
     uint8_t program_flash_block_count;
+    bool ftfa_has_block_commands;
     uint32_t sram_lower_address;
     uint32_t sram_lower_size;
     uint32_t sram_upper_address;
