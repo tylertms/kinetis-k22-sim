@@ -301,6 +301,15 @@ static uint32_t pdb_divider(uint32_t sc) {
     return (1u << ((sc >> 12u) & 7u)) * multipliers[(sc >> 2u) & 3u];
 }
 
+static uint64_t pdb_ticks(KinetisTiming* timing, uint32_t cycles) {
+    const uint64_t divisor = (uint64_t)timing->core_clock_hz * pdb_divider(timing->pdb_sc);
+    if (timing->bus_clock_hz == 0u || divisor == 0u)
+        return 0u;
+    const uint64_t accumulated = timing->pdb_remainder + (uint64_t)cycles * timing->bus_clock_hz;
+    timing->pdb_remainder = accumulated % divisor;
+    return accumulated / divisor;
+}
+
 bool kinetis_timing_internal_pdb_auxiliary_offset(uint32_t offset) {
     return (offset >= 0x10u && offset <= 0x1cu && (offset & 3u) == 0) ||
            (offset >= 0x38u && offset <= 0x44u && (offset & 3u) == 0) ||
@@ -323,9 +332,7 @@ void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles)
         (timing->sim_scgc6 & (1u << 22u)) == 0 || (timing->pdb_sc & 1u) == 0) {
         return;
     }
-    const uint32_t source_hz = timing->bus_clock_hz / pdb_divider(timing->pdb_sc);
-    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&timing->pdb_remainder, cycles,
-                                                               source_hz, timing->core_clock_hz);
+    const uint64_t ticks = pdb_ticks(timing, cycles);
     if (ticks == 0) {
         return;
     }

@@ -2,6 +2,25 @@
 
 void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
                                   Observations* observations) {
+    const uint32_t original_core_clock_hz = timing->core_clock_hz;
+    const uint32_t original_bus_clock_hz = timing->bus_clock_hz;
+    timing->core_clock_hz = 120000000u;
+    timing->bus_clock_hz = 60000000u;
+    timing->sim_scgc6 |= 1u << 22u;
+    timing->pdb_sc = 0x700du;
+    timing->pdb_mod = UINT16_MAX;
+    timing->pdb_counter = 0u;
+    timing->pdb_remainder = 0u;
+    kinetis_timing_internal_advance_pdb(timing, 10239u);
+    expect(state, timing->pdb_counter == 0u, "PDB waits for the complete divided clock period");
+    kinetis_timing_internal_advance_pdb(timing, 1u);
+    expect(state, timing->pdb_counter == 1u, "PDB preserves the exact prescaled clock ratio");
+    timing->core_clock_hz = original_core_clock_hz;
+    timing->bus_clock_hz = original_bus_clock_hz;
+    timing->pdb_sc = 0u;
+    timing->pdb_counter = 0u;
+    timing->pdb_remainder = 0u;
+
     kinetis_timing_test_expect_write(state, timing, SIM_SCGC6, 4, timing->sim_scgc6 | (1u << 22u));
     kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 4u);
     kinetis_timing_test_expect_write(state, timing, PDB_IDLY, 4, 2u);

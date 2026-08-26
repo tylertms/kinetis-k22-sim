@@ -128,6 +128,7 @@ typedef struct {
 
 uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
                                              uint32_t source_hz, uint32_t core_hz);
+void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles);
 
 KinetisTimingSignals kinetis_timing_test_signals(Observations* observations);
 uint32_t kinetis_timing_test_cycles_for_ticks(const KinetisTiming* timing, uint32_t ticks,
