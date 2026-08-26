@@ -321,6 +321,28 @@ void kinetis_data_test_test_flash_commands_and_failures(TestState* state) {
 
     memset(&bus, 0, sizeof(bus));
     memset(bus.flash, 0xff, sizeof(bus.flash));
+    data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN25612);
+    kinetis_data_test_write_fccob(state, data, 4u, 0u);
+    kinetis_data_test_write_fccob(state, data, 5u, 1u);
+    kinetis_data_test_write_fccob(state, data, 6u, 0u);
+    bus.flash[0x1008u] = 0u;
+    kinetis_data_test_flash_command(state, data, 0x01u, 0x1000u, 40u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) == 0u,
+           "(kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) == 0u");
+    bus.flash[0x1008u] = 0xffu;
+    kinetis_data_test_write_fccob(state, data, 5u, 2u);
+    kinetis_data_test_flash_command(state, data, 0x01u, 0x7f8u, 40u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) == 0u,
+           "(kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) == 0u");
+    bus.flash[0x800u] = 0u;
+    kinetis_data_test_flash_command(state, data, 0x09u, 0x808u, 2000u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) == 0u,
+           "(kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) == 0u");
+    expect(state, bus.flash[0x800u] == 0xffu, "bus.flash[0x800u] == 0xffu");
+    kinetis_data_destroy(data);
+
+    memset(&bus, 0, sizeof(bus));
+    memset(bus.flash, 0xff, sizeof(bus.flash));
     data = kinetis_data_test_create_without_program(state, &bus, KINETIS_PROFILE_MK22FN51212);
     kinetis_data_test_write_fccob(state, data, 0u, 0x06u);
     kinetis_data_test_set_flash_address(state, data, 0x1000u);

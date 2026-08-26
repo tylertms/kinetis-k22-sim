@@ -473,6 +473,7 @@ static void flash_execute(KinetisData* data) {
     const uint8_t command = flash_fccob(data, 0u);
     const uint32_t address = flash_address(data);
     const bool ftfe = kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE);
+    const uint32_t phrase_size = ftfe ? 16u : 8u;
     const uint32_t sector_size = ftfe ? 4096u : 2048u;
     const uint8_t program_command = ftfe ? 0x07u : 0x06u;
     const uint8_t program_words = ftfe ? 2u : 1u;
@@ -493,7 +494,7 @@ static void flash_execute(KinetisData* data) {
         bool data_flash = false;
         uint32_t offset = 0;
         const uint32_t start = address & ~(sector_size - 1u);
-        valid = (address & 0x0fu) == 0u &&
+        valid = (address & (phrase_size - 1u)) == 0u &&
                 flash_memory_range(data, start, sector_size, &data_flash, &offset);
         protection_failure = valid && (flash_memory_range_protected(data, start, sector_size) ||
                                        flash_swap_range_protected(data, start, sector_size, true));
@@ -555,11 +556,14 @@ static void flash_execute(KinetisData* data) {
     } else if (command == 0x01u) {
         const uint32_t count = ((uint32_t)flash_fccob(data, 4u) << 8u) | flash_fccob(data, 5u);
         const uint8_t margin = flash_fccob(data, 6u);
-        const uint32_t length = count * 16u;
+        const uint32_t length = count * phrase_size;
         bool data_flash = false;
-        uint32_t offset = 0;
-        valid = margin <= 2u && count != 0u && (address & 0x0fu) == 0u &&
-                length <= sector_size - (address & (sector_size - 1u)) &&
+        uint32_t block_size = 0u;
+        uint32_t start = 0u;
+        uint32_t offset = 0u;
+        valid = margin <= 2u && count != 0u && (address & (phrase_size - 1u)) == 0u &&
+                flash_block_range(data, address, &start, &block_size, &data_flash) &&
+                length <= block_size - (address - start) &&
                 flash_memory_range(data, address, length, &data_flash, &offset);
         verify_failure = valid && !flash_range_erased(data, address, length);
     } else if (command == 0x40u) {
