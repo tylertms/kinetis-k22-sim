@@ -1,5 +1,7 @@
 #include "internal.h"
 
+enum { IRC48_CLOCK_HZ = 48000000u };
+
 bool kinetis_timing_internal_mcg_register(uint32_t offset) {
     return offset <= 6u || offset == 8u || (offset >= 10u && offset <= 13u);
 }
@@ -14,16 +16,33 @@ uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycle
     return accumulated_cycles / core_hz;
 }
 
+static uint32_t external_reference_clock_hz(const KinetisTiming* timing) {
+    switch (timing->mcg[12] & 3u) {
+    case 0u:
+        return timing->external_oscillator_hz;
+    case 1u:
+        return kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC) &&
+                       (timing->rtc_cr & 0x100u) != 0u
+                   ? timing->rtc_oscillator_hz
+                   : 0u;
+    case 2u:
+        return IRC48_CLOCK_HZ;
+    default:
+        return 0u;
+    }
+}
+
 static uint32_t calculate_fll_reference_clock_hz(const KinetisTiming* timing) {
     uint32_t reference_clock_hz = timing->slow_irc_hz;
     if ((timing->mcg[0] & 4u) == 0) {
         const uint8_t reference_divider_index = (timing->mcg[0] >> 3u) & 7u;
         const uint16_t low_range_dividers[8] = {1u, 2u, 4u, 8u, 16u, 32u, 64u, 128u};
         const uint16_t high_range_dividers[8] = {32u, 64u, 128u, 256u, 512u, 1024u, 1280u, 1536u};
-        const uint16_t reference_divider = (timing->mcg[1] & 0x30u) == 0
-                                               ? low_range_dividers[reference_divider_index]
-                                               : high_range_dividers[reference_divider_index];
-        reference_clock_hz = timing->external_oscillator_hz / reference_divider;
+        const uint16_t reference_divider =
+            (timing->mcg[1] & 0x30u) == 0u || (timing->mcg[12] & 3u) == 1u
+                ? low_range_dividers[reference_divider_index]
+                : high_range_dividers[reference_divider_index];
+        reference_clock_hz = external_reference_clock_hz(timing) / reference_divider;
     }
     return reference_clock_hz;
 }
@@ -132,7 +151,8 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
-    if (timing->external_oscillator_hz != 0 && (timing->mcg[1] & 4u) != 0) {
+    if ((timing->mcg[12] & 3u) == 0u && timing->external_oscillator_hz != 0u &&
+        (timing->mcg[1] & 4u) != 0u) {
         mcg_status_value |= 2u;
     }
     if (mcg_clock_source == 1u) {
@@ -141,7 +161,7 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
         mcg_status_value |= 1u << 2u;
         mcg_status_value |= 1u << 4u;
     } else if (mcg_clock_source == 2u) {
-        mcg_output_clock_hz = timing->external_oscillator_hz;
+        mcg_output_clock_hz = external_reference_clock_hz(timing);
         mcg_status_value |= 2u << 2u;
     } else if ((timing->mcg[5] & 0x40u) != 0) {
         mcg_output_clock_hz = calculate_pll_clock_hz(timing);

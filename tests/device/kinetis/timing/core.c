@@ -265,6 +265,33 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     clock_source.smc[3] = 0x10u;
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u, "PLL stops in VLPS");
 
+    KinetisTiming mcg_source = *timing;
+    mcg_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
+    mcg_source.sim_clkdiv1 = 0u;
+    mcg_source.mcg[0] = 6u << 3u;
+    mcg_source.mcg[1] = 1u << 4u;
+    mcg_source.mcg[3] = 3u << 5u;
+    mcg_source.mcg[5] = 0u;
+    mcg_source.mcg[12] = 2u;
+    kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 96000000u,
+           "KV30 FLL uses the selected 48 MHz internal reference");
+    mcg_source.mcg[0] = 2u << 6u;
+    kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 48000000u,
+           "KV30 external-reference mode uses the selected 48 MHz internal clock");
+
+    mcg_source.profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
+    mcg_source.mcg[12] = 1u;
+    mcg_source.rtc_cr = 0x100u;
+    kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == mcg_source.rtc_oscillator_hz,
+           "K22 external-reference mode uses the selected RTC oscillator");
+    mcg_source.mcg[0] = 6u << 3u;
+    kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 1310720u,
+           "K22 RTC FLL reference uses the low-range divider");
+
     KinetisTiming lptmr_source = *timing;
     lptmr_source.mcg[0] &= ~2u;
     expect(state, lptmr_ticks_in_one_second(lptmr_source, 0u) == 0u,

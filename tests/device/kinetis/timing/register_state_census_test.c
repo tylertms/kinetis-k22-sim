@@ -141,7 +141,7 @@ int main(void) {
     }
     expect(&state,
            census.reads == 9044u && census.writes == 12089u &&
-               census.fingerprint == UINT64_C(15824878122998444534),
+               census.fingerprint == UINT64_C(11653839786543551825),
            "timing register state census matches");
     return test_finish(&state);
 }
