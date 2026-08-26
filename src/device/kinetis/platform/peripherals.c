@@ -60,8 +60,8 @@ void kinetis_internal_raw_store(Kinetis* device, uint32_t address, uint8_t byte_
 
 bool kinetis_internal_aips_access_allowed(const Kinetis* device, uint32_t address,
                                           CortexM4Access access, bool write_access) {
-    if (device->profile->id < KINETIS_PROFILE_MK22FN1M012 || access == CORTEX_M4_ACCESS_DEBUG ||
-        address < KINETIS_PERIPHERAL_BASE ||
+    if (!kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_AIPS0) ||
+        access == CORTEX_M4_ACCESS_DEBUG || address < KINETIS_PERIPHERAL_BASE ||
         address >= KINETIS_PERIPHERAL_BASE + KINETIS_PERIPHERAL_SIZE) {
         return true;
     }
@@ -456,6 +456,8 @@ bool kinetis_internal_peripheral_clock_enabled(const Kinetis* device, KinetisPer
     const uint32_t scgc5 = device->timing.sim_scgc5;
     const uint32_t scgc6 = device->timing.sim_scgc6;
     const uint32_t scgc7 = device->timing.sim_scgc7;
+    const bool extended_clock_gates =
+        kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_AIPS1);
     if (id >= KINETIS_PERIPHERAL_PORTA && id <= KINETIS_PERIPHERAL_PORTE) {
         return gate(scgc5, (uint8_t)(9u + id - KINETIS_PERIPHERAL_PORTA));
     }
@@ -480,22 +482,19 @@ bool kinetis_internal_peripheral_clock_enabled(const Kinetis* device, KinetisPer
     case KINETIS_PERIPHERAL_FTM1:
         return gate(scgc6, (uint8_t)(24u + id - KINETIS_PERIPHERAL_FTM0));
     case KINETIS_PERIPHERAL_FTM2:
-        return device->profile->id >= KINETIS_PROFILE_MK22FN1M012 ? gate(scgc3, 24)
-                                                                  : gate(scgc6, 26);
+        return extended_clock_gates ? gate(scgc3, 24) : gate(scgc6, 26);
     case KINETIS_PERIPHERAL_FTM3:
-        return device->profile->id >= KINETIS_PROFILE_MK22FN1M012 ? gate(scgc3, 25)
-                                                                  : gate(scgc6, 6);
+        return extended_clock_gates ? gate(scgc3, 25) : gate(scgc6, 6);
     case KINETIS_PERIPHERAL_ADC0:
         return gate(scgc6, 27);
     case KINETIS_PERIPHERAL_ADC1:
-        return device->profile->id >= KINETIS_PROFILE_MK22FN1M012 ? gate(scgc3, 27)
-                                                                  : gate(scgc6, 7);
+        return extended_clock_gates ? gate(scgc3, 27) : gate(scgc6, 7);
     case KINETIS_PERIPHERAL_DAC0:
-        return device->profile->id >= KINETIS_PROFILE_MK22FN1M012
+        return extended_clock_gates
                    ? gate(kinetis_internal_raw_load(device, KINETIS_SIM_SCGC2, 4), 12)
                    : gate(scgc6, 31);
     case KINETIS_PERIPHERAL_DAC1:
-        return device->profile->id >= KINETIS_PROFILE_MK22FN1M012
+        return extended_clock_gates
                    ? gate(kinetis_internal_raw_load(device, KINETIS_SIM_SCGC2, 4), 13)
                    : gate(scgc6, 8);
     case KINETIS_PERIPHERAL_RNG:

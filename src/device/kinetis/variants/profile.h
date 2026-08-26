@@ -122,6 +122,7 @@ typedef struct {
     uint32_t flexram_size;
     uint32_t sim_sdid_reset;
     uint32_t sim_sdid_mask;
+    uint32_t sim_clkdiv1_reset;
     bool sim_fcfg2_has_pflsh;
     uint8_t fmc_set_count;
     uint8_t fmc_line_size;

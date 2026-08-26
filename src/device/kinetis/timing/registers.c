@@ -534,8 +534,7 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
                                 timing->profile->id == KINETIS_PROFILE_MK22FX51212
                             ? 6u
                             : 2u;
-    timing->sim_clkdiv1 =
-        timing->profile->id <= KINETIS_PROFILE_MK22FN25612 ? 0x00010000u : 0x00110000u;
+    timing->sim_clkdiv1 = timing->profile->sim_clkdiv1_reset;
     timing->mcg[0] = 4u;
     timing->mcg[1] = 0x80u;
     timing->mcg[6] = 0x10u;
