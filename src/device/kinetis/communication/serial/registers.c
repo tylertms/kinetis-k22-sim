@@ -167,6 +167,7 @@ bool kinetis_serial_init(KinetisSerial* serial, const KinetisDeviceProfile* prof
     serial->profile = profile;
     serial->core_clock_hz = profile->cpu.maximum_core_clock_hz;
     serial->bus_clock_hz = profile->cpu.maximum_core_clock_hz;
+    serial->lpuart_clock_hz = profile->cpu.maximum_core_clock_hz;
     configure_uart(&serial->lpuart0, profile, KINETIS_PERIPHERAL_LPUART0, 1);
     configure_uart(&serial->uart[0], profile, KINETIS_PERIPHERAL_UART0, 8);
     configure_uart(&serial->uart[1], profile, KINETIS_PERIPHERAL_UART1, 1);
@@ -195,6 +196,7 @@ void kinetis_serial_reset(KinetisSerial* serial) {
     for (size_t index = 0; index < 3; index++)
         reset_i2c(&serial->i2c[index], serial->profile);
     serial->bus_cycle_remainder = 0u;
+    serial->lpuart_cycle_remainder = 0u;
     serial->event_read_index = 0;
     serial->event_write_index = 0;
     serial->event_count = 0;
@@ -207,14 +209,17 @@ bool kinetis_serial_copy(KinetisSerial* destination, const KinetisSerial* source
     return true;
 }
 
-void kinetis_serial_set_clocks(KinetisSerial* serial, uint32_t core_clock_hz,
-                               uint32_t bus_clock_hz) {
+void kinetis_serial_set_clocks(KinetisSerial* serial, uint32_t core_clock_hz, uint32_t bus_clock_hz,
+                               uint32_t lpuart_clock_hz) {
     if (serial == NULL)
         return;
     if (serial->core_clock_hz != core_clock_hz || serial->bus_clock_hz != bus_clock_hz)
         serial->bus_cycle_remainder = 0u;
+    if (serial->core_clock_hz != core_clock_hz || serial->lpuart_clock_hz != lpuart_clock_hz)
+        serial->lpuart_cycle_remainder = 0u;
     serial->core_clock_hz = core_clock_hz;
     serial->bus_clock_hz = bus_clock_hz;
+    serial->lpuart_clock_hz = lpuart_clock_hz;
 }
 
 static KinetisSerialUart* find_uart_by_peripheral(KinetisSerial* serial,

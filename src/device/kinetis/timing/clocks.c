@@ -46,6 +46,26 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
                       (pll_divider * 2u));
 }
 
+uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
+    if (timing == NULL)
+        return 0u;
+    switch ((timing->sim_sopt2 >> 26u) & 3u) {
+    case 1u:
+        if (((timing->sim_sopt2 >> 16u) & 3u) == 0u)
+            return calculate_fll_clock_hz(timing);
+        return ((timing->sim_sopt2 >> 16u) & 3u) == 3u ? 48000000u : 0u;
+    case 2u:
+        return (timing->osc_cr & 0x80u) != 0u ? timing->external_oscillator_hz : 0u;
+    case 3u:
+        if ((timing->mcg[0] & 2u) == 0u)
+            return 0u;
+        return (timing->mcg[1] & 1u) != 0u ? timing->fast_irc_hz >> ((timing->mcg[8] >> 1u) & 7u)
+                                           : timing->slow_irc_hz;
+    default:
+        return 0u;
+    }
+}
+
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
     uint32_t mcg_output_clock_hz = 0;

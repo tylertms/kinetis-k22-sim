@@ -226,5 +226,6 @@ bool kinetis_timing_copy(KinetisTiming* destination, const KinetisTiming* source
                          KinetisTimingSignals signals);
 uint32_t kinetis_timing_core_clock_hz(const KinetisTiming* timing);
 uint32_t kinetis_timing_bus_clock_hz(const KinetisTiming* timing);
+uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing);
 
 #endif

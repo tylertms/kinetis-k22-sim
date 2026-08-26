@@ -207,9 +207,15 @@ void kinetis_serial_advance(KinetisSerial* serial, uint32_t core_cycles) {
         serial->core_clock_hz == 0u ? 0u : scaled_bus_cycles / serial->core_clock_hz;
     serial->bus_cycle_remainder =
         serial->core_clock_hz == 0u ? 0u : scaled_bus_cycles % serial->core_clock_hz;
+    const uint64_t scaled_lpuart_cycles =
+        serial->lpuart_cycle_remainder + (uint64_t)core_cycles * serial->lpuart_clock_hz;
+    const uint64_t lpuart_cycles =
+        serial->core_clock_hz == 0u ? 0u : scaled_lpuart_cycles / serial->core_clock_hz;
+    serial->lpuart_cycle_remainder =
+        serial->core_clock_hz == 0u ? 0u : scaled_lpuart_cycles % serial->core_clock_hz;
     for (size_t index = 0; index < 2; index++)
         advance_uart(&serial->uart[index], false, core_cycles);
-    advance_uart(&serial->lpuart0, true, core_cycles);
+    advance_uart(&serial->lpuart0, true, lpuart_cycles);
     for (size_t index = 2; index < 6; index++)
         advance_uart(&serial->uart[index], false, peripheral_cycles);
     for (size_t index = 0; index < 3; index++)

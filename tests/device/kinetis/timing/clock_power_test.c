@@ -2,9 +2,13 @@
 
 #include <stdint.h>
 
+#include "kinetis_test.h"
 #include "test.h"
 
 enum {
+    LPUART0_BAUD = 0x4002a000u,
+    LPUART0_CTRL = 0x4002a008u,
+    LPUART0_DATA = 0x4002a00cu,
     LPTMR0_CSR = 0x40040000u,
     MCG_C1 = 0x40064000u,
     MCG_C6 = 0x40064005u,
@@ -13,6 +17,8 @@ enum {
     SMC_PMCTRL = 0x4007e001u,
     SMC_PMSTAT = 0x4007e003u,
     SIM_SCGC5 = 0x40048038u,
+    SIM_SCGC6 = 0x4004803cu,
+    SIM_SOPT2 = 0x40048004u,
 };
 
 static void write_register(TestState* state, Kinetis* device, uint32_t address, uint8_t size,
@@ -32,6 +38,7 @@ int main(void) {
     TestState state = {0};
     Kinetis* device = kinetis_create(kinetis_default_configuration());
     expect(&state, device != NULL, "device != NULL");
+    expect(&state, kinetis_test_disable_watchdog(device), "watchdog disabled for clock tests");
 
     write_register(&state, device, SMC_PMPROT, 1, 0x80u);
     write_register(&state, device, SMC_PMCTRL, 1, 0x60u);
@@ -59,6 +66,24 @@ int main(void) {
     write_register(&state, device, SIM_SCGC5, 4, 0xa55ac33cu);
     expect(&state, read_register(&state, device, SIM_SCGC5, 4) == 0x00040382u,
            "read_register(&state, device, SIM_SCGC5, 4) == 0x00040382u");
+
+    expect(&state,
+           cortex_m4_write_memory(kinetis_cpu(device), SIM_SCGC6, 4,
+                                  read_register(&state, device, SIM_SCGC6, 4) | (1u << 10)),
+           "firmware enables the LPUART clock gate");
+    expect(&state, (read_register(&state, device, SIM_SCGC6, 4) & (1u << 10)) != 0u,
+           "LPUART clock gate remains enabled");
+    write_register(&state, device, LPUART0_BAUD, 4, 0x0f000001u);
+    write_register(&state, device, LPUART0_CTRL, 4, 1u << 19);
+    write_register(&state, device, LPUART0_DATA, 4, 0x5au);
+    kinetis_advance(device, 1000u);
+    uint16_t transmitted_value = 0u;
+    expect(&state, !kinetis_serial_transmit(device, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "reset LPUART clock selection prevents transmission");
+    write_register(&state, device, SIM_SOPT2, 4, 1u << 26);
+    kinetis_advance(device, 1000u);
+    expect(&state, kinetis_serial_transmit(device, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "selected LPUART source completes transmission");
 
     kinetis_destroy(device);
 

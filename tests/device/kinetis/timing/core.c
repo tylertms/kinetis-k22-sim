@@ -133,6 +133,34 @@ void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
 }
 
 void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTiming* timing) {
+    KinetisTiming clock_source = *timing;
+    expect(state, kinetis_timing_lpuart_clock_hz(NULL) == 0u,
+           "null timing state has no LPUART clock");
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "reset LPUART clock source is disabled");
+    clock_source.sim_sopt2 = 1u << 26;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 32768u * 640u,
+           "LPUART selects MCGFLLCLK");
+    clock_source.sim_sopt2 |= 3u << 16;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 48000000u,
+           "LPUART selects IRC48M");
+    clock_source.sim_sopt2 = 2u << 26;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "disabled OSCERCLK does not clock LPUART");
+    clock_source.osc_cr = 0x80u;
+    expect(state,
+           kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.external_oscillator_hz,
+           "LPUART selects enabled OSCERCLK");
+    clock_source.sim_sopt2 = 3u << 26;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "disabled MCGIRCLK does not clock LPUART");
+    clock_source.mcg[0] |= 2u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.slow_irc_hz,
+           "LPUART selects slow MCGIRCLK");
+    clock_source.mcg[1] |= 1u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.fast_irc_hz / 2u,
+           "LPUART selects divided fast MCGIRCLK");
+
     kinetis_timing_test_expect_write(state, timing, MCG_C1, 1, 0x32u);
     kinetis_timing_test_expect_write(state, timing, MCG_C2, 1, 0xa0u);
     kinetis_timing_test_expect_write(state, timing, MCG_C4, 1, 0x60u);

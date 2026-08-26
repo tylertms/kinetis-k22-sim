@@ -566,7 +566,8 @@ void kinetis_sync_clock_gates(Kinetis* device) {
     const uint32_t scgc6 = device->timing.sim_scgc6;
     const uint32_t scgc7 = device->timing.sim_scgc7;
     kinetis_serial_set_clocks(&device->serial, kinetis_timing_core_clock_hz(&device->timing),
-                              kinetis_timing_bus_clock_hz(&device->timing));
+                              kinetis_timing_bus_clock_hz(&device->timing),
+                              kinetis_timing_lpuart_clock_hz(&device->timing));
     kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_LPUART0, gate(scgc6, 10));
     kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI0, gate(scgc6, 12));
     kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI1, gate(scgc6, 13));
