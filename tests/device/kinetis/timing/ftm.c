@@ -252,6 +252,32 @@ void kinetis_timing_test_test_ftm_clock_sources(TestState* state,
 
     kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 0u);
     kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 2u << 3u);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C2, 1u, 0x13u);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C1, 1u, 0x42u);
+    expect(state, kinetis_timing_internal_fixed_clock_hz(&timing) == 0u,
+           "FTM fixed-frequency source stops in BLPI");
+    kinetis_timing_advance(&timing, 640u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C2, 1u, 0x10u);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C1, 1u, 0x18u);
+    kinetis_timing_advance(&timing, 640u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 1u);
+
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 2u << 3u);
+    kinetis_timing_set_cpu_sleeping(&timing, true, true);
+    expect(state, kinetis_timing_internal_fixed_clock_hz(&timing) == 0u,
+           "FTM fixed-frequency source stops in Stop mode");
+    kinetis_timing_advance(&timing, 640u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_set_cpu_sleeping(&timing, false, false);
+    kinetis_timing_advance(&timing, 640u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 1u);
+
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4u, 0u);
     kinetis_timing_test_expect_write(state, &timing, SIM_SOPT4, 4u, 1u << 24);
     kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, (3u << 3) | 1u);
     kinetis_timing_advance(&timing, 640u);

@@ -42,7 +42,7 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
 }
 
 uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
-    if (timing == NULL)
+    if (timing == NULL || (timing->mcg[1] & 2u) != 0u || timing->deep_sleeping)
         return 0u;
     const uint32_t reference_clock_hz = calculate_fll_reference_clock_hz(timing);
     const uint32_t core_divider = ((timing->sim_clkdiv1 >> 28u) & 15u) + 1u;
