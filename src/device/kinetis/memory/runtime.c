@@ -3,6 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+static uint32_t eeprom_size(const KinetisData* data) {
+    const uint8_t size_code = data->flash_data_ifr[0x3fdu];
+    return size_code >= 2u && size_code <= 9u ? 1u << (14u - size_code) : 0u;
+}
+
+static bool flexram_range(const KinetisData* data, uint32_t address, uint8_t byte_count,
+                          uint32_t* byte_offset) {
+    if (data->profile->flexram_size == 0u || address < data->profile->flexram_address)
+        return false;
+    *byte_offset = address - data->profile->flexram_address;
+    const uint32_t size = data->flexram_eeprom ? eeprom_size(data) : data->profile->flexram_size;
+    return byte_count <= size && *byte_offset <= size - byte_count;
+}
+
 static bool mapped_memory_read(KinetisData* data, uint32_t address, uint8_t byte_count,
                                uint32_t* output_value) {
     if (data->profile->flexnvm_size != 0 && address >= data->profile->flexnvm_address &&
@@ -11,10 +25,9 @@ static bool mapped_memory_read(KinetisData* data, uint32_t address, uint8_t byte
             data->flexnvm, address - data->profile->flexnvm_address, byte_count);
         return true;
     }
-    if (data->profile->flexram_size != 0 && address >= data->profile->flexram_address &&
-        address - data->profile->flexram_address <= data->profile->flexram_size - byte_count) {
-        *output_value = kinetis_data_internal_load_bytes(
-            data->flexram, address - data->profile->flexram_address, byte_count);
+    uint32_t byte_offset = 0u;
+    if (flexram_range(data, address, byte_count, &byte_offset)) {
+        *output_value = kinetis_data_internal_load_bytes(data->flexram, byte_offset, byte_count);
         return true;
     }
     return false;
@@ -31,10 +44,11 @@ static bool mapped_memory_write(KinetisData* data, uint32_t address, uint8_t byt
                                           previous_value & write_value);
         return true;
     }
-    if (data->profile->flexram_size != 0 && address >= data->profile->flexram_address &&
-        address - data->profile->flexram_address <= data->profile->flexram_size - byte_count) {
-        kinetis_data_internal_store_bytes(data->flexram, address - data->profile->flexram_address,
-                                          byte_count, write_value);
+    uint32_t byte_offset = 0u;
+    if (flexram_range(data, address, byte_count, &byte_offset)) {
+        kinetis_data_internal_store_bytes(data->flexram, byte_offset, byte_count, write_value);
+        if (data->flexram_eeprom)
+            kinetis_data_internal_store_bytes(data->eeprom, byte_offset, byte_count, write_value);
         return true;
     }
     return false;
@@ -74,8 +88,11 @@ KinetisData* kinetis_data_create(const KinetisDeviceProfile* profile, KinetisDat
         data->flexnvm = malloc(profile->flexnvm_size);
     if (profile->flexram_size != 0)
         data->flexram = malloc(profile->flexram_size);
+    if (profile->flexnvm_size != 0 && profile->flexram_size != 0)
+        data->eeprom = malloc(profile->flexram_size);
     if ((profile->flexnvm_size != 0 && data->flexnvm == NULL) ||
-        (profile->flexram_size != 0 && data->flexram == NULL)) {
+        (profile->flexram_size != 0 && data->flexram == NULL) ||
+        (profile->flexnvm_size != 0 && profile->flexram_size != 0 && data->eeprom == NULL)) {
         kinetis_data_destroy(data);
         return NULL;
     }
@@ -83,6 +100,8 @@ KinetisData* kinetis_data_create(const KinetisDeviceProfile* profile, KinetisDat
         memset(data->flexnvm, 0xff, profile->flexnvm_size);
     if (data->flexram != NULL)
         memset(data->flexram, 0, profile->flexram_size);
+    if (data->eeprom != NULL)
+        memset(data->eeprom, 0xff, profile->flexram_size);
     memset(data->flash_config, 0xff, sizeof(data->flash_config));
     data->flash_config[0x0c] = 0xfeu;
     memset(data->flash_program_ifr, 0xff, sizeof(data->flash_program_ifr));
@@ -96,6 +115,7 @@ void kinetis_data_destroy(KinetisData* data) {
         return;
     free(data->flexnvm);
     free(data->flexram);
+    free(data->eeprom);
     free(data);
 }
 
@@ -156,7 +176,8 @@ void kinetis_data_reset(KinetisData* data) {
     if (data->flexram != NULL) {
         const uint8_t partition_code = data->flash_data_ifr[0x3fcu];
         const bool eeprom_partitioned = partition_code != 0xffu && partition_code != 0x00u &&
-                                        partition_code != 0x0du && partition_code != 0x0fu;
+                                        partition_code != 0x0du && partition_code != 0x0fu &&
+                                        data->eeprom != NULL;
         data->flash[1] = eeprom_partitioned ? 0x01u : 0x02u;
         data->flexram_eeprom = eeprom_partitioned;
     }
@@ -168,7 +189,9 @@ void kinetis_data_reset(KinetisData* data) {
     data->flash_busy_length = 0u;
     data->flash_key_blocked = false;
     data->flash_partitioned = data->flash_data_ifr[0x3fcu] != 0xffu;
-    if (data->flexram != NULL)
+    if (data->flexram_eeprom)
+        memcpy(data->flexram, data->eeprom, data->profile->flexram_size);
+    else if (data->flexram != NULL)
         memset(data->flexram, 0, data->profile->flexram_size);
     for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++)
         kinetis_data_internal_adc_reset_registers(&data->adc[adc_index]);
@@ -186,14 +209,18 @@ bool kinetis_data_copy(KinetisData* destination, const KinetisData* source) {
     KinetisDataBus bus = destination->bus;
     uint8_t* flexnvm = destination->flexnvm;
     uint8_t* flexram = destination->flexram;
+    uint8_t* eeprom = destination->eeprom;
     memcpy(destination, source, sizeof(*destination));
     destination->bus = bus;
     destination->flexnvm = flexnvm;
     destination->flexram = flexram;
+    destination->eeprom = eeprom;
     if (flexnvm != NULL)
         memcpy(flexnvm, source->flexnvm, source->profile->flexnvm_size);
     if (flexram != NULL)
         memcpy(flexram, source->flexram, source->profile->flexram_size);
+    if (eeprom != NULL)
+        memcpy(eeprom, source->eeprom, source->profile->flexram_size);
     kinetis_data_internal_dma_update_interrupts(destination);
     return true;
 }

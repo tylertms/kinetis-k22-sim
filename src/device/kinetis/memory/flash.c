@@ -327,6 +327,7 @@ static bool flash_program_partition(KinetisData* data) {
     data->flash_data_ifr[0x3fdu] = eeprom_size_code;
     data->flash_partitioned = true;
     data->flexram_eeprom = !no_eeprom;
+    memset(data->eeprom, 0xff, data->profile->flexram_size);
     memset(data->flexram, 0xff, data->profile->flexram_size);
     data->flash[1] = (uint8_t)((data->flash[1] & 0xfcu) | (data->flexram_eeprom ? 0x01u : 0x02u));
     return true;
@@ -340,8 +341,11 @@ static bool flash_set_flexram(KinetisData* data) {
         return false;
     if (control == 0u && !data->flash_partitioned)
         return false;
-    memset(data->flexram, 0xff, data->profile->flexram_size);
     data->flexram_eeprom = control == 0u;
+    if (data->flexram_eeprom)
+        memcpy(data->flexram, data->eeprom, data->profile->flexram_size);
+    else
+        memset(data->flexram, 0xff, data->profile->flexram_size);
     data->flash[1] = (uint8_t)((data->flash[1] & 0xfcu) | (data->flexram_eeprom ? 0x01u : 0x02u));
     return true;
 }
@@ -527,6 +531,8 @@ static void flash_execute(KinetisData* data) {
                 memset(data->flexnvm, 0xff, data->profile->flexnvm_size);
             if (valid && data->flexram != NULL)
                 memset(data->flexram, 0xff, data->profile->flexram_size);
+            if (valid && data->eeprom != NULL)
+                memset(data->eeprom, 0xff, data->profile->flexram_size);
             if (valid) {
                 memset(data->flash_config, 0xff, sizeof(data->flash_config));
                 memset(data->flash_data_ifr, 0xff, sizeof(data->flash_data_ifr));

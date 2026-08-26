@@ -463,6 +463,7 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
            "(kinetis_data_test_read_value(state, data, FTFA + 1u, 1u) & 3u) == 1u");
     expect(state, kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == UINT32_MAX,
            "kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == UINT32_MAX");
+    kinetis_data_test_write_value(state, data, 0x14000000u, 4u, 0x5aa5c33cu);
     kinetis_data_test_write_fccob(state, data, 1u, 0xffu);
     kinetis_data_test_flash_command_without_address(state, data, 0x81u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u,
@@ -480,6 +481,8 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_reset(data);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA + 1u, 1u) & 3u) == 1u,
            "(kinetis_data_test_read_value(state, data, FTFA + 1u, 1u) & 3u) == 1u");
+    expect(state, kinetis_data_test_read_value(state, data, 0x14000000u, 4u) == 0x5aa5c33cu,
+           "EEPROM data is restored after reset");
     kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u");
@@ -494,6 +497,8 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_flash_command_without_address(state, data, 0x81u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA + 1u, 1u) & 3u) == 1u,
            "(kinetis_data_test_read_value(state, data, FTFA + 1u, 1u) & 3u) == 1u");
+    expect(state, kinetis_data_test_read_value(state, data, 0x14000000u, 4u) == 0x5aa5c33cu,
+           "EEPROM data survives FlexRAM mode changes");
     kinetis_data_test_write_fccob(state, data, 1u, 1u);
     kinetis_data_test_flash_command_without_address(state, data, 0x81u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
@@ -506,6 +511,33 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
            "kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == 0x04030201u");
     expect(state, kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x08070605u,
            "kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x08070605u");
+    kinetis_data_destroy(data);
+
+    memset(&bus, 0, sizeof(bus));
+    memset(bus.flash, 0xff, sizeof(bus.flash));
+    data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FX51212);
+    kinetis_data_test_write_fccob(state, data, 3u, 0u);
+    kinetis_data_test_write_fccob(state, data, 4u, 9u);
+    kinetis_data_test_write_fccob(state, data, 5u, 3u);
+    kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
+    uint32_t eeprom_value = 0u;
+    expect(state,
+           kinetis_data_write(data, 0x1400001fu, 1u, 0x96u) &&
+               kinetis_data_read(data, 0x1400001fu, 1u, &eeprom_value) && eeprom_value == 0x96u,
+           "configured EEPROM range is accessible");
+    expect(state,
+           !kinetis_data_write(data, 0x14000020u, 1u, 0u) &&
+               !kinetis_data_read(data, 0x14000020u, 1u, &eeprom_value),
+           "FlexRAM outside the configured EEPROM range is inaccessible");
+    KinetisData* copy = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FX51212);
+    expect(state, kinetis_data_copy(copy, data), "EEPROM state is copied");
+    kinetis_data_reset(copy);
+    expect(state, kinetis_data_test_read_value(state, copy, 0x1400001fu, 1u) == 0x96u,
+           "copied EEPROM data survives reset");
+    kinetis_data_destroy(copy);
+    kinetis_data_reset(data);
+    expect(state, kinetis_data_test_read_value(state, data, 0x1400001fu, 1u) == 0x96u,
+           "small EEPROM data survives reset");
     kinetis_data_destroy(data);
 
     memset(&bus, 0, sizeof(bus));

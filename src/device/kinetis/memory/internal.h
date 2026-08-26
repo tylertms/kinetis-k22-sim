@@ -95,6 +95,7 @@ struct KinetisData {
     bool flexram_eeprom;
     uint8_t* flexnvm;
     uint8_t* flexram;
+    uint8_t* eeprom;
 };
 
 bool kinetis_data_internal_adc_read(KinetisData* data, uint8_t instance, uint32_t address,
