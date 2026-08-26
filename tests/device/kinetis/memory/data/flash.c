@@ -95,8 +95,8 @@ void kinetis_data_test_test_flash_collision_lifecycle(TestState* state) {
            "!bus.interrupt[KINETIS_DATA_INTERRUPT_FTFA]");
     expect(state, !kinetis_data_flash_read(data, false, 0x1000u, 1u),
            "!kinetis_data_flash_read(data, false, 0x1000u, 1u)");
-    expect(state, kinetis_data_flash_read(data, false, 0x41000u, 1u),
-           "kinetis_data_flash_read(data, false, 0x41000u, 1u)");
+    expect(state, !kinetis_data_flash_read(data, false, 0x41000u, 1u),
+           "!kinetis_data_flash_read(data, false, 0x41000u, 1u)");
     expect(state, kinetis_data_flash_read(data, true, 0u, 1u),
            "kinetis_data_flash_read(data, true, 0u, 1u)");
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x40u) != 0u,
@@ -196,6 +196,16 @@ void kinetis_data_test_test_flash_controller_geometry(TestState* state) {
     kinetis_data_test_write_value(state, data, FTFA, 1, 0x80u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) != 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1) & 0x20u) != 0u");
+    kinetis_data_destroy(data);
+
+    memset(&bus, 0, sizeof(bus));
+    memset(bus.flash, 0xff, sizeof(bus.flash));
+    data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FX51212);
+    bus.flash[0x100u] = 0u;
+    bus.flash[0x40000u] = 0u;
+    kinetis_data_test_flash_command(state, data, 0x08u, 0u, 2000u);
+    expect(state, bus.flash[0x100u] == 0xffu, "single-block flash erases its lower half");
+    expect(state, bus.flash[0x40000u] == 0xffu, "single-block flash erases its upper half");
     kinetis_data_destroy(data);
 }
 

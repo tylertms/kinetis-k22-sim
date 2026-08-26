@@ -186,9 +186,7 @@ static bool flash_range_erased(KinetisData* data, uint32_t start, uint32_t lengt
 }
 
 static uint32_t flash_block_size(const KinetisData* data) {
-    if (data->profile->program_flash_size >= 0x80000u)
-        return data->profile->program_flash_size == 0x100000u ? 0x80000u : 0x40000u;
-    return data->profile->program_flash_size;
+    return data->profile->program_flash_size / data->profile->program_flash_block_count;
 }
 
 static bool flash_block_range(const KinetisData* data, uint32_t address, uint32_t* start,
