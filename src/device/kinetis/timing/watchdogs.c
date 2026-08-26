@@ -443,7 +443,7 @@ bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t 
         *output_value = ftm->modulo;
     else if (offset >= 0x0cu && offset < 0x4cu) {
         const uint8_t channel = (uint8_t)((offset - 0x0cu) / 8u);
-        if (channel >= k22_timing_internal_ftm_channel_count(instance))
+        if (channel >= k22_timing_internal_ftm_channel_count(timing, instance))
             return false;
         if (((offset - 0x0cu) & 4u) == 0u) {
             *output_value = ftm->channel_sc[channel];
@@ -456,7 +456,7 @@ bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t 
         *output_value = ftm->initial;
     else if (offset == 0x50u) {
         uint32_t status = 0;
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+        const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
         for (uint8_t channel = 0; channel < channels; channel++) {
             status |= ((ftm->channel_sc[channel] >> 7u) & 1u) << channel;
         }

@@ -49,25 +49,27 @@ static void apply_fmc_control(Kinetis* device, uint32_t address, uint8_t access_
         return;
     }
     const uint8_t selected_ways = (uint8_t)((write_value >> 20u) & 0x0fu);
-    const uint8_t set_count = 4u;
-
-    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
+    for (uint8_t cache_way = 0u; cache_way < K22_FMC_WAY_COUNT; cache_way++) {
         if ((selected_ways & (1u << cache_way)) == 0u) {
             continue;
         }
 
-        for (uint8_t cache_set = 0u; cache_set < set_count; cache_set++) {
+        for (uint8_t cache_set = 0u; cache_set < device->profile->fmc_set_count; cache_set++) {
             const uint32_t tag_address =
-                K22_FMC + 0x100u + ((uint32_t)cache_way * set_count + cache_set) * 4u;
+                K22_FMC + 0x100u +
+                ((uint32_t)cache_way * device->profile->fmc_set_count + cache_set) * 4u;
             if (k22_register_manifest_lookup(device->profile->id, tag_address, 32u) != NULL) {
                 kinetis_internal_raw_store(device, tag_address, 4u, 0u);
                 device->fmc_bank[cache_way][cache_set] = 0u;
                 device->fmc_age[cache_way][cache_set] = 0u;
 
-                for (uint8_t word_index = 0u; word_index < 4u; word_index++) {
+                const uint8_t word_count = device->profile->fmc_line_size / 4u;
+                for (uint8_t word_index = 0u; word_index < word_count; word_index++) {
                     const uint32_t data_address =
                         K22_FMC + 0x200u +
-                        (((uint32_t)cache_way * set_count + cache_set) * 4u + word_index) * 4u;
+                        ((uint32_t)cache_way * device->profile->fmc_set_count + cache_set) *
+                            device->profile->fmc_line_size +
+                        word_index * 4u;
                     kinetis_internal_raw_store(device, data_address, 4u, 0u);
                 }
             }
@@ -131,6 +133,10 @@ bool kinetis_peripheral_write(Kinetis* device, uint32_t address, uint8_t access_
     }
     if (descriptor != NULL && (descriptor->access & K22_REGISTER_ACCESS_WRITE) == 0u) {
         return true;
+    }
+    if (descriptor != NULL) {
+        write_value &= kinetis_internal_manifest_access_mask(
+            descriptor, address, descriptor->write_mask & descriptor->implemented_mask);
     }
     if (!kinetis_internal_aips_access_allowed(device, address, access, true) ||
         (location.id == K22_PERIPHERAL_AXBS &&

@@ -1664,7 +1664,7 @@ static const K22RegisterDescriptor mk22f12_registers[] = {
      32u, (K22RegisterAccess)3},
     {0x40048038u, 0x00040182u, 0xffffffffu, 0x00003e01u, 0x00003e01u, 0x00003e01u, 0x00000000u, 27u,
      32u, (K22RegisterAccess)3},
-    {0x4004803cu, 0x40000001u, 0xffffffffu, 0xafe49013u, 0xafe49013u, 0xafe49013u, 0x00000000u, 27u,
+    {0x4004803cu, 0x40000001u, 0xffffffffu, 0xafe4b013u, 0xafe4b013u, 0xafe4b013u, 0x00000000u, 27u,
      32u, (K22RegisterAccess)3},
     {0x40048040u, 0x00000006u, 0xffffffffu, 0x00000007u, 0x00000007u, 0x00000007u, 0x00000000u, 27u,
      32u, (K22RegisterAccess)3},
@@ -2887,7 +2887,7 @@ static const K22RegisterDescriptor mk22f12_registers[] = {
 const K22RegisterManifest* k22_mk22fn1m012_register_manifest(void) {
     static const K22RegisterManifest manifest = {
         K22_PROFILE_MK22FN1M012,      mk22f12_registers,          COUNT(mk22f12_registers),
-        mk22f12_peripherals,          COUNT(mk22f12_peripherals), UINT64_C(0xfa25597b9f6fc31f),
+        mk22f12_peripherals,          COUNT(mk22f12_peripherals), UINT64_C(0xe8b8eff25d03b5bf),
         UINT64_C(0x640ec2eadda02f54),
     };
     return &manifest;
@@ -2896,7 +2896,7 @@ const K22RegisterManifest* k22_mk22fn1m012_register_manifest(void) {
 const K22RegisterManifest* k22_mk22fx51212_register_manifest(void) {
     static const K22RegisterManifest manifest = {
         K22_PROFILE_MK22FX51212,      mk22f12_registers,          COUNT(mk22f12_registers),
-        mk22f12_peripherals,          COUNT(mk22f12_peripherals), UINT64_C(0xfa25597b9f6fc31f),
+        mk22f12_peripherals,          COUNT(mk22f12_peripherals), UINT64_C(0xe8b8eff25d03b5bf),
         UINT64_C(0x640ec2eadda02f54),
     };
     return &manifest;

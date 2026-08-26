@@ -92,7 +92,7 @@ int main(void) {
         K22FtmState* ftm = &timing.ftm[instance];
         configure_case(ftm, selector * UINT32_C(2654435761));
         const uint8_t channel =
-            (uint8_t)((selector >> 2u) % k22_timing_internal_ftm_channel_count(instance));
+            (uint8_t)((selector >> 2u) % k22_timing_internal_ftm_channel_count(&timing, instance));
         const uint8_t input = (uint8_t)((selector >> 6u) & 3u);
         const bool high = (selector & 1u) != 0u;
         const bool accepted_input = k22_timing_set_ftm_input(&timing, instance, channel, high);

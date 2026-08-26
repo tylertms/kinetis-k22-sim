@@ -130,6 +130,8 @@ typedef struct {
     uint32_t flexram_size;
     uint32_t sim_sdid_reset;
     uint32_t sim_sdid_mask;
+    uint8_t fmc_set_count;
+    uint8_t fmc_line_size;
     K22CpuOptions cpu;
     const K22PeripheralBlock* peripheral_blocks;
     size_t peripheral_block_count;

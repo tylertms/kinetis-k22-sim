@@ -319,6 +319,24 @@ static void test_io_api(TestState* state, Kinetis* device) {
     expect(state, !kinetis_gpio_release(NULL, 0u, 0u), "!kinetis_gpio_release(NULL, 0u, 0u)");
 }
 
+static void test_mkv30_package_and_channels(TestState* state) {
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
+    configuration.package = KINETIS_PACKAGE_FM_32_QFN;
+    Kinetis* device = kinetis_create(configuration);
+    expect(state, device != NULL, "MKV30 host API device is created");
+    bool output = false;
+    expect(state, kinetis_set_ftm_input(device, 0u, 5u, true), "MKV30 FTM0 channel 5 exists");
+    expect(state, !kinetis_set_ftm_input(device, 0u, 6u, true),
+           "MKV30 FTM0 channel 6 does not exist");
+    expect(state, !kinetis_get_ftm_output(device, 0u, 7u, &output),
+           "MKV30 FTM0 channel 7 does not exist");
+    uint32_t vref_value = 0u;
+    expect(state,
+           !kinetis_peripheral_read(device, 0x40074000u, 1u, CORTEX_M4_ACCESS_DEBUG, &vref_value),
+           "MKV30 FM32 package has no VREF peripheral");
+    kinetis_destroy(device);
+}
+
 static void test_guards(TestState* state, Kinetis* device) {
     uint32_t guard_value = 0u;
     const uint8_t guard_memory[] = {1u, 2u, 3u, 4u};
@@ -433,6 +451,7 @@ int main(void) {
     test_io_api(&state, device);
     test_guards(&state, device);
     kinetis_destroy(device);
+    test_mkv30_package_and_channels(&state);
 #ifdef K22_TEST_ALLOCATION_FAILURE
     test_allocation_failures(&state);
 #endif

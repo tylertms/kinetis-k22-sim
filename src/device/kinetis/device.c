@@ -45,28 +45,34 @@ static void fmc_raw_store(Kinetis* device, uint32_t address, uint32_t write_valu
     write_little_endian(device->peripheral + address - K22_PERIPHERAL_BASE, 4u, write_value);
 }
 
-static uint32_t fmc_tag_address(uint8_t cache_way, uint8_t cache_set) {
-    return 0x4001f100u + ((uint32_t)cache_way * 4u + cache_set) * 4u;
+static uint32_t fmc_tag_address(const Kinetis* device, uint8_t cache_way, uint8_t cache_set) {
+    return 0x4001f100u + ((uint32_t)cache_way * device->profile->fmc_set_count + cache_set) * 4u;
 }
 
-static uint32_t fmc_data_address(uint8_t cache_way, uint8_t cache_set, uint8_t word_index) {
-    return 0x4001f200u + ((uint32_t)cache_way * 4u + cache_set) * 16u + (3u - word_index) * 4u;
+static uint32_t fmc_data_address(const Kinetis* device, uint8_t cache_way, uint8_t cache_set,
+                                 uint8_t word_index) {
+    const uint8_t word_count = device->profile->fmc_line_size / 4u;
+    return 0x4001f200u +
+           ((uint32_t)cache_way * device->profile->fmc_set_count + cache_set) *
+               device->profile->fmc_line_size +
+           (word_count - 1u - word_index) * 4u;
 }
 
 static uint32_t fmc_tag_value(const Kinetis* device, uint32_t cache_line_address);
 
 static void fmc_clear_entry(Kinetis* device, uint8_t cache_way, uint8_t cache_set) {
-    fmc_raw_store(device, fmc_tag_address(cache_way, cache_set), 0u);
-    for (uint8_t word_index = 0u; word_index < 4u; word_index++) {
-        fmc_raw_store(device, fmc_data_address(cache_way, cache_set, word_index), 0u);
+    fmc_raw_store(device, fmc_tag_address(device, cache_way, cache_set), 0u);
+    const uint8_t word_count = device->profile->fmc_line_size / 4u;
+    for (uint8_t word_index = 0u; word_index < word_count; word_index++) {
+        fmc_raw_store(device, fmc_data_address(device, cache_way, cache_set, word_index), 0u);
     }
     device->fmc_bank[cache_way][cache_set] = 0u;
     device->fmc_age[cache_way][cache_set] = 0u;
 }
 
 static void fmc_clear_cache(Kinetis* device) {
-    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
-        for (uint8_t cache_set = 0u; cache_set < 4u; cache_set++) {
+    for (uint8_t cache_way = 0u; cache_way < K22_FMC_WAY_COUNT; cache_way++) {
+        for (uint8_t cache_set = 0u; cache_set < device->profile->fmc_set_count; cache_set++) {
             fmc_clear_entry(device, cache_way, cache_set);
         }
     }
@@ -74,11 +80,13 @@ static void fmc_clear_cache(Kinetis* device) {
 }
 
 static void fmc_invalidate_line(Kinetis* device, uint8_t flash_bank, uint32_t flash_offset) {
-    const uint8_t cache_set = (uint8_t)((flash_offset >> 4u) & 3u);
-    const uint32_t tag = fmc_tag_value(device, flash_offset & ~15u);
-    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
+    const uint8_t line_size = device->profile->fmc_line_size;
+    const uint8_t cache_set =
+        (uint8_t)((flash_offset / line_size) % device->profile->fmc_set_count);
+    const uint32_t tag = fmc_tag_value(device, flash_offset & ~(line_size - 1u));
+    for (uint8_t cache_way = 0u; cache_way < K22_FMC_WAY_COUNT; cache_way++) {
         if (device->fmc_bank[cache_way][cache_set] == flash_bank &&
-            fmc_raw_load(device, fmc_tag_address(cache_way, cache_set)) == tag) {
+            fmc_raw_load(device, fmc_tag_address(device, cache_way, cache_set)) == tag) {
             fmc_clear_entry(device, cache_way, cache_set);
         }
     }
@@ -102,16 +110,16 @@ static uint8_t fmc_replacement_way(Kinetis* device, uint8_t cache_set, bool inst
     const uint32_t cache_control = fmc_raw_load(device, 0x4001f004u);
     const uint8_t locked_way_mask = (uint8_t)((cache_control >> 24u) & 0x0fu);
     const uint8_t replacement_mode = (uint8_t)((cache_control >> 5u) & 7u);
-    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
+    for (uint8_t cache_way = 0u; cache_way < K22_FMC_WAY_COUNT; cache_way++) {
         if ((locked_way_mask & (1u << cache_way)) == 0u &&
             fmc_way_allowed(replacement_mode, instruction_access, cache_way) &&
-            (fmc_raw_load(device, fmc_tag_address(cache_way, cache_set)) & 1u) == 0u) {
+            (fmc_raw_load(device, fmc_tag_address(device, cache_way, cache_set)) & 1u) == 0u) {
             return cache_way;
         }
     }
     uint8_t selected_cache_way = UINT8_MAX;
     uint64_t oldest_age = UINT64_MAX;
-    for (uint8_t cache_way = 0u; cache_way < 4u; cache_way++) {
+    for (uint8_t cache_way = 0u; cache_way < K22_FMC_WAY_COUNT; cache_way++) {
         if ((locked_way_mask & (1u << cache_way)) == 0u &&
             fmc_way_allowed(replacement_mode, instruction_access, cache_way) &&
             device->fmc_age[cache_way][cache_set] < oldest_age) {
@@ -136,13 +144,16 @@ static uint8_t fmc_source_byte(Kinetis* device, uint8_t flash_bank, uint32_t fla
 
 static uint8_t fmc_cached_byte(Kinetis* device, uint8_t flash_bank, uint32_t flash_offset,
                                CortexM4Access access) {
-    const uint32_t cache_line_address = flash_offset & ~15u;
-    const uint8_t cache_set = (uint8_t)((flash_offset >> 4u) & 3u);
+    const uint8_t line_size = device->profile->fmc_line_size;
+    const uint8_t word_count = line_size / 4u;
+    const uint32_t cache_line_address = flash_offset & ~(line_size - 1u);
+    const uint8_t cache_set =
+        (uint8_t)((flash_offset / line_size) % device->profile->fmc_set_count);
     const uint32_t tag = fmc_tag_value(device, cache_line_address);
     uint8_t cache_way = UINT8_MAX;
-    for (uint8_t candidate_way = 0u; candidate_way < 4u; candidate_way++) {
+    for (uint8_t candidate_way = 0u; candidate_way < K22_FMC_WAY_COUNT; candidate_way++) {
         if (device->fmc_bank[candidate_way][cache_set] == flash_bank &&
-            fmc_raw_load(device, fmc_tag_address(candidate_way, cache_set)) == tag) {
+            fmc_raw_load(device, fmc_tag_address(device, candidate_way, cache_set)) == tag) {
             cache_way = candidate_way;
             break;
         }
@@ -151,7 +162,7 @@ static uint8_t fmc_cached_byte(Kinetis* device, uint8_t flash_bank, uint32_t fla
         cache_way = fmc_replacement_way(device, cache_set, access == CORTEX_M4_ACCESS_INSTRUCTION);
         if (cache_way == UINT8_MAX)
             return fmc_source_byte(device, flash_bank, flash_offset);
-        for (uint8_t word_index = 0u; word_index < 4u; word_index++) {
+        for (uint8_t word_index = 0u; word_index < word_count; word_index++) {
             uint32_t cache_word = 0u;
             for (uint8_t byte_index = 0u; byte_index < 4u; byte_index++) {
                 const uint32_t source_address =
@@ -159,15 +170,17 @@ static uint8_t fmc_cached_byte(Kinetis* device, uint8_t flash_bank, uint32_t fla
                 cache_word |= (uint32_t)fmc_source_byte(device, flash_bank, source_address)
                               << (byte_index * 8u);
             }
-            fmc_raw_store(device, fmc_data_address(cache_way, cache_set, word_index), cache_word);
+            fmc_raw_store(device, fmc_data_address(device, cache_way, cache_set, word_index),
+                          cache_word);
         }
-        fmc_raw_store(device, fmc_tag_address(cache_way, cache_set), tag);
+        fmc_raw_store(device, fmc_tag_address(device, cache_way, cache_set), tag);
         device->fmc_bank[cache_way][cache_set] = flash_bank;
     }
     device->fmc_age[cache_way][cache_set] = ++device->fmc_access_count;
-    const uint8_t word_index = (uint8_t)((flash_offset >> 2u) & 3u);
-    return (uint8_t)(fmc_raw_load(device, fmc_data_address(cache_way, cache_set, word_index)) >>
-                     ((flash_offset & 3u) * 8u));
+    const uint8_t word_index = (uint8_t)((flash_offset >> 2u) & (word_count - 1u));
+    const uint32_t cache_word =
+        fmc_raw_load(device, fmc_data_address(device, cache_way, cache_set, word_index));
+    return (uint8_t)(cache_word >> ((flash_offset & 3u) * 8u));
 }
 
 static bool fmc_cache_enabled(const Kinetis* device, uint8_t bank, CortexM4Access access) {
@@ -559,13 +572,14 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
     if (profile == NULL || manifest == NULL) {
         return NULL;
     }
+    const size_t profile_sram_size = (size_t)profile->sram_lower_size + profile->sram_upper_size;
     const K22PackageSelection* package_selection =
         configuration.package == KINETIS_PACKAGE_DEFAULT
             ? k22_package_default(profile)
             : k22_package_select(profile, (K22PackageId)configuration.package);
     if (package_selection == NULL || configuration.flash_size == 0 ||
         configuration.flash_size > profile->program_flash_size || configuration.sram_size == 0 ||
-        configuration.sram_size > 0x40000000u) {
+        configuration.sram_size > profile_sram_size) {
         return NULL;
     }
     Kinetis* device = calloc(1, sizeof(*device));
@@ -577,7 +591,6 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
     device->profile = profile;
     device->package = package_selection;
     device->manifest = manifest;
-    const size_t profile_sram_size = (size_t)profile->sram_lower_size + profile->sram_upper_size;
     device->sram_base = configuration.sram_size == profile_sram_size
                             ? profile->sram_lower_address
                             : K22_SRAM_CENTER - (uint32_t)(configuration.sram_size / 2u);

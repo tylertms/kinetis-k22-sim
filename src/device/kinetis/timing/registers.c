@@ -1,21 +1,24 @@
 #include "internal.h"
 
-static uint32_t ftm_register_write_mask(uint8_t instance, uint8_t register_index) {
+static uint32_t ftm_register_write_mask(const K22Timing* timing, uint8_t instance,
+                                        uint8_t register_index) {
     static const uint32_t write_masks[18] = {
         0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x7f7f7f7fu, 0x000000ffu,
         0x000000ffu, 0x000000ffu, 0x000000efu, 0x0000ffffu, 0x00000fffu, 0x000000ffu,
         0x000006dfu, 0x0000000fu, 0x001f1fb5u, 0x0000000fu, 0x0000ffffu, 0x000002ffu,
     };
     uint32_t register_mask = write_masks[register_index];
-    if (k22_timing_internal_ftm_channel_count(instance) == 2u) {
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
+    if (channels < 8u) {
+        const uint32_t channel_mask = (1u << channels) - 1u;
         if (register_index == 2u || register_index == 3u || register_index == 7u)
-            register_mask &= 3u;
+            register_mask &= channel_mask;
         else if (register_index == 4u)
-            register_mask &= 0x7fu;
+            register_mask &= (1u << ((channels / 2u) * 8u)) - 1u;
         else if (register_index == 16u)
-            register_mask &= 0x0303u;
+            register_mask &= channel_mask | (channel_mask << 8u);
         else if (register_index == 17u)
-            register_mask &= 0x0203u;
+            register_mask &= 0x0200u | channel_mask;
     }
     return register_mask;
 }
@@ -49,7 +52,7 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
         ftm->counter = ftm->initial;
         ftm->counting_down = false;
         ftm->overflow_count = 0u;
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+        const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
         for (uint8_t channel = 0u; channel < channels; channel++) {
             if (!k22_timing_internal_ftm_output_compare_mode(ftm, channel))
                 ftm->channel_output[channel] = (ftm->registers[2] & (1u << channel)) != 0u;
@@ -66,7 +69,7 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
         }
     } else if (offset >= 0x0cu && offset < 0x4cu) {
         const uint8_t channel = (uint8_t)((offset - 0x0cu) / 8u);
-        if (channel >= k22_timing_internal_ftm_channel_count(instance))
+        if (channel >= k22_timing_internal_ftm_channel_count(timing, instance))
             return false;
         if (((offset - 0x0cu) & 4u) == 0) {
             uint32_t channel_flag = ftm->channel_sc[channel] & 0x80u;
@@ -93,7 +96,7 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
             ftm->initial_pending = true;
         }
     } else if (offset == 0x50u) {
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+        const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
         for (uint8_t channel = 0; channel < channels; channel++) {
             if ((write_value & (1u << channel)) == 0) {
                 ftm->channel_sc[channel] &= ~0x80u;
@@ -103,7 +106,7 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
         k22_timing_internal_update_ftm_irq(timing, instance);
     } else if (offset >= 0x54u && offset <= 0x98u) {
         const uint8_t register_index = (uint8_t)((offset - 0x54u) / 4u);
-        write_value &= ftm_register_write_mask(instance, register_index);
+        write_value &= ftm_register_write_mask(timing, instance, register_index);
         if (offset == 0x54u) {
             const uint32_t current_register_value = ftm->registers[register_index];
             const uint32_t protected_mask = ftm_write_protection_mask(register_index);
@@ -121,7 +124,7 @@ static bool write_ftm_register(K22Timing* timing, uint8_t instance, uint32_t off
             }
             ftm->registers[register_index] = next_value;
             if ((write_value & 2u) != 0u) {
-                const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+                const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
                 for (uint8_t channel = 0u; channel < channels; channel++)
                     ftm->channel_output[channel] = (ftm->registers[2] & (1u << channel)) != 0u;
             }

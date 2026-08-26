@@ -13,13 +13,15 @@ enum {
     FLEXNVM = 0x10000000u,
     FLEXRAM = 0x14000000u,
     TAG_W0_S0 = 0x4001f100u,
+    TAG_W0_S1 = 0x4001f104u,
     TAG_W0_S3 = 0x4001f10cu,
-    TAG_W1_S0 = 0x4001f110u,
-    TAG_W2_S0 = 0x4001f120u,
-    TAG_W3_S0 = 0x4001f130u,
+    TAG_W2_S0 = 0x4001f140u,
+    TAG_W3_S0 = 0x4001f160u,
+    TAG_16_BYTE_W1_S0 = 0x4001f110u,
     DATA_W0_S0_UM = 0x4001f200u,
-    DATA_W0_S0_LM = 0x4001f20cu,
-    DATA_W0_S3_UM = 0x4001f230u,
+    DATA_W0_S0_LM = 0x4001f204u,
+    DATA_W0_S3_UM = 0x4001f218u,
+    DATA_16_BYTE_W0_S0_LM = 0x4001f20cu,
     INVALIDATE_ALL = 0x00f00000u,
 };
 
@@ -107,6 +109,12 @@ static void test_visible_cache_and_invalidation(TestState* state) {
     write_flash(state, device, 0x100u, 0x5au);
     expect(state, read_flash(state, device, 0x100u, CORTEX_M4_ACCESS_DATA) == 0x5au,
            "read_flash(state, device, 0x100u, CORTEX_M4_ACCESS_DATA) == 0x5au");
+    expect(state, kinetis_flash_controller_write(device, 0x108u, 1u, 0x3cu),
+           "kinetis_flash_controller_write(device, 0x108u, 1u, 0x3cu)");
+    expect(state, read_flash(state, device, 0x108u, CORTEX_M4_ACCESS_DATA) == 0x3cu,
+           "adjacent FMC cache lines are independent");
+    expect(state, read_register(state, device, TAG_W0_S1) == 0x101u,
+           "the adjacent cache line occupies the next set");
     expect(state, read_register(state, device, TAG_W0_S0) == 0x101u,
            "read_register(state, device, TAG_W0_S0) == 0x101u");
     expect(state, (read_register(state, device, DATA_W0_S0_LM) & 0xffu) == 0x5au,
@@ -263,12 +271,12 @@ static void test_bank_one_cache(TestState* state) {
            "read_flash(state, device, FLEXNVM + 0x100u, CORTEX_M4_ACCESS_DATA) == data");
     expect(state, read_register(state, device, TAG_W0_S0) == 0x101u,
            "read_register(state, device, TAG_W0_S0) == 0x101u");
-    expect(state, read_register(state, device, TAG_W1_S0) == 0x101u,
-           "read_register(state, device, TAG_W1_S0) == 0x101u");
-    expect(state, (read_register(state, device, DATA_W0_S0_LM) & 0xffu) == program,
-           "(read_register(state, device, DATA_W0_S0_LM) & 0xffu) == program");
-    expect(state, (read_register(state, device, DATA_W0_S0_LM + 0x40u) & 0xffu) == data,
-           "(read_register(state, device, DATA_W0_S0_LM + 0x40u) & 0xffu) == data");
+    expect(state, read_register(state, device, TAG_16_BYTE_W1_S0) == 0x101u,
+           "read_register(state, device, TAG_16_BYTE_W1_S0) == 0x101u");
+    expect(state, (read_register(state, device, DATA_16_BYTE_W0_S0_LM) & 0xffu) == program,
+           "(read_register(state, device, DATA_16_BYTE_W0_S0_LM) & 0xffu) == program");
+    expect(state, (read_register(state, device, DATA_16_BYTE_W0_S0_LM + 0x40u) & 0xffu) == data,
+           "(read_register(state, device, DATA_16_BYTE_W0_S0_LM + 0x40u) & 0xffu) == data");
 
     write_register(state, device, PFAPR, 1u);
     uint32_t value = 0u;

@@ -31,6 +31,8 @@ enum {
     K22_FMC = 0x4001f000u,
     K22_USBDCD = 0x40035000u,
     K22_CMT = 0x40062000u,
+    K22_FMC_WAY_COUNT = 4,
+    K22_FMC_MAX_SET_COUNT = 8,
 };
 
 struct Kinetis {
@@ -65,8 +67,8 @@ struct Kinetis {
     bool cmt_fsk_secondary;
     bool cmt_extended_space;
     bool cmt_dma_pending;
-    uint8_t fmc_bank[4][4];
-    uint64_t fmc_age[4][4];
+    uint8_t fmc_bank[K22_FMC_WAY_COUNT][K22_FMC_MAX_SET_COUNT];
+    uint64_t fmc_age[K22_FMC_WAY_COUNT][K22_FMC_MAX_SET_COUNT];
     uint64_t fmc_access_count;
     K22UsbDcd usbdcd;
     K22Data* data;

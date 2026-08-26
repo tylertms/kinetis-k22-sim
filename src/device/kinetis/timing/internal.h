@@ -85,7 +85,7 @@ uint32_t k22_timing_internal_rtc_access_reset(const K22Timing* timing);
 uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, uint32_t source_hz,
                                          uint32_t core_hz);
 uint8_t k22_timing_internal_ftm_active_fault_mask(const K22FtmState* ftm);
-uint8_t k22_timing_internal_ftm_channel_count(uint8_t instance);
+uint8_t k22_timing_internal_ftm_channel_count(const K22Timing* timing, uint8_t instance);
 uint8_t k22_timing_internal_ftm_fault_mode(const K22FtmState* ftm);
 void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles);
 void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t instance, uint32_t cycles);

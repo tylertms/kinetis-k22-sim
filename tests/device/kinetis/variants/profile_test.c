@@ -170,9 +170,12 @@ static void expect_invalid_configuration(TestState* state) {
     configuration = kinetis_default_configuration();
     configuration.sram_size = 0u;
     expect(state, kinetis_create(configuration) == NULL, "empty SRAM is rejected");
-    configuration = kinetis_default_configuration();
-    configuration.sram_size = (size_t)0x40000001u;
-    expect(state, kinetis_create(configuration) == NULL, "oversized SRAM is rejected");
+    for (KinetisProfile profile = 0; profile < KINETIS_PROFILE_COUNT; profile++) {
+        configuration = kinetis_configuration(profile);
+        configuration.sram_size++;
+        expect(state, kinetis_create(configuration) == NULL,
+               "SRAM larger than the selected device is rejected");
+    }
     kinetis_destroy(NULL);
 }
 

@@ -62,6 +62,17 @@ int main(void) {
 
     kinetis_destroy(device);
 
+    KinetisConfiguration mkv30_configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
+    device = kinetis_create(mkv30_configuration);
+    expect(&state, device != NULL, "MKV30 device is created");
+    const uint32_t mkv30_reset_clock = kinetis_core_clock_hz(device);
+    write_register(&state, device, MCG_C6, 1u, 0x40u);
+    expect(&state, read_register(&state, device, MCG_C6, 1u) == 0u,
+           "MKV30 reserved MCG_C6 bits read as zero");
+    expect(&state, kinetis_core_clock_hz(device) == mkv30_reset_clock,
+           "MKV30 reserved MCG_C6 bits do not select a PLL");
+    kinetis_destroy(device);
+
     KinetisConfiguration missing_oscillator = kinetis_default_configuration();
     missing_oscillator.external_oscillator_hz = 0u;
     device = kinetis_create(missing_oscillator);

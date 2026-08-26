@@ -14,8 +14,12 @@ static uint8_t ftm_trigger_bit_for_channel(uint8_t channel) {
     return channel < 6u ? bits[channel] : UINT8_MAX;
 }
 
-uint8_t k22_timing_internal_ftm_channel_count(uint8_t instance) {
-    return instance == 0u || instance == 3u ? 8u : 2u;
+uint8_t k22_timing_internal_ftm_channel_count(const K22Timing* timing, uint8_t instance) {
+    if (timing == NULL || timing->profile == NULL || instance >= 4u)
+        return 0u;
+    if (instance == 0u)
+        return timing->profile->id == K22_PROFILE_MKV30F12810 ? 6u : 8u;
+    return instance == 3u ? 8u : 2u;
 }
 
 static bool is_ftm_quadrature_enabled(const K22FtmState* ftm) {
@@ -42,7 +46,7 @@ static bool is_ftm_complementary_mode(const K22FtmState* ftm, uint8_t channel) {
 bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel,
                               bool input_high) {
     if (timing == NULL || timing->profile == NULL || instance >= 4u ||
-        channel >= k22_timing_internal_ftm_channel_count(instance))
+        channel >= k22_timing_internal_ftm_channel_count(timing, instance))
         return false;
     const K22PeripheralId peripheral = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + instance);
     if (!k22_timing_internal_has(timing, peripheral))
@@ -127,7 +131,7 @@ static bool ftm_fault_channel_enabled(const K22FtmState* ftm, uint8_t channel) {
 bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_t channel,
                                bool* output_high) {
     if (timing == NULL || output_high == NULL || timing->profile == NULL || instance >= 4u ||
-        channel >= k22_timing_internal_ftm_channel_count(instance))
+        channel >= k22_timing_internal_ftm_channel_count(timing, instance))
         return false;
     const K22PeripheralId peripheral = (K22PeripheralId)(K22_PERIPHERAL_FTM0 + instance);
     if (!k22_timing_internal_has(timing, peripheral))
@@ -152,7 +156,7 @@ bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_
 void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instance) {
     const K22FtmState* ftm = &timing->ftm[instance];
     bool asserted = (ftm->sc & 0xc0u) == 0xc0u;
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
     for (uint8_t channel = 0u; channel < channels; channel++)
         asserted = asserted || (ftm->channel_sc[channel] & 0xc0u) == 0xc0u;
     asserted = asserted || ((ftm->registers[0] & 0x80u) != 0u && (ftm->registers[8] & 0x80u) != 0u);
@@ -450,7 +454,7 @@ static void advance_ftm_up_down(K22Timing* timing, uint8_t instance, uint64_t ti
     }
     const uint32_t span = last - first;
     const uint32_t period = span * 2u;
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
     ftm_apply_counter_change_values(ftm, channels);
     uint32_t phase;
     if (ftm->counter < first || ftm->counter > last) {
@@ -521,7 +525,7 @@ static void advance_ftm_counter(K22Timing* timing, uint8_t instance, uint32_t cy
         advance_ftm_up_down(timing, instance, ticks);
         return;
     }
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
     ftm_apply_counter_change_values(ftm, channels);
     const uint32_t first = ftm->initial;
     const uint32_t last = ftm->modulo >= first ? ftm->modulo : 0xffffu;
@@ -857,7 +861,7 @@ static bool ftm_has_deadtime(const K22FtmState* ftm, uint8_t channels) {
 
 static void ftm_advance_deadtime(K22Timing* timing, uint8_t instance, uint32_t cycles) {
     K22FtmState* ftm = &timing->ftm[instance];
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
     if (!ftm_gate(timing, instance))
         return;
     const uint8_t divider = (uint8_t)(ftm->registers[5] >> 6u);
@@ -891,7 +895,7 @@ void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t instance, uint32
     K22FtmState* ftm = &timing->ftm[instance];
     ftm_apply_system_clock_updates(ftm);
     ftm_process_hardware_triggers(timing, instance);
-    const uint8_t channels = k22_timing_internal_ftm_channel_count(instance);
+    const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
     uint32_t remaining = cycles;
     while (remaining != 0u) {
         uint32_t segment =

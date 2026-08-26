@@ -180,6 +180,9 @@ static void expect_selection_data(TestState* state, const ExpectedSelection* exp
             exists = expected->dac1;
         if (peripheral == K22_PERIPHERAL_FB)
             exists = expected->flexbus;
+        if (expected->profile == K22_PROFILE_MKV30F12810 &&
+            expected->package == K22_PACKAGE_FM_32_QFN && peripheral == K22_PERIPHERAL_VREF)
+            exists = false;
         if (expected->profile == K22_PROFILE_MK22FN1M012 ||
             expected->profile == K22_PROFILE_MK22FX51212) {
             const bool at_least_80 = expected->package != K22_PACKAGE_LH_64_LQFP;

@@ -164,6 +164,9 @@ bool k22_package_has_peripheral(const K22PackageSelection* selection, K22Periphe
     const K22Profile* profile = k22_profile_get(selection->profile);
     if (!k22_profile_has_peripheral(profile, peripheral))
         return false;
+    if (selection->profile == K22_PROFILE_MKV30F12810 &&
+        selection->package == K22_PACKAGE_FM_32_QFN && peripheral == K22_PERIPHERAL_VREF)
+        return false;
     if (selection->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_DAC1)
         return selection->package != K22_PACKAGE_FX_88_HVQFN;
     if (selection->profile == K22_PROFILE_MK22FN51212 && peripheral == K22_PERIPHERAL_FB)
