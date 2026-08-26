@@ -40,7 +40,7 @@ kinetis_firmware_runner <IMAGE> --profile <DEVICE> --reset-address <ADDRESS> [OP
 
 | Option | Description |
 | :--- | :--- |
-| `--reset-address <ADDR>` | Entry point / reset address (required). |
+| `--reset-address <ADDR>` | Vector-table base address used for reset (required). |
 | `--profile <DEVICE>` | Kinetis device profile (required). |
 | `--package <CODE>` | Package code such as `LH`, `LL`, or `LQ`. |
 | `--binary-address <ADDR>` | Base address for raw binary images. |
