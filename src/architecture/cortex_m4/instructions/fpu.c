@@ -165,39 +165,110 @@ static uint32_t rounded_float(CortexM4* cpu, double exact) {
     return bits;
 }
 
-static int host_rounding_mode(const CortexM4* cpu) {
-    const uint8_t rounding = (uint8_t)(cpu->fpscr >> FPSCR_RMODE_SHIFT) & 3u;
-    static const int modes[] = {FE_TONEAREST, FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO};
-    return modes[rounding];
+static int exact_sum_compare(double rounded, double error, double value) {
+    if (rounded < value) {
+        if (error <= 0)
+            return -1;
+        const double difference = value - rounded;
+        return error < difference ? -1 : error > difference ? 1 : 0;
+    }
+    if (rounded > value) {
+        if (error >= 0)
+            return 1;
+        const double difference = rounded - value;
+        return -error < difference ? 1 : -error > difference ? -1 : 0;
+    }
+    return error < 0 ? -1 : error > 0 ? 1 : 0;
+}
+
+static uint32_t nearest_float(double rounded, double error, uint32_t lower, uint32_t upper) {
+    double midpoint;
+    if (float_is_infinity(upper))
+        midpoint = ldexp(1.0, 128) - ldexp(1.0, 103);
+    else if (float_is_infinity(lower))
+        midpoint = -ldexp(1.0, 128) + ldexp(1.0, 103);
+    else
+        midpoint = ((double)bits_to_float(lower) + (double)bits_to_float(upper)) * 0.5;
+    const int comparison = exact_sum_compare(rounded, error, midpoint);
+    if (comparison < 0)
+        return lower;
+    if (comparison > 0)
+        return upper;
+    return (lower & 1u) == 0u ? lower : upper;
 }
 
 static uint32_t fused_float(CortexM4* cpu, float left, float right, float accumulator) {
+    const bool product_negative = signbit(left) != signbit(right);
+    if (isinf(left) || isinf(right))
+        return (product_negative ? FLOAT_SIGN : 0u) | FLOAT_EXPONENT;
+    if (isinf(accumulator))
+        return float_to_bits(accumulator);
+
     fenv_t environment;
-    if (fegetenv(&environment) != 0 || fesetround(host_rounding_mode(cpu)) != 0) {
-        return rounded_float(cpu, fma((double)left, (double)right, (double)accumulator));
+    const bool restore_environment = fegetenv(&environment) == 0;
+    if (restore_environment)
+        fesetround(FE_TONEAREST);
+    volatile double product = (double)left * (double)right;
+    const double addend = accumulator;
+    volatile double rounded = product + addend;
+    const double virtual_addend = rounded - product;
+    const double error = (product - (rounded - virtual_addend)) + (addend - virtual_addend);
+    const uint8_t rounding = (uint8_t)(cpu->fpscr >> FPSCR_RMODE_SHIFT) & 3u;
+    if (rounded == 0 && error == 0) {
+        const bool matching_zero_signs =
+            product == 0 && addend == 0 && product_negative == signbit(accumulator);
+        if (restore_environment)
+            fesetenv(&environment);
+        if (matching_zero_signs)
+            return product_negative ? FLOAT_SIGN : 0u;
+        return rounding == 2u ? FLOAT_SIGN : 0u;
     }
-    feclearexcept(FE_ALL_EXCEPT);
-    volatile float result = fmaf(left, right, accumulator);
-    const int exceptions = fetestexcept(FE_INVALID | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
-    fesetenv(&environment);
-    if ((exceptions & FE_INVALID) != 0) {
-        cpu->fpscr |= FPSCR_IOC;
-    }
-    if ((exceptions & FE_OVERFLOW) != 0) {
-        cpu->fpscr |= FPSCR_OFC;
-    }
-    if ((exceptions & FE_UNDERFLOW) != 0) {
-        cpu->fpscr |= FPSCR_UFC;
-    }
-    if ((exceptions & FE_INEXACT) != 0) {
+
+    volatile float converted = (float)rounded;
+    if (restore_environment)
+        fesetenv(&environment);
+    const uint32_t converted_bits = float_to_bits(converted);
+    uint32_t lower = converted_bits;
+    uint32_t upper = converted_bits;
+    int converted_comparison;
+    if (float_is_infinity(converted_bits))
+        converted_comparison = (converted_bits & FLOAT_SIGN) != 0u ? 1 : -1;
+    else
+        converted_comparison = exact_sum_compare(rounded, error, (double)converted);
+    if (converted_comparison < 0)
+        lower = next_float(converted_bits, false);
+    else if (converted_comparison > 0)
+        upper = next_float(converted_bits, true);
+
+    uint32_t result;
+    if (lower == upper)
+        result = lower;
+    else if (rounding == 0u)
+        result = nearest_float(rounded, error, lower, upper);
+    else if (rounding == 1u)
+        result = upper;
+    else if (rounding == 2u)
+        result = lower;
+    else
+        result = exact_sum_compare(rounded, error, 0) < 0 ? upper : lower;
+
+    const bool inexact = lower != upper;
+    const bool overflow = exact_sum_compare(rounded, error, FLT_MAX) > 0 ||
+                          exact_sum_compare(rounded, error, -FLT_MAX) < 0;
+    const bool tiny = exact_sum_compare(rounded, error, 0) > 0
+                          ? exact_sum_compare(rounded, error, FLT_MIN) < 0
+                          : exact_sum_compare(rounded, error, -FLT_MIN) > 0;
+    if (overflow)
+        cpu->fpscr |= FPSCR_OFC | FPSCR_IXC;
+    else if (inexact)
         cpu->fpscr |= FPSCR_IXC;
-    }
-    const uint32_t bits = float_to_bits(result);
-    if ((cpu->fpscr & FPSCR_FZ) != 0 && float_is_subnormal(bits)) {
+    if (tiny && inexact)
+        cpu->fpscr |= FPSCR_UFC;
+    if ((cpu->fpscr & FPSCR_FZ) != 0u && float_is_subnormal(result)) {
         cpu->fpscr |= FPSCR_UFC | FPSCR_IXC;
-        return bits & FLOAT_SIGN;
+        return result & FLOAT_SIGN;
     }
-    return bits;
+    return result;
 }
 
 static uint32_t expand_vfp_immediate(uint8_t immediate) {
