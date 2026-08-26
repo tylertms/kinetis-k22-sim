@@ -141,6 +141,7 @@ static void reset_spi(KinetisSerialSpi* spi, const KinetisDeviceProfile* profile
     fifo_clear(&spi->wire_receive);
     fifo_clear(&spi->wire_transmit);
     spi->transfer_cycles = 0;
+    spi->push_command = 0;
     spi->clock_enabled = false;
 }
 
@@ -486,9 +487,19 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
                                        uint8_t byte_count, uint32_t write_value) {
     if (!spi->clock_enabled)
         return false;
-    if (register_offset == SPI_PUSHR &&
-        (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
-        uint16_t command = byte_count == 4u ? (uint16_t)(write_value >> 16) : 0u;
+    bool master = (spi->registers[SPI_MCR / 4] & (1u << 31)) != 0u;
+    if (master && register_offset == SPI_PUSHR + 2u && byte_count == 2u) {
+        spi->push_command = (uint16_t)write_value;
+    } else if (master && register_offset >= SPI_PUSHR + 2u && register_offset <= SPI_PUSHR + 3u &&
+               byte_count == 1u) {
+        uint8_t shift = (uint8_t)((register_offset - SPI_PUSHR - 2u) * 8u);
+        spi->push_command = (uint16_t)((spi->push_command & ~(UINT16_C(0xff) << shift)) |
+                                       ((uint16_t)(write_value & UINT8_MAX) << shift));
+    } else if (register_offset == SPI_PUSHR &&
+               (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
+        if (master && byte_count == 4u)
+            spi->push_command = (uint16_t)(write_value >> 16);
+        uint16_t command = master ? spi->push_command : 0u;
         if (!kinetis_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth,
                                                (uint16_t)write_value, command))
             spi->registers[SPI_SR / 4] |= 1u << 27;

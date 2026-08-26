@@ -122,6 +122,7 @@ typedef struct {
     KinetisSerialFifo wire_receive;
     KinetisSerialFifo wire_transmit;
     uint32_t transfer_cycles;
+    uint16_t push_command;
     uint8_t fifo_depth;
     bool present;
     bool clock_enabled;

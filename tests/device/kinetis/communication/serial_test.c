@@ -227,6 +227,28 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value),
            "kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value)");
     expect(state, transmitted_value == 0x5au, "transmitted_value == 0x5au");
+    write_register(state, &serial, SPI0_BASE, 4, UINT32_C(0x80000000));
+    write_register(state, &serial, SPI0_BASE + 0x36, 2, 0x9803u);
+    write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x6au);
+    write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x6bu);
+    kinetis_serial_advance(&serial, 1024);
+    KinetisSerialSpiTransfer byte_transfer;
+    expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer),
+           "kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer)");
+    expect(state, byte_transfer.data == 0x6au, "byte_transfer.data == 0x6au");
+    expect(state, byte_transfer.chip_selects == 3u, "byte_transfer.chip_selects == 3u");
+    expect(state, byte_transfer.clock_and_transfer_attributes == 1u,
+           "byte_transfer.clock_and_transfer_attributes == 1u");
+    expect(state, byte_transfer.continuous_chip_select, "byte_transfer.continuous_chip_select");
+    expect(state, byte_transfer.end_of_queue, "byte_transfer.end_of_queue");
+    expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer),
+           "kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer)");
+    expect(state, byte_transfer.data == 0x6bu, "byte_transfer.data == 0x6bu");
+    expect(state, byte_transfer.chip_selects == 3u, "byte_transfer.chip_selects == 3u");
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu,
+           "read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu");
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu,
+           "read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu");
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0)");
     write_register(state, &serial, SPI0_BASE + 0x34, 4, 0xabcdu);
@@ -479,7 +501,7 @@ static void test_register_edge_paths(TestState* state) {
     expect(state, serial.spi[0].receive.count == 0, "serial.spi[0].receive.count == 0");
     expect(state, serial.spi[0].transmit.count == 0, "serial.spi[0].transmit.count == 0");
     write_register(state, &serial, SPI0_BASE + 0x0c, 4, 0xb8000000u);
-    write_register(state, &serial, SPI0_BASE, 4, 0);
+    write_register(state, &serial, SPI0_BASE, 4, UINT32_C(0x80000000));
     for (uint16_t receive_value = 0u; receive_value < 5u; receive_value++) {
         expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, receive_value, 0),
                "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, receive_value, 0)");
