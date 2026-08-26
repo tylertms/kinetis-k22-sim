@@ -31,7 +31,7 @@ static const uint8_t flash_configuration[16] = {
 };
 
 static const uint32_t sim_fcfg2_reset_values[KINETIS_PROFILE_COUNT] = {
-    0x10000000u, 0x10000000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
+    0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
 };
 
 static uint32_t width_mask(uint8_t width) {

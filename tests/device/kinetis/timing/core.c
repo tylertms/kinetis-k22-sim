@@ -83,7 +83,7 @@ void kinetis_timing_test_disable_watchdog_fixture(KinetisTiming* timing) {
 
 void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
     static const uint32_t expected_fcfg2[KINETIS_PROFILE_COUNT] = {
-        0x10000000u, 0x10000000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
+        0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
     };
     for (KinetisProfile id = 0; id < KINETIS_PROFILE_COUNT; id++) {
         KinetisTiming timing;

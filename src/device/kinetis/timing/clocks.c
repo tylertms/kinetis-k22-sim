@@ -104,8 +104,10 @@ static uint32_t sim_fcfg2_value(const KinetisTiming* timing) {
         max_address_1 = profile->flexnvm_size >> 13u;
     else if (profile->program_flash_block_count > 1)
         max_address_1 = program_block_size >> 13u;
-    const uint32_t program_flash =
-        profile->sim_fcfg2_has_pflsh && profile->flexnvm_size == 0 ? 1u << 23u : 0u;
+    const uint32_t program_flash = (profile->id == KINETIS_PROFILE_MKV30F12810 ||
+                                    (profile->sim_fcfg2_has_pflsh && profile->flexnvm_size == 0))
+                                       ? 1u << 23u
+                                       : 0u;
     return (max_address_0 << 24u) | program_flash | (max_address_1 << 16u);
 }
 
