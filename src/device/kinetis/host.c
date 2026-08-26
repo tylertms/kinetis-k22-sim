@@ -172,7 +172,8 @@ bool kinetis_serial_receive(Kinetis* device, KinetisSerialEndpoint endpoint,
     (void)kinetis_serial_set_clock_gate(&device->serial, id, true);
     const bool receive_accepted = kinetis_serial_push_receive(
         &device->serial, (KinetisSerialEndpoint)endpoint, received_value, status);
-    kinetis_serial_advance_endpoint(&device->serial, (KinetisSerialEndpoint)endpoint);
+    if (endpoint < KINETIS_SERIAL_I2C0 || endpoint > KINETIS_SERIAL_I2C2)
+        kinetis_serial_advance_endpoint(&device->serial, (KinetisSerialEndpoint)endpoint);
     kinetis_internal_refresh_serial_signals(device);
     kinetis_sync_clock_gates(device);
     return receive_accepted;

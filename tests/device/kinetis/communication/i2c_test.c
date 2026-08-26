@@ -133,6 +133,27 @@ int main(void) {
     write_register8(&state, device, I2C0_FLT, 0x6au);
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
            "read_register8(&state, device, I2C0_FLT) == 0x2au");
+
+    write_register8(&state, device, I2C0_C1, 0xf0u);
+    expect_transfer(&state, device, KINETIS_I2C_START, 0);
+    write_register8(&state, device, I2C0_D, 0xa4u);
+    expect_transfer(&state, device, KINETIS_I2C_WRITE, 0xa4u);
+    expect(&state, kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true),
+           "kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true)");
+    write_register8(&state, device, I2C0_S, 2u);
+    write_register8(&state, device, I2C0_C1, 0xe0u);
+    (void)read_register8(&state, device, I2C0_D);
+    expect_transfer(&state, device, KINETIS_I2C_READ, 0);
+    expect(&state, kinetis_i2c_receive(device, KINETIS_SERIAL_I2C0, 0x5au),
+           "kinetis_i2c_receive(device, KINETIS_SERIAL_I2C0, 0x5au)");
+    expect(&state, (read_register8(&state, device, I2C0_S) & 2u) == 0u,
+           "I2C input remains pending until transfer time elapses");
+    expect(&state, kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true),
+           "kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true)");
+    expect(&state, (read_register8(&state, device, I2C0_S) & 2u) != 0u,
+           "I2C input completes after transfer time elapses");
+    expect(&state, read_register8(&state, device, I2C0_D) == 0x5au,
+           "read_register8(&state, device, I2C0_D) == 0x5au");
     kinetis_destroy(device);
     return test_finish(&state);
 }
