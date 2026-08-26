@@ -113,6 +113,20 @@ static void test_reset_clock_and_configuration(TestState* state) {
            "!kinetis_io_read(&io, 0x40012340u, 4, &read_data)");
 }
 
+static void test_kv30_mcm_reset(TestState* state) {
+    KinetisIoConfiguration configuration =
+        kinetis_io_default_configuration(kinetis_profile_get(KINETIS_PROFILE_MKV30F12810));
+    KinetisIo io;
+
+    expect(state, kinetis_io_init(&io, configuration), "kinetis_io_init(&io, configuration)");
+    expect(state, read_value(state, &io, MCM, 2) == 0x0fu,
+           "KV30 PLASC reports four crossbar slave ports");
+    expect(state, read_value(state, &io, MCM + 2u, 2) == 0x17u,
+           "KV30 PLAMC reports the documented master ports");
+    expect(state, read_value(state, &io, MCM, 4) == 0x0017000fu,
+           "KV30 combined MCM topology read matches its register reset values");
+}
+
 static void test_gpio_mux_pull_open_drain_and_lock(TestState* state) {
     EventLog log = {0};
     KinetisIoConfiguration configuration =
@@ -581,6 +595,7 @@ static void test_edges_and_fail_closed_access(TestState* state) {
 int main(void) {
     TestState state = {0};
     test_reset_clock_and_configuration(&state);
+    test_kv30_mcm_reset(&state);
     test_gpio_mux_pull_open_drain_and_lock(&state);
     test_gpio_interrupt_dma_filter_and_bit_band(&state);
     test_usb(&state);

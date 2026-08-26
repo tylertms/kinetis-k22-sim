@@ -217,6 +217,17 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "read_register(state, &serial, SPI0_BASE, 4) == 0x00004001u");
     write_register(state, &serial, SPI0_BASE + 0x34, 4, 0x1234u);
     expect(state, serial.spi[0].transmit.count == 0, "serial.spi[0].transmit.count == 0");
+    write_register(state, &serial, SPI0_BASE, 4, 1u);
+    write_register(state, &serial, SPI0_BASE + 0x34, 4, 0x1234u);
+    expect(state, serial.spi[0].transmit.count == 1, "HALT accepts data into the transmit FIFO");
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x1234u,
+           "HALT preserves the accepted push value");
+    write_register(state, &serial, SPI0_BASE, 4, 1u << 14);
+    write_register(state, &serial, SPI0_BASE + 0x34, 4, 0x5678u);
+    expect(state, serial.spi[0].transmit.count == 1, "MDIS ignores push writes");
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x1234u,
+           "MDIS preserves the last accepted push value");
+    write_register(state, &serial, SPI0_BASE, 4, 1u << 11);
     write_register(state, &serial, SPI0_BASE, 4, 0);
     write_register(state, &serial, SPI0_BASE + 0x30, 4, 3u << 16);
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0),
@@ -380,14 +391,23 @@ static void test_i2c_start_stop_detection(TestState* state) {
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_START, 0);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au");
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
+           "start detection latches IICIF");
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
            "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
+           "IICIF reasserts until STARTF is cleared");
     write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "clearing STARTF before IICIF clears the interrupt");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
-    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
-           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au");
-    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "a master-generated stop does not latch STOPF");
+    expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "a master-generated stop does not request an interrupt");
 
     expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
            "kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0)");
@@ -395,7 +415,13 @@ static void test_i2c_start_stop_detection(TestState* state) {
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au");
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
            "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
+           "IICIF reasserts while STARTF remains set");
     write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "clearing STARTF leaves IICIF pending");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
     expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
@@ -405,9 +431,17 @@ static void test_i2c_start_stop_detection(TestState* state) {
            "kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0)");
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au");
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
+           "stop detection latches IICIF");
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
            "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0)");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "IICIF reasserts while STOPF remains set");
     write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "clearing STOPF leaves IICIF pending");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au");
     expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),

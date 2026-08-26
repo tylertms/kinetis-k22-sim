@@ -245,16 +245,10 @@ void kinetis_io_reset(KinetisIo* io) {
                                sizeof(io->i2s));
     reset_peripheral_registers(&configuration, KINETIS_PERIPHERAL_FB, (uint8_t*)io->flexbus,
                                sizeof(io->flexbus));
+    reset_peripheral_registers(&configuration, KINETIS_PERIPHERAL_MCM, (uint8_t*)io->mcm,
+                               sizeof(io->mcm));
     reset_peripheral_registers(&configuration, KINETIS_PERIPHERAL_SYSMPU, (uint8_t*)io->sysmpu,
                                sizeof(io->sysmpu));
-    const bool has_large_memory_profile =
-        configuration.profile->id == KINETIS_PROFILE_MK22FN1M012 ||
-        configuration.profile->id == KINETIS_PROFILE_MK22FX51212;
-    const uint32_t crossbar_port_mask =
-        configuration.profile->id >= KINETIS_PROFILE_MK22FN51212 ? 0x1fu : 0x0fu;
-    io->mcm[0] = (has_large_memory_profile ? 0x00370000u : 0x00170000u) | crossbar_port_mask;
-    if (!has_large_memory_profile)
-        io->mcm[8u / 4u] = 0x00020000u;
     for (uint8_t port = 0; port < KINETIS_IO_PORT_COUNT; port++) {
         io->gpio_filtered[port] = kinetis_io_internal_pin_level_unfiltered(io, port);
         io->gpio_pending[port] = io->gpio_filtered[port];

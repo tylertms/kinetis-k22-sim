@@ -124,6 +124,7 @@ int main(void) {
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x3au,
            "read_register8(&state, device, I2C0_FLT) == 0x3au");
     write_register8(&state, device, I2C0_FLT, 0x3au);
+    write_register8(&state, device, I2C0_S, 2u);
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
            "read_register8(&state, device, I2C0_FLT) == 0x2au");
     expect(&state, kinetis_i2c_detect_stop(device, KINETIS_SERIAL_I2C0),
@@ -131,6 +132,7 @@ int main(void) {
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x6au,
            "read_register8(&state, device, I2C0_FLT) == 0x6au");
     write_register8(&state, device, I2C0_FLT, 0x6au);
+    write_register8(&state, device, I2C0_S, 2u);
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
            "read_register8(&state, device, I2C0_FLT) == 0x2au");
 
@@ -140,6 +142,7 @@ int main(void) {
     expect_transfer(&state, device, KINETIS_I2C_WRITE, 0xa4u);
     expect(&state, kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true),
            "kinetis_i2c_acknowledge(device, KINETIS_SERIAL_I2C0, true)");
+    write_register8(&state, device, I2C0_FLT, 0x3au);
     write_register8(&state, device, I2C0_S, 2u);
     write_register8(&state, device, I2C0_C1, 0xe0u);
     (void)read_register8(&state, device, I2C0_D);

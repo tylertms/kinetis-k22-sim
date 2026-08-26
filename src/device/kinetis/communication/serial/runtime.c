@@ -345,6 +345,8 @@ bool kinetis_serial_i2c_detect_start(KinetisSerial* serial, KinetisSerialEndpoin
     if (i2c == NULL)
         return false;
     i2c->registers[I2C_FLT] |= 0x10u;
+    if ((i2c->registers[I2C_FLT] & 0x20u) != 0u)
+        i2c->registers[I2C_S] |= 2u;
     return true;
 }
 
@@ -353,6 +355,8 @@ bool kinetis_serial_i2c_detect_stop(KinetisSerial* serial, KinetisSerialEndpoint
     if (i2c == NULL)
         return false;
     i2c->registers[I2C_FLT] |= 0x40u;
+    if ((i2c->registers[I2C_FLT] & 0x20u) != 0u)
+        i2c->registers[I2C_S] |= 2u;
     return true;
 }
 
@@ -453,9 +457,8 @@ bool kinetis_serial_irq(const KinetisSerial* serial, KinetisSerialIrq irq) {
     case KINETIS_SERIAL_IRQ_I2C1:
     case KINETIS_SERIAL_IRQ_I2C2: {
         const KinetisSerialI2c* i2c = &serial->i2c[irq - KINETIS_SERIAL_IRQ_I2C0];
-        return i2c->present &&
-               (((i2c->registers[I2C_C1] & 0x40u) != 0 && (i2c->registers[I2C_S] & 0x12u) != 0) ||
-                ((i2c->registers[I2C_FLT] & 0x20u) != 0 && (i2c->registers[I2C_FLT] & 0x50u) != 0));
+        return i2c->present && (i2c->registers[I2C_C1] & 0x40u) != 0 &&
+               (i2c->registers[I2C_S] & 0x12u) != 0;
     }
     case KINETIS_SERIAL_IRQ_UART0:
     case KINETIS_SERIAL_IRQ_UART1:

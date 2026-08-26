@@ -502,7 +502,8 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
     bool push_command_access = (register_offset == SPI_PUSHR + 2u && byte_count == 2u) ||
                                (register_offset >= SPI_PUSHR + 2u &&
                                 register_offset <= SPI_PUSHR + 3u && byte_count == 1u);
-    if ((push_data_access || push_command_access) && (spi->registers[SPI_MCR / 4] & 1u) != 0u) {
+    if ((push_data_access || push_command_access) &&
+        (spi->registers[SPI_MCR / 4] & (1u << 14)) != 0u) {
         kinetis_serial_internal_refresh_spi(spi);
         return true;
     }
@@ -572,10 +573,14 @@ bool kinetis_serial_internal_read_i2c(KinetisSerial* serial, KinetisSerialI2c* i
 
 static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
     i2c->registers[I2C_S] &= 0xdfu;
-    i2c->registers[I2C_FLT] |= 0x40u;
     i2c->transfer_pending = false;
     i2c->transfer_cycles = 0;
     push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
+}
+
+static void latch_i2c_detection_interrupt(KinetisSerialI2c* i2c) {
+    if ((i2c->registers[I2C_FLT] & 0x20u) != 0u && (i2c->registers[I2C_FLT] & 0x50u) != 0u)
+        i2c->registers[I2C_S] |= 2u;
 }
 
 bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* i2c,
@@ -598,10 +603,12 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
         } else if ((register_value & 0x20u) != 0 && (previous_control & 0x20u) == 0) {
             i2c->registers[I2C_S] |= 0x20u;
             i2c->registers[I2C_FLT] |= 0x10u;
+            latch_i2c_detection_interrupt(i2c);
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_START, 0);
         } else if ((register_value & 0x04u) != 0 && (previous_control & 0x04u) == 0 &&
                    (register_value & 0x20u) != 0) {
             i2c->registers[I2C_FLT] |= 0x10u;
+            latch_i2c_detection_interrupt(i2c);
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_REPEATED_START,
                        0);
         } else if ((register_value & 0x20u) == 0 && (previous_control & 0x20u) != 0) {
@@ -609,9 +616,11 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
         }
     } else if (register_offset == I2C_S) {
         i2c->registers[I2C_S] &= (uint8_t)~(register_value & 0x12u);
+        latch_i2c_detection_interrupt(i2c);
     } else if (register_offset == I2C_FLT) {
         i2c->registers[I2C_FLT] =
             (register_value & 0xafu) | (i2c->registers[I2C_FLT] & (uint8_t)~register_value & 0x50u);
+        latch_i2c_detection_interrupt(i2c);
     } else if (register_offset == I2C_D) {
         i2c->registers[I2C_D] = register_value;
         if ((i2c->registers[I2C_C1] & 0x30u) == 0x30u) {
