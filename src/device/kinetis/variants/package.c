@@ -178,7 +178,7 @@ bool kinetis_package_has_peripheral(const KinetisPackageSelection* selection,
         selection->package == KINETIS_PACKAGE_FM_32_QFN && peripheral == KINETIS_PERIPHERAL_VREF)
         return false;
     if (selection->profile == KINETIS_PROFILE_MK22FN51212 && peripheral == KINETIS_PERIPHERAL_DAC1)
-        return selection->package != KINETIS_PACKAGE_FX_88_HVQFN;
+        return selection->package == KINETIS_PACKAGE_DC_121_XFBGA;
     if (selection->profile == KINETIS_PROFILE_MK22FN51212 && peripheral == KINETIS_PERIPHERAL_FB)
         return selection->package != KINETIS_PACKAGE_FX_88_HVQFN;
     if (selection->profile == KINETIS_PROFILE_MK22FN1M012 ||
