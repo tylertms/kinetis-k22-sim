@@ -82,6 +82,9 @@ void kinetis_timing_test_disable_watchdog_fixture(KinetisTiming* timing) {
 }
 
 void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
+    static const uint32_t expected_fcfg2[KINETIS_PROFILE_COUNT] = {
+        0x10000000u, 0x10000000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
+    };
     for (KinetisProfile id = 0; id < KINETIS_PROFILE_COUNT; id++) {
         KinetisTiming timing;
         Observations observations = {0};
@@ -93,6 +96,7 @@ void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
                "kinetis_timing_init(&timing, profile, 8000000u, 32768u, "
                "kinetis_timing_test_signals(&observations))");
         kinetis_timing_test_expect_read(state, &timing, SIM_SDID, 4, profile->sim_sdid_reset);
+        kinetis_timing_test_expect_read(state, &timing, SIM_FCFG2, 4, expected_fcfg2[id]);
         kinetis_timing_test_expect_read(
             state, &timing, 0x4004804cu, 4,
             id == KINETIS_PROFILE_MK22FN1M012 || id == KINETIS_PROFILE_MK22FX51212 ? 0xff0f0f00u

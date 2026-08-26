@@ -617,6 +617,7 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
         destroy_partial_device(device);
         return NULL;
     }
+    device->timing.sim_sdid_pin_id = kinetis_package_pin_id(package_selection);
     device->data = kinetis_data_create(profile, kinetis_data_bus(device));
     if (device->data == NULL) {
         destroy_partial_device(device);

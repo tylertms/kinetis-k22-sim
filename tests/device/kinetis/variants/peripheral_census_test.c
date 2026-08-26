@@ -82,7 +82,7 @@ int main(void) {
     expect(&state, device != NULL, "device != NULL");
     const Census census = census_peripherals(device);
     const bool census_matches = census.reads == 6560u && census.writes == 6370u &&
-                                census.fingerprint == UINT64_C(372040259498926477);
+                                census.fingerprint == UINT64_C(11767272468776373587);
     if (!census_matches) {
         fprintf(stderr, "[census] reads=%" PRIu64 " writes=%" PRIu64 " fingerprint=%" PRIu64 "\n",
                 census.reads, census.writes, census.fingerprint);

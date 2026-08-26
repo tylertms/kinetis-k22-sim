@@ -14,21 +14,21 @@ struct KinetisPackageSelection {
 };
 
 static const KinetisPackageDescription packages[KINETIS_PACKAGE_COUNT] = {
-    {KINETIS_PACKAGE_LH_64_LQFP, "LH", "64 LQFP", 64},
-    {KINETIS_PACKAGE_MP_64_MAPBGA, "MP", "64 MAPBGA", 64},
-    {KINETIS_PACKAGE_AH_64_WLCSP, "AH", "64 WLCSP", 64},
-    {KINETIS_PACKAGE_LK_80_LQFP, "LK", "80 LQFP", 80},
-    {KINETIS_PACKAGE_AP_80_WLCSP, "AP", "80 WLCSP 0.564 mm", 80},
-    {KINETIS_PACKAGE_BP_80_WLCSP, "BP", "80 WLCSP 0.321 mm", 80},
-    {KINETIS_PACKAGE_FX_88_HVQFN, "FX", "88 HVQFN", 88},
-    {KINETIS_PACKAGE_LL_100_LQFP, "LL", "100 LQFP", 100},
-    {KINETIS_PACKAGE_DC_121_XFBGA, "DC", "121 XFBGA", 121},
-    {KINETIS_PACKAGE_MC_121_MAPBGA, "MC", "121 MAPBGA", 121},
-    {KINETIS_PACKAGE_LQ_144_LQFP, "LQ", "144 LQFP", 144},
-    {KINETIS_PACKAGE_MD_144_MAPBGA, "MD", "144 MAPBGA", 144},
-    {KINETIS_PACKAGE_AK_49_WLCSP, "AK", "49 WLCSP", 49},
-    {KINETIS_PACKAGE_FM_32_QFN, "FM", "32 QFN", 32},
-    {KINETIS_PACKAGE_LF_48_LQFP, "LF", "48 LQFP", 48},
+    {KINETIS_PACKAGE_LH_64_LQFP, "LH", "64 LQFP", 64, 5},
+    {KINETIS_PACKAGE_MP_64_MAPBGA, "MP", "64 MAPBGA", 64, 5},
+    {KINETIS_PACKAGE_AH_64_WLCSP, "AH", "64 WLCSP", 64, 11},
+    {KINETIS_PACKAGE_LK_80_LQFP, "LK", "80 LQFP", 80, 6},
+    {KINETIS_PACKAGE_AP_80_WLCSP, "AP", "80 WLCSP 0.564 mm", 80, 11},
+    {KINETIS_PACKAGE_BP_80_WLCSP, "BP", "80 WLCSP 0.321 mm", 80, 11},
+    {KINETIS_PACKAGE_FX_88_HVQFN, "FX", "88 HVQFN", 88, 7},
+    {KINETIS_PACKAGE_LL_100_LQFP, "LL", "100 LQFP", 100, 8},
+    {KINETIS_PACKAGE_DC_121_XFBGA, "DC", "121 XFBGA", 121, 9},
+    {KINETIS_PACKAGE_MC_121_MAPBGA, "MC", "121 MAPBGA", 121, 9},
+    {KINETIS_PACKAGE_LQ_144_LQFP, "LQ", "144 LQFP", 144, 10},
+    {KINETIS_PACKAGE_MD_144_MAPBGA, "MD", "144 MAPBGA", 144, 10},
+    {KINETIS_PACKAGE_AK_49_WLCSP, "AK", "49 WLCSP", 49, 11},
+    {KINETIS_PACKAGE_FM_32_QFN, "FM", "32 QFN", 32, 2},
+    {KINETIS_PACKAGE_LF_48_LQFP, "LF", "48 LQFP", 48, 4},
 };
 
 static const KinetisPackageSelection selections[] = {
@@ -147,6 +147,11 @@ KinetisProfile kinetis_package_selection_profile(const KinetisPackageSelection* 
 const KinetisPackageDescription*
 kinetis_package_selection_package(const KinetisPackageSelection* selection) {
     return selection == NULL ? NULL : kinetis_package_get(selection->package);
+}
+
+uint8_t kinetis_package_pin_id(const KinetisPackageSelection* selection) {
+    const KinetisPackageDescription* package = kinetis_package_selection_package(selection);
+    return package == NULL ? 0 : package->pin_id;
 }
 
 uint32_t kinetis_package_port_pin_mask(const KinetisPackageSelection* selection, uint8_t port) {

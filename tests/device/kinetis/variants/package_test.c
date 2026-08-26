@@ -15,6 +15,7 @@ typedef struct {
     const char* code;
     const char* name;
     uint16_t terminal_count;
+    uint8_t pin_id;
 } ExpectedPackage;
 
 typedef struct {
@@ -26,21 +27,21 @@ typedef struct {
 } ExpectedSelection;
 
 static const ExpectedPackage expected_packages[] = {
-    {KINETIS_PACKAGE_LH_64_LQFP, "LH", "64 LQFP", 64},
-    {KINETIS_PACKAGE_MP_64_MAPBGA, "MP", "64 MAPBGA", 64},
-    {KINETIS_PACKAGE_AH_64_WLCSP, "AH", "64 WLCSP", 64},
-    {KINETIS_PACKAGE_LK_80_LQFP, "LK", "80 LQFP", 80},
-    {KINETIS_PACKAGE_AP_80_WLCSP, "AP", "80 WLCSP 0.564 mm", 80},
-    {KINETIS_PACKAGE_BP_80_WLCSP, "BP", "80 WLCSP 0.321 mm", 80},
-    {KINETIS_PACKAGE_FX_88_HVQFN, "FX", "88 HVQFN", 88},
-    {KINETIS_PACKAGE_LL_100_LQFP, "LL", "100 LQFP", 100},
-    {KINETIS_PACKAGE_DC_121_XFBGA, "DC", "121 XFBGA", 121},
-    {KINETIS_PACKAGE_MC_121_MAPBGA, "MC", "121 MAPBGA", 121},
-    {KINETIS_PACKAGE_LQ_144_LQFP, "LQ", "144 LQFP", 144},
-    {KINETIS_PACKAGE_MD_144_MAPBGA, "MD", "144 MAPBGA", 144},
-    {KINETIS_PACKAGE_AK_49_WLCSP, "AK", "49 WLCSP", 49},
-    {KINETIS_PACKAGE_FM_32_QFN, "FM", "32 QFN", 32},
-    {KINETIS_PACKAGE_LF_48_LQFP, "LF", "48 LQFP", 48},
+    {KINETIS_PACKAGE_LH_64_LQFP, "LH", "64 LQFP", 64, 5},
+    {KINETIS_PACKAGE_MP_64_MAPBGA, "MP", "64 MAPBGA", 64, 5},
+    {KINETIS_PACKAGE_AH_64_WLCSP, "AH", "64 WLCSP", 64, 11},
+    {KINETIS_PACKAGE_LK_80_LQFP, "LK", "80 LQFP", 80, 6},
+    {KINETIS_PACKAGE_AP_80_WLCSP, "AP", "80 WLCSP 0.564 mm", 80, 11},
+    {KINETIS_PACKAGE_BP_80_WLCSP, "BP", "80 WLCSP 0.321 mm", 80, 11},
+    {KINETIS_PACKAGE_FX_88_HVQFN, "FX", "88 HVQFN", 88, 7},
+    {KINETIS_PACKAGE_LL_100_LQFP, "LL", "100 LQFP", 100, 8},
+    {KINETIS_PACKAGE_DC_121_XFBGA, "DC", "121 XFBGA", 121, 9},
+    {KINETIS_PACKAGE_MC_121_MAPBGA, "MC", "121 MAPBGA", 121, 9},
+    {KINETIS_PACKAGE_LQ_144_LQFP, "LQ", "144 LQFP", 144, 10},
+    {KINETIS_PACKAGE_MD_144_MAPBGA, "MD", "144 MAPBGA", 144, 10},
+    {KINETIS_PACKAGE_AK_49_WLCSP, "AK", "49 WLCSP", 49, 11},
+    {KINETIS_PACKAGE_FM_32_QFN, "FM", "32 QFN", 32, 2},
+    {KINETIS_PACKAGE_LF_48_LQFP, "LF", "48 LQFP", 48, 4},
 };
 
 static const ExpectedSelection expected_selections[] = {
@@ -145,6 +146,7 @@ static void expect_package_metadata(TestState* state) {
                "strcmp(package->name, expected->name) == 0");
         expect(state, package->terminal_count == expected->terminal_count,
                "package->terminal_count == expected->terminal_count");
+        expect(state, package->pin_id == expected->pin_id, "package->pin_id == expected->pin_id");
         expect(state, kinetis_package_find(expected->code) == package,
                "kinetis_package_find(expected->code) == package");
         KinetisPackage public_package = KINETIS_PACKAGE_DEFAULT;
@@ -164,6 +166,9 @@ static void expect_selection_data(TestState* state, const ExpectedSelection* exp
            "kinetis_package_selection_profile(selected) == expected->profile");
     expect(state, kinetis_package_selection_package(selected)->id == expected->package,
            "kinetis_package_selection_package(selected)->id == expected->package");
+    expect(state,
+           kinetis_package_pin_id(selected) == kinetis_package_selection_package(selected)->pin_id,
+           "kinetis_package_pin_id(selected) == selected package pin ID");
     for (uint8_t port = 0; port < KINETIS_PACKAGE_PORT_COUNT; port++) {
         expect(state,
                kinetis_package_port_pin_mask(selected, port) == expected->port_pin_mask[port],
@@ -274,6 +279,7 @@ static void expect_fail_closed(TestState* state) {
            "kinetis_package_selection_profile(NULL) == KINETIS_PROFILE_COUNT");
     expect(state, kinetis_package_selection_package(NULL) == NULL,
            "kinetis_package_selection_package(NULL) == NULL");
+    expect(state, kinetis_package_pin_id(NULL) == 0, "kinetis_package_pin_id(NULL) == 0");
     expect(state, kinetis_package_port_pin_mask(NULL, 0) == 0,
            "kinetis_package_port_pin_mask(NULL, 0) == 0");
     expect(state, kinetis_package_port_pin_mask(selected, KINETIS_PACKAGE_PORT_COUNT) == 0,

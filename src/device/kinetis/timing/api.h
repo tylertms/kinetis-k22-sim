@@ -97,6 +97,7 @@ typedef struct {
     uint32_t flash_clock_hz;
     uint64_t elapsed_core_cycles;
     bool debug_halted;
+    uint8_t sim_sdid_pin_id;
     uint32_t sim_sopt1;
     uint32_t sim_sopt1cfg;
     uint32_t sim_sopt2;

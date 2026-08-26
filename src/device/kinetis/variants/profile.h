@@ -109,6 +109,7 @@ typedef struct {
     KinetisProfile id;
     const char* name;
     uint32_t program_flash_size;
+    uint8_t program_flash_block_count;
     uint32_t sram_lower_address;
     uint32_t sram_lower_size;
     uint32_t sram_upper_address;
@@ -119,6 +120,7 @@ typedef struct {
     uint32_t flexram_size;
     uint32_t sim_sdid_reset;
     uint32_t sim_sdid_mask;
+    bool sim_fcfg2_has_pflsh;
     uint8_t fmc_set_count;
     uint8_t fmc_line_size;
     KinetisCpuOptions cpu;

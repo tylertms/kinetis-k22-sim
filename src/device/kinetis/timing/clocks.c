@@ -94,6 +94,21 @@ static uint32_t sim_fcfg1_value(const KinetisTiming* timing) {
                : 0x0f0f0f00u;
 }
 
+static uint32_t sim_fcfg2_value(const KinetisTiming* timing) {
+    const KinetisDeviceProfile* profile = timing->profile;
+    const uint32_t program_block_size =
+        profile->program_flash_size / profile->program_flash_block_count;
+    const uint32_t max_address_0 = program_block_size >> 13u;
+    uint32_t max_address_1 = 0u;
+    if (profile->flexnvm_size != 0)
+        max_address_1 = profile->flexnvm_size >> 13u;
+    else if (profile->program_flash_block_count > 1)
+        max_address_1 = program_block_size >> 13u;
+    const uint32_t program_flash =
+        profile->sim_fcfg2_has_pflsh && profile->flexnvm_size == 0 ? 1u << 23u : 0u;
+    return (max_address_0 << 24u) | program_flash | (max_address_1 << 16u);
+}
+
 bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t address, uint8_t size,
                                       uint32_t* output_value) {
     if (size != 4) {
@@ -122,7 +137,7 @@ bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t addr
         *output_value = timing->sim_sopt8;
         return true;
     case SIM_SDID:
-        *output_value = timing->profile->sim_sdid_reset;
+        *output_value = (timing->profile->sim_sdid_reset & ~15u) | timing->sim_sdid_pin_id;
         return true;
     case SIM_SCGC3:
         if (timing->profile->id != KINETIS_PROFILE_MK22FN1M012 &&
@@ -152,13 +167,7 @@ bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t addr
         *output_value = sim_fcfg1_value(timing);
         return true;
     case SIM_FCFG2:
-        if (timing->profile->id == KINETIS_PROFILE_MKV30F12810)
-            *output_value = 0xf900007fu;
-        else if (timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
-                 timing->profile->id == KINETIS_PROFILE_MK22FX51212)
-            *output_value = 0x7f7f0000u;
-        else
-            *output_value = 0x7fff0000u;
+        *output_value = sim_fcfg2_value(timing);
         return true;
     default:
         return false;

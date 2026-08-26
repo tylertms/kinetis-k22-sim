@@ -16,6 +16,7 @@ typedef struct {
     const char* code;
     const char* name;
     uint16_t terminal_count;
+    uint8_t pin_id;
 } KinetisPackageDescription;
 
 typedef struct KinetisPackageSelection KinetisPackageSelection;
@@ -28,6 +29,7 @@ const KinetisPackageSelection* kinetis_package_default(const KinetisDeviceProfil
 KinetisProfile kinetis_package_selection_profile(const KinetisPackageSelection* selection);
 const KinetisPackageDescription*
 kinetis_package_selection_package(const KinetisPackageSelection* selection);
+uint8_t kinetis_package_pin_id(const KinetisPackageSelection* selection);
 uint32_t kinetis_package_port_pin_mask(const KinetisPackageSelection* selection, uint8_t port);
 bool kinetis_package_pin_exists(const KinetisPackageSelection* selection, uint8_t port,
                                 uint8_t pin);

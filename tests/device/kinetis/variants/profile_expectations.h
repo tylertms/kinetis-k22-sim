@@ -16,6 +16,7 @@ typedef struct {
     KinetisProfile id;
     const char* name;
     uint32_t program_flash_size;
+    uint8_t program_flash_block_count;
     uint32_t sram_lower_address;
     uint32_t sram_lower_size;
     uint32_t sram_upper_address;
@@ -26,6 +27,7 @@ typedef struct {
     uint32_t flexram_size;
     uint32_t sim_sdid_reset;
     uint32_t sim_sdid_mask;
+    bool sim_fcfg2_has_pflsh;
     uint32_t maximum_core_clock_hz;
     uint16_t external_irq_count;
     const KinetisExpectedBlock* blocks;
@@ -190,6 +192,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22F12810,
      .name = "MK22F12810",
      .program_flash_size = 0x20000u,
+     .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fffe000u,
      .sram_lower_size = 0x2000u,
      .sram_upper_address = 0x20000000u,
@@ -203,6 +206,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MKV30F12810,
      .name = "MKV30F12810",
      .program_flash_size = 0x20000u,
+     .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fffe000u,
      .sram_lower_size = 0x2000u,
      .sram_upper_address = 0x20000000u,
@@ -216,6 +220,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22FN12812,
      .name = "MK22FN12812",
      .program_flash_size = 0x20000u,
+     .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fffc000u,
      .sram_lower_size = 0x4000u,
      .sram_upper_address = 0x20000000u,
@@ -229,6 +234,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22FN25612,
      .name = "MK22FN25612",
      .program_flash_size = 0x40000u,
+     .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fffc000u,
      .sram_lower_size = 0x4000u,
      .sram_upper_address = 0x20000000u,
@@ -242,6 +248,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22FN51212,
      .name = "MK22FN51212",
      .program_flash_size = 0x80000u,
+     .program_flash_block_count = 2u,
      .sram_lower_address = 0x1fff0000u,
      .sram_lower_size = 0x10000u,
      .sram_upper_address = 0x20000000u,
@@ -255,6 +262,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22FN1M012,
      .name = "MK22FN1M012",
      .program_flash_size = 0x100000u,
+     .program_flash_block_count = 2u,
      .sram_lower_address = 0x1fff0000u,
      .sram_lower_size = 0x10000u,
      .sram_upper_address = 0x20000000u,
@@ -263,6 +271,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
      .flexram_size = 0x1000u,
      .sim_sdid_reset = 0x300u,
      .sim_sdid_mask = 0xffff0f80u,
+     .sim_fcfg2_has_pflsh = true,
      .maximum_core_clock_hz = 120000000u,
      .external_irq_count = 82u,
      .blocks = expected_mk22f12_blocks,
@@ -270,6 +279,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
     {.id = KINETIS_PROFILE_MK22FX51212,
      .name = "MK22FX51212",
      .program_flash_size = 0x80000u,
+     .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fff0000u,
      .sram_lower_size = 0x10000u,
      .sram_upper_address = 0x20000000u,
@@ -280,6 +290,7 @@ static const KinetisExpectedProfile expected_profiles[] = {
      .flexram_size = 0x1000u,
      .sim_sdid_reset = 0x300u,
      .sim_sdid_mask = 0xffff0f80u,
+     .sim_fcfg2_has_pflsh = true,
      .maximum_core_clock_hz = 120000000u,
      .external_irq_count = 82u,
      .blocks = expected_mk22f12_blocks,

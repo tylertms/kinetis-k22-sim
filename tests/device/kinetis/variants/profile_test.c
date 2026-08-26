@@ -104,6 +104,10 @@ static void expect_profile(TestState* state, const KinetisExpectedProfile* expec
            "profile->sim_sdid_reset == expected->sim_sdid_reset");
     expect(state, profile->sim_sdid_mask == expected->sim_sdid_mask,
            "profile->sim_sdid_mask == expected->sim_sdid_mask");
+    expect(state, profile->program_flash_block_count == expected->program_flash_block_count,
+           "profile->program_flash_block_count == expected->program_flash_block_count");
+    expect(state, profile->sim_fcfg2_has_pflsh == expected->sim_fcfg2_has_pflsh,
+           "profile->sim_fcfg2_has_pflsh == expected->sim_fcfg2_has_pflsh");
     expect(state, profile->peripheral_block_count == expected->block_count,
            "profile->peripheral_block_count == expected->block_count");
     expect_cpu(state, profile, expected);

@@ -480,6 +480,7 @@ bool kinetis_timing_init(KinetisTiming* timing, const KinetisDeviceProfile* prof
     }
     memset(timing, 0, sizeof(*timing));
     timing->profile = profile;
+    timing->sim_sdid_pin_id = (uint8_t)(profile->sim_sdid_reset & 15u);
     timing->signals = signals;
     timing->external_oscillator_hz = external_oscillator_hz;
     timing->rtc_oscillator_hz = rtc_oscillator_hz == 0 ? 32768u : rtc_oscillator_hz;
@@ -500,10 +501,12 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     const uint32_t rtc = timing->rtc_oscillator_hz;
     const uint64_t elapsed = timing->elapsed_core_cycles;
     const uint64_t generation = timing->reset_generation;
+    const uint8_t sim_sdid_pin_id = timing->sim_sdid_pin_id;
     const uint8_t sticky0 = timing->rcm[8];
     const uint8_t sticky1 = timing->rcm[9];
     memset(timing, 0, sizeof(*timing));
     timing->profile = profile;
+    timing->sim_sdid_pin_id = sim_sdid_pin_id;
     timing->signals = signals;
     timing->external_oscillator_hz = external;
     timing->rtc_oscillator_hz = rtc;

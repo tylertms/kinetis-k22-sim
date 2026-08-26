@@ -30,6 +30,10 @@ static const uint8_t flash_configuration[16] = {
     0x81u, 0x82u, 0x84u, 0x88u, 0xfeu, 0x5au, 0xc3u, 0x3cu,
 };
 
+static const uint32_t sim_fcfg2_reset_values[KINETIS_PROFILE_COUNT] = {
+    0x10000000u, 0x10000000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
+};
+
 static uint32_t width_mask(uint8_t width) {
     return width == 32u ? UINT32_MAX : (UINT32_C(1) << width) - 1u;
 }
@@ -86,8 +90,17 @@ widest_covering_descriptor(const KinetisRegisterManifest* manifest,
     return widest;
 }
 
-static uint32_t expected_reset_value(const KinetisRegisterManifest* manifest,
+static uint32_t expected_reset_value(const ProfileFixture* fixture,
+                                     const KinetisRegisterManifest* manifest,
                                      const KinetisRegisterDescriptor* descriptor) {
+    if (descriptor->address == 0x40048024u) {
+        const KinetisDeviceProfile* profile = kinetis_profile_get(fixture->profile);
+        const KinetisPackageSelection* package = kinetis_package_select(profile, fixture->package);
+        return (profile->sim_sdid_reset & ~15u) | kinetis_package_pin_id(package);
+    }
+    if (descriptor->address == 0x40048050u) {
+        return sim_fcfg2_reset_values[fixture->profile];
+    }
     const uint32_t offset = descriptor->address - 0x40020000u;
     if (offset == 1u && (manifest->profile == KINETIS_PROFILE_MK22FN1M012 ||
                          manifest->profile == KINETIS_PROFILE_MK22FX51212))
@@ -112,7 +125,7 @@ static bool uses_flash_configuration(const KinetisRegisterDescriptor* descriptor
            offset == 0x16u || offset == 0x17u;
 }
 
-static void expect_reset_read(TestState* state, Kinetis* device,
+static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFixture* fixture,
                               const KinetisRegisterManifest* manifest,
                               const KinetisRegisterDescriptor* descriptor) {
     if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
@@ -137,12 +150,14 @@ static void expect_reset_read(TestState* state, Kinetis* device,
     }
     actual &= width_mask(descriptor->width);
     const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
+    const bool semantic_reset =
+        descriptor->address == 0x40048024u || descriptor->address == 0x40048050u;
     const uint32_t reset_mask =
-        uses_flash_configuration(descriptor)
+        uses_flash_configuration(descriptor) || semantic_reset
             ? width_mask(descriptor->width)
             : widest->reset_mask >> ((descriptor->address - widest->address) * 8u);
-    const uint32_t expected =
-        expected_reset_value(manifest, descriptor) & reset_mask & width_mask(descriptor->width);
+    const uint32_t expected = expected_reset_value(fixture, manifest, descriptor) & reset_mask &
+                              width_mask(descriptor->width);
     if (actual != expected) {
         report_mismatch(descriptor, "reset value", actual, expected);
     }
@@ -201,7 +216,7 @@ static void expect_profile(TestState* state, const ProfileFixture* fixture) {
     expect(state, manifest != NULL, "manifest != NULL");
     if (manifest != NULL) {
         for (size_t index = 0u; index < manifest->register_count; index++) {
-            expect_reset_read(state, device, manifest, &manifest->registers[index]);
+            expect_reset_read(state, device, fixture, manifest, &manifest->registers[index]);
             expect_declared_writes(state, device, &manifest->registers[index]);
         }
         expect_reserved_gaps(state, device, manifest);

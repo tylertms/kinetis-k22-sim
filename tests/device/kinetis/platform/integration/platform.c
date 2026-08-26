@@ -74,6 +74,10 @@ void kinetis_integration_test_expect_package_selection(TestState* state) {
 
     Kinetis* small_device =
         kinetis_integration_test_create_device(state, KINETIS_PACKAGE_LH_64_LQFP);
+    uint32_t device_id = 0u;
+    expect(state, kinetis_integration_test_read32(small_device, SIM_SDID, &device_id),
+           "kinetis_integration_test_read32(small_device, SIM_SDID, &device_id)");
+    expect(state, (device_id & 15u) == 5u, "64-pin package reports PINID 5");
     uint16_t dac_value = 0u;
     uint8_t register_value = 0;
     expect(state, kinetis_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
@@ -90,6 +94,9 @@ void kinetis_integration_test_expect_package_selection(TestState* state) {
 
     Kinetis* large_device =
         kinetis_integration_test_create_device(state, KINETIS_PACKAGE_DC_121_XFBGA);
+    expect(state, kinetis_integration_test_read32(large_device, SIM_SDID, &device_id),
+           "kinetis_integration_test_read32(large_device, SIM_SDID, &device_id)");
+    expect(state, (device_id & 15u) == 9u, "121-pin package reports PINID 9");
     expect(state, kinetis_read(large_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
            "kinetis_read(large_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
     kinetis_destroy(large_device);

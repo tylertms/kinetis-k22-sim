@@ -114,7 +114,7 @@ static void test_sim_surface(TestState* state, KinetisTiming* timing) {
     }
     kinetis_timing_test_expect_read(state, timing, SIM_SOPT7, 4, 5u);
     kinetis_timing_test_expect_read(state, timing, 0x4004804cu, 4, 0xff0f0f00u);
-    kinetis_timing_test_expect_read(state, timing, 0x40048050u, 4, 0x7f7f0000u);
+    kinetis_timing_test_expect_read(state, timing, 0x40048050u, 4, 0x40c00000u);
     expect(state, !kinetis_timing_read(timing, 0x40048028u, 4, &(uint32_t){0}),
            "!kinetis_timing_read(timing, 0x40048028u, 4, &(uint32_t){0})");
     expect(state, !kinetis_timing_write(timing, 0x40048028u, 4, 0),
