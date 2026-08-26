@@ -603,10 +603,12 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
         } else if ((register_value & 0x20u) != 0 && (previous_control & 0x20u) == 0) {
             i2c->registers[I2C_S] |= 0x20u;
             i2c->registers[I2C_FLT] |= 0x10u;
+            latch_i2c_detection_interrupt(i2c);
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_START, 0);
         } else if ((register_value & 0x04u) != 0 && (previous_control & 0x04u) == 0 &&
                    (register_value & 0x20u) != 0) {
             i2c->registers[I2C_FLT] |= 0x10u;
+            latch_i2c_detection_interrupt(i2c);
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_REPEATED_START,
                        0);
         } else if ((register_value & 0x20u) == 0 && (previous_control & 0x20u) != 0) {
