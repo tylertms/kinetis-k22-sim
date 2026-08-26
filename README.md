@@ -15,19 +15,18 @@ The 50 MHz K22D5 devices use Cortex-M4 cores without floating-point units and a 
 ## Build
 
 ```
-cmake -S . -B build/simulator -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build/simulator --parallel
+meson setup build/simulator --buildtype=release
+meson compile -C build/simulator
 ```
 
 ### Build Targets
 
 | Target | Type | Description |
 | :--- | :--- | :--- |
-| `kinetis_k22::simulator` | Static Library | K22 device and Cortex-M4F core simulator. |
-| `kinetis_k22::firmware_image` | Static Library | ELF and raw binary image loader. |
-| `kinetis_k22::firmware_runner` | Executable | CLI tool to load and run firmware images. |
+| `kinetis_k22_simulator` | Static Library | K22 device and Cortex-M4F core simulator. |
+| `kinetis_k22_firmware_image` | Static Library | ELF and raw binary image loader. |
+| `kinetis_k22_firmware_runner` | Executable | CLI tool to load and run firmware images. |
 | `test` | Utility | Run all tests. |
-| `test-coverage` | Utility | Run all tests and print a source coverage summary. |
 
 ## Run Firmware
 
@@ -47,11 +46,13 @@ kinetis_k22_firmware_runner <IMAGE> --reset-address <ADDRESS> [OPTIONS]
 | `--max-instructions <N>` | Maximum instruction count. |
 | `--max-cycles <N>` | Maximum clock cycle limit. |
 
-## Use in CMake Projects
+## Use in Meson Projects
 
-```cmake
-add_subdirectory(sim/kinetis-k22-sim EXCLUDE_FROM_ALL)
-target_link_libraries(your_target PRIVATE kinetis_k22::simulator)
+```meson
+kinetis_k22 = subproject('kinetis-k22-sim')
+simulator = kinetis_k22.get_variable('kinetis_k22_simulator_dependency')
+
+executable('your_target', 'main.c', dependencies: simulator)
 ```
 
 ## Run Tests
@@ -59,13 +60,15 @@ target_link_libraries(your_target PRIVATE kinetis_k22::simulator)
 Run all tests:
 
 ```
-cmake --build build/simulator --target test
+meson test -C build/simulator
 ```
 
 Run all tests with simulator source coverage:
 
 ```
-cmake --build build/simulator --target test-coverage
+meson setup build/test-coverage --buildtype=debug -Db_coverage=true
+meson test -C build/test-coverage
+meson compile -C build/test-coverage coverage-text
 ```
 
-The coverage target requires GCC and gcov. It prints the summary after all tests pass.
+The coverage report requires GCC, gcov, and gcovr.
