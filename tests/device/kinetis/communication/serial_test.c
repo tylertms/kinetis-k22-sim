@@ -404,10 +404,16 @@ static void test_i2c_start_stop_detection(TestState* state) {
            "clearing STARTF before IICIF clears the interrupt");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
-    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
-           "a master-generated stop does not latch STOPF");
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
+           "master stop latches STOPF");
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "master stop requests an enabled detection interrupt");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
+    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "clearing master STOPF leaves IICIF pending");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
     expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "a master-generated stop does not request an interrupt");
+           "clearing master IICIF removes the interrupt");
 
     expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
            "kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0)");

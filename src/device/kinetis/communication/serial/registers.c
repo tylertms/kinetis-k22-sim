@@ -571,16 +571,18 @@ bool kinetis_serial_internal_read_i2c(KinetisSerial* serial, KinetisSerialI2c* i
     return true;
 }
 
-static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
-    i2c->registers[I2C_S] &= 0xdfu;
-    i2c->transfer_pending = false;
-    i2c->transfer_cycles = 0;
-    push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
-}
-
 static void latch_i2c_detection_interrupt(KinetisSerialI2c* i2c) {
     if ((i2c->registers[I2C_FLT] & 0x20u) != 0u && (i2c->registers[I2C_FLT] & 0x50u) != 0u)
         i2c->registers[I2C_S] |= 2u;
+}
+
+static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
+    i2c->registers[I2C_S] &= 0xdfu;
+    i2c->registers[I2C_FLT] |= 0x40u;
+    latch_i2c_detection_interrupt(i2c);
+    i2c->transfer_pending = false;
+    i2c->transfer_cycles = 0;
+    push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
 }
 
 bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* i2c,
