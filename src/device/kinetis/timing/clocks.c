@@ -192,6 +192,8 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
 }
 
 static uint32_t sim_fcfg1_value(const KinetisTiming* timing) {
+    if (timing->profile->id == KINETIS_PROFILE_MK22FN256CAP12)
+        return 0x090f0f00u;
     return timing->profile->program_flash_size >= 1024u * 1024u ||
                    timing->profile->flexnvm_size != 0
                ? 0xff0f0f00u
