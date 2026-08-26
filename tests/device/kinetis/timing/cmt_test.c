@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #include "device/kinetis/internal.h"
-#include "k22_test.h"
+#include "kinetis_test.h"
 #include "test.h"
 
 enum {

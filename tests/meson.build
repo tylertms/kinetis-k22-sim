@@ -518,6 +518,7 @@ fixture_generator = executable(
 )
 runner_images = custom_target(
   'kinetis_firmware_runner_images',
+  build_by_default: true,
   command: fixture_generator,
   output: [smoke_image_name, fault_image_name],
 )

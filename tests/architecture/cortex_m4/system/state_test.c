@@ -4,8 +4,6 @@
 
 #include "test.h"
 
-enum { SCB_SHCSR = 0xe000ed24u };
-
 static Kinetis* create_device(TestState* state) {
     KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.flash_size = 4096;

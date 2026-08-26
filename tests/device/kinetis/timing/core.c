@@ -109,7 +109,11 @@ void k22_timing_test_test_profiles_and_reset(TestState* state) {
         k22_timing_test_expect_read(
             state, &timing, 0x40037000u, 4,
             id == K22_PROFILE_MK22FN1M012 || id == K22_PROFILE_MK22FX51212 ? 2u : 6u);
-        k22_timing_test_expect_read(state, &timing, 0x4003d014u, 4, 1u);
+        if (k22_profile_has_peripheral(profile, K22_PERIPHERAL_RTC))
+            k22_timing_test_expect_read(state, &timing, 0x4003d014u, 4, 1u);
+        else
+            expect(state, !k22_timing_read(&timing, 0x4003d014u, 4, &(uint32_t){0}),
+                   "profile without RTC rejects the register");
         k22_timing_test_expect_read(state, &timing, 0x40052000u, 2, 0x01d3u);
         expect(state, k22_timing_core_clock_hz(&timing) == 20971520u,
                "k22_timing_core_clock_hz(&timing) == 20971520u");

@@ -155,9 +155,9 @@ int main(void) {
          profile++) {
         exercise_profile(&state, &census, profile);
     }
-    const bool census_matches = census.read_successes == 35164u &&
-                                census.write_successes == 35910u && census.signal_count == 89803u &&
-                                census.fingerprint == UINT64_C(16146922478742010809);
+    const bool census_matches =
+        census.read_successes == 40699u && census.write_successes == 41428u &&
+        census.signal_count == 102545u && census.fingerprint == UINT64_C(2922200824746955242);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32

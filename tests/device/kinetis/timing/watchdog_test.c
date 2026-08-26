@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "k22_test.h"
+#include "kinetis_test.h"
 #include "test.h"
 
 static const uint32_t WDOG_STCTRLH = 0x40052000u, WDOG_TOVALH = 0x40052004u,

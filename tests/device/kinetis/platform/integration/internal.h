@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #include "device/kinetis/internal.h"
-#include "k22_test.h"
+#include "kinetis_test.h"
 #include "test.h"
 
 enum {
@@ -87,9 +87,9 @@ enum {
     RCM_SRS0 = 0x4007f000u,
     RCM_SSRS0 = 0x4007f008u,
     GPIOA_PDIR = 0x400ff010u,
-    DHCSR = 0xe000edf0u,
 };
 
+static const uint32_t DHCSR = 0xe000edf0u;
 static const uint32_t MCM_PLASC = 0xe0080008u;
 
 typedef struct {

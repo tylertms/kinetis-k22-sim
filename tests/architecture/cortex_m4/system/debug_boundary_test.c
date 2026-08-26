@@ -44,12 +44,10 @@ static void test_access_boundaries(TestState* state) {
            cortex_m4_debug_write(&cpu, ITM_BASE + 3u, 2u, 0u) == CORTEX_M4_SYSTEM_ACCESS_REJECTED,
            "cross-word debug writes are rejected");
     expect(state,
-           cortex_m4_debug_read(&cpu, 0xe0001060u, 4u, &value) ==
-               CORTEX_M4_SYSTEM_ACCESS_REJECTED,
+           cortex_m4_debug_read(&cpu, 0xe0001060u, 4u, &value) == CORTEX_M4_SYSTEM_ACCESS_REJECTED,
            "unknown debug register reads are rejected");
     expect(state,
-           cortex_m4_debug_write(&cpu, 0xe0001060u, 4u, 0u) ==
-               CORTEX_M4_SYSTEM_ACCESS_REJECTED,
+           cortex_m4_debug_write(&cpu, 0xe0001060u, 4u, 0u) == CORTEX_M4_SYSTEM_ACCESS_REJECTED,
            "unknown debug register writes are rejected");
 
     cpu.debug.demcr = 1u << 16u;
