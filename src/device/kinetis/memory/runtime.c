@@ -8,6 +8,16 @@ static uint32_t eeprom_size(const KinetisData* data) {
     return size_code >= 2u && size_code <= 9u ? 1u << (14u - size_code) : 0u;
 }
 
+static bool eeprom_range_protected(const KinetisData* data, uint32_t byte_offset,
+                                   uint8_t byte_count) {
+    const uint32_t region_size = eeprom_size(data) / 8u;
+    const uint8_t first_region = (uint8_t)(byte_offset / region_size);
+    const uint8_t last_region = (uint8_t)((byte_offset + byte_count - 1u) / region_size);
+    const uint16_t region_mask =
+        (uint16_t)(((1u << (last_region - first_region + 1u)) - 1u) << first_region);
+    return (data->flash[0x16u] & region_mask) != region_mask;
+}
+
 static bool flexram_range(const KinetisData* data, uint32_t address, uint8_t byte_count,
                           uint32_t* byte_offset) {
     if (data->profile->flexram_size == 0u || address < data->profile->flexram_address)
@@ -46,6 +56,14 @@ static bool mapped_memory_write(KinetisData* data, uint32_t address, uint8_t byt
     }
     uint32_t byte_offset = 0u;
     if (flexram_range(data, address, byte_count, &byte_offset)) {
+        const bool protection_failure =
+            data->flexram_eeprom && eeprom_range_protected(data, byte_offset, byte_count);
+        if (data->flexram_eeprom && ((data->flash[0] & 0x30u) != 0u || protection_failure)) {
+            if (protection_failure)
+                data->flash[0] |= 0x10u;
+            kinetis_data_internal_flash_update_interrupts(data);
+            return true;
+        }
         kinetis_data_internal_store_bytes(data->flexram, byte_offset, byte_count, write_value);
         if (data->flexram_eeprom)
             kinetis_data_internal_store_bytes(data->eeprom, byte_offset, byte_count, write_value);

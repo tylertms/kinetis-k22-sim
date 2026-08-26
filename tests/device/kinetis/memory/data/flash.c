@@ -569,6 +569,17 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_write_fccob(state, data, 5u, 3u);
     kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
     uint32_t eeprom_value = 0u;
+    data->flash[0x16u] = 0u;
+    kinetis_data_test_write_value(state, data, 0x14000000u, 4u, 0x12345678u);
+    expect(state, kinetis_data_test_read_value(state, data, 0x14000000u, 4u) == UINT32_MAX,
+           "protected EEPROM write does not change data");
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x10u) != 0u,
+           "protected EEPROM write sets FPVIOL");
+    data->flash[0x16u] = 0xffu;
+    kinetis_data_test_write_value(state, data, 0x14000004u, 1u, 0x5au);
+    expect(state, kinetis_data_test_read_value(state, data, 0x14000004u, 1u) == 0xffu,
+           "FPVIOL blocks subsequent EEPROM writes");
+    kinetis_data_test_clear_flash_status(state, data);
     expect(state,
            kinetis_data_write(data, 0x1400001fu, 1u, 0x96u) &&
                kinetis_data_read(data, 0x1400001fu, 1u, &eeprom_value) && eeprom_value == 0x96u,
