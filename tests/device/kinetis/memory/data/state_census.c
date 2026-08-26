@@ -34,6 +34,7 @@ static void randomize_state(KinetisData* data, DataStateCensus* census, uint32_t
     const uint32_t tcd = 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
     for (uint8_t index = 0u; index < DMA_TCD_SIZE; index++)
         data->dma[tcd + index] = (uint8_t)next_random(census);
+    kinetis_data_internal_store_bytes(data->dma + tcd, 8u, 4u, (random & 31u) + 1u);
     for (uint8_t index = 0u; index < 0x40u; index++)
         data->dma[index] = (uint8_t)next_random(census);
     data->dma_requests = (uint16_t)random;
@@ -118,7 +119,7 @@ void kinetis_data_test_test_state_census(TestState* state) {
     }
     expect(state,
            census.reads == 19524u && census.writes == 19097u && census.signals == 66372u &&
-               census.fingerprint == UINT64_C(7330588028485455910),
+               census.fingerprint == UINT64_C(1131582871870430636),
            "data state census matches");
     kinetis_data_destroy(data);
 }

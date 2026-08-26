@@ -260,7 +260,7 @@ void kinetis_data_test_test_dma_advanced(TestState* state) {
     expect(state, bus.ram[0x902] == 4, "bus.ram[0x902] == 4");
     expect(state, bus.ram[0x903] == 5, "bus.ram[0x903] == 5");
 
-    write_tcd(state, data, TCD0, RAM_BASE, 1, 0, 0, 0, RAM_BASE + 0x100u, 1, 1, 0, 0);
+    write_tcd(state, data, TCD0, RAM_BASE, 2, 0x0101u, 1, 0, RAM_BASE + 0x100u, 2, 1, 0, 0);
     kinetis_data_test_write_value(state, data, DMA + 0x1du, 1, 0u);
     kinetis_data_advance(data, 1u);
     expect(state, (kinetis_data_test_read_value(state, data, DMA + 0x2cu, 2) & 1u) != 0u,
@@ -492,7 +492,7 @@ void kinetis_data_test_test_dma_arbitration_and_control(TestState* state) {
     kinetis_data_test_write_value(state, data, DMA, 4u, 0x10u);
     kinetis_data_test_write_value(state, data, DMA + 0x19u, 1u, 0u);
     prepare_single_byte_dma(state, data, TCD0, RAM_BASE + 0x10u, RAM_BASE + 0x200u);
-    kinetis_data_test_write_value(state, data, TCD0 + 8u, 4u, 0u);
+    kinetis_data_test_write_value(state, data, TCD0 + 6u, 2u, 3u << 8u);
     kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
     kinetis_data_advance(data, 1u);
     expect(state, (kinetis_data_test_read_value(state, data, DMA, 4u) & 0x20u) != 0u,
