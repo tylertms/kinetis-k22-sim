@@ -266,7 +266,6 @@ test_definitions = [
       'device/kinetis_k22/memory/data/state_census.c',
     ],
     'suite': ['device', 'integration'],
-    'stack': '4194304',
   },
   {
     'name': 'device_fmc_complete',
@@ -471,7 +470,7 @@ foreach definition : test_definitions
   sources = definition['sources']
   c_args = []
   link_args = []
-  if definition.get('allocation_failure', false) and cc.get_id() != 'msvc'
+  if definition.get('allocation_failure', false)
     sources += ['support/allocation_failure.c']
     c_args += ['-DK22_TEST_ALLOCATION_FAILURE=1']
     link_args += [
@@ -479,9 +478,6 @@ foreach definition : test_definitions
       '-Wl,--wrap=calloc',
       '-Wl,--wrap=realloc',
     ]
-  endif
-  if cc.get_id() == 'msvc' and definition.has_key('stack')
-    link_args += ['/STACK:' + definition['stack']]
   endif
   target = executable(
     name,

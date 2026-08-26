@@ -14,6 +14,8 @@ The 50 MHz K22D5 devices use Cortex-M4 cores without floating-point units and a 
 
 ## Build
 
+Requires GCC, Meson, and Ninja.
+
 ```
 meson setup build/simulator --buildtype=release
 meson compile -C build/simulator
