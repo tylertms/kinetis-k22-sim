@@ -521,10 +521,6 @@ KinetisConfiguration kinetis_configuration(KinetisProfile profile_id) {
     return configuration;
 }
 
-KinetisConfiguration kinetis_default_configuration(void) {
-    return kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
-}
-
 bool kinetis_profile_from_name(const char* name, KinetisProfile* profile) {
     const KinetisDeviceProfile* match = kinetis_profile_find(name);
     if (match == NULL || profile == NULL) {

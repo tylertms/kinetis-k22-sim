@@ -19,7 +19,7 @@ static uint32_t read_value(TestState* state, CortexM4* cpu, uint32_t address, ui
 }
 
 static Kinetis* create_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
     Kinetis* device = kinetis_create(configuration);

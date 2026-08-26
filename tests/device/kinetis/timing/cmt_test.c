@@ -26,7 +26,7 @@ enum {
 };
 
 static Kinetis* make_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_MK22FN1M012;
     configuration.package = KINETIS_PACKAGE_LQ_144_LQFP;
     Kinetis* device = kinetis_create(configuration);
@@ -306,7 +306,7 @@ static void test_api_guards(TestState* state) {
     bool high = false;
     expect(state, !kinetis_get_cmt_output(NULL, &driven, &high),
            "!kinetis_get_cmt_output(NULL, &driven, &high)");
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(state, device != NULL, "device != NULL");
     expect(state, !kinetis_get_cmt_output(device, &driven, &high),
            "!kinetis_get_cmt_output(device, &driven, &high)");

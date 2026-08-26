@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
         UINT64_C(2258742799113528101),  UINT64_C(12554654631497704229),
         UINT64_C(13714994920826217253), UINT64_C(2274096894812758821),
     };
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
     Kinetis* device = kinetis_create(configuration);

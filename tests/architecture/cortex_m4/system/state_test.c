@@ -5,7 +5,7 @@
 #include "test.h"
 
 static Kinetis* create_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size = 4096;
     configuration.sram_size = 65536;
     Kinetis* device = kinetis_create(configuration);

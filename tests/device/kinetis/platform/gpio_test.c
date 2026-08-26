@@ -30,7 +30,7 @@ static void write32(TestState* state, Kinetis* device, uint32_t register_address
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     for (uint8_t pin_index = 0u; pin_index < 32u; pin_index++) {
         if (pin_index != 3u) {
@@ -78,7 +78,7 @@ int main(void) {
     expect(&state, !cortex_m4_get_irq_pending(kinetis_cpu(device), PORTA_IRQ),
            "!cortex_m4_get_irq_pending(kinetis_cpu(device), PORTA_IRQ)");
 
-    Kinetis* copied_device = kinetis_create(kinetis_default_configuration());
+    Kinetis* copied_device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, copied_device != NULL, "copied_device != NULL");
     expect(&state, kinetis_copy(copied_device, device), "kinetis_copy(copied_device, device)");
     expect(&state, read32(&state, copied_device, GPIOA_PDIR) == (1u << 3),

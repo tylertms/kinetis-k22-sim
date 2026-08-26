@@ -537,6 +537,8 @@ test(
   kinetis_firmware_runner,
   args: [
     runner_images[0],
+    '--profile',
+    'MKV30F12810',
     '--reset-address',
     '0',
     '--binary-address',
@@ -553,6 +555,8 @@ test(
   kinetis_firmware_runner,
   args: [
     runner_images[1],
+    '--profile',
+    'MKV30F12810',
     '--reset-address',
     '0',
     '--binary-address',
@@ -570,8 +574,9 @@ runner_failure_cases = [
   {'name': 'missing_reset_value', 'args': [missing_image, '--reset-address']},
   {
     'name': 'missing_reset_address',
-    'args': [missing_image, '--max-instructions', '1'],
+    'args': [missing_image, '--profile', 'MKV30F12810', '--max-instructions', '1'],
   },
+  {'name': 'missing_profile', 'args': [missing_image, '--reset-address', '1']},
   {
     'name': 'invalid_profile',
     'args': [missing_image, '--reset-address', '1', '--profile', 'invalid'],
@@ -590,7 +595,13 @@ runner_failure_cases = [
   },
   {
     'name': 'large_address',
-    'args': [missing_image, '--reset-address', '4294967296'],
+    'args': [
+      missing_image,
+      '--profile',
+      'MKV30F12810',
+      '--reset-address',
+      '4294967296',
+    ],
   },
   {
     'name': 'invalid_device',

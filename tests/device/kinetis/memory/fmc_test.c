@@ -26,7 +26,7 @@ enum {
 };
 
 static Kinetis* create_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.package = KINETIS_PACKAGE_DC_121_XFBGA;
     Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
@@ -35,7 +35,7 @@ static Kinetis* create_device(TestState* state) {
 }
 
 static Kinetis* create_flexnvm_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_MK22FX51212;
     configuration.package = KINETIS_PACKAGE_MC_121_MAPBGA;
     Kinetis* device = kinetis_create(configuration);

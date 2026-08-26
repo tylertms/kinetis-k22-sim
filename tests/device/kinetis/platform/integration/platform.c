@@ -39,7 +39,7 @@ static uint32_t flash_fccob_address(uint8_t byte_index) {
 }
 
 Kinetis* kinetis_integration_test_create_device(TestState* state, KinetisPackage package) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.package = package;
     Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
@@ -53,7 +53,7 @@ Kinetis* kinetis_integration_test_create_device(TestState* state, KinetisPackage
 }
 
 Kinetis* kinetis_integration_test_create_f12_device(TestState* state, KinetisPackage package) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_MK22FN1M012;
     configuration.package = package;
     configuration.flash_size = 1024u * 1024u;
@@ -63,12 +63,12 @@ Kinetis* kinetis_integration_test_create_f12_device(TestState* state, KinetisPac
 }
 
 void kinetis_integration_test_expect_package_selection(TestState* state) {
-    KinetisConfiguration invalid_profile = kinetis_default_configuration();
+    KinetisConfiguration invalid_profile = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     invalid_profile.profile = KINETIS_PROFILE_COUNT;
     expect(state, kinetis_create(invalid_profile) == NULL,
            "kinetis_create(invalid_profile) == NULL");
 
-    KinetisConfiguration invalid = kinetis_default_configuration();
+    KinetisConfiguration invalid = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     invalid.package = KINETIS_PACKAGE_AH_64_WLCSP;
     expect(state, kinetis_create(invalid) == NULL, "kinetis_create(invalid) == NULL");
 
@@ -282,7 +282,7 @@ void kinetis_integration_test_expect_memory_domains(TestState* state) {
     expect(state, byte == 0x5au, "byte == 0x5au");
     kinetis_destroy(device);
 
-    KinetisConfiguration small = kinetis_default_configuration();
+    KinetisConfiguration small = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     small.flash_size = 8u;
     Kinetis* short_flash = kinetis_create(small);
     expect(state, short_flash != NULL, "short_flash != NULL");

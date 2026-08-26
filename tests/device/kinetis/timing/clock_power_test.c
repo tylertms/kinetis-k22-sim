@@ -37,7 +37,7 @@ static uint32_t read_register(TestState* state, Kinetis* device, uint32_t addres
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     expect(&state, kinetis_test_disable_watchdog(device), "watchdog disabled for clock tests");
 
@@ -88,7 +88,7 @@ int main(void) {
 
     kinetis_destroy(device);
 
-    device = kinetis_create(kinetis_default_configuration());
+    device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "PLL-clocked LPUART device is created");
     expect(&state, kinetis_test_disable_watchdog(device), "PLL-clocked LPUART watchdog disabled");
     write_register(&state, device, MCG_C5, 1u, 1u);
@@ -119,7 +119,7 @@ int main(void) {
            "MKV30 reserved MCG_C6 bits do not select a PLL");
     kinetis_destroy(device);
 
-    KinetisConfiguration missing_oscillator = kinetis_default_configuration();
+    KinetisConfiguration missing_oscillator = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     missing_oscillator.external_oscillator_hz = 0u;
     device = kinetis_create(missing_oscillator);
     expect(&state, device != NULL, "missing-oscillator device is created");

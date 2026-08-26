@@ -85,7 +85,7 @@ static void test_boundaries(TestState* state, Kinetis* device) {
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     const uint32_t flash_value = 0x12345678u;
     expect(&state, kinetis_load(device, 0x100, &flash_value, 4),

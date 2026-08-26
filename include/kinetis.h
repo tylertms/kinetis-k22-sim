@@ -132,7 +132,6 @@ typedef struct {
     uint8_t value;
 } KinetisI2cTransfer;
 
-KinetisConfiguration kinetis_default_configuration(void);
 KinetisConfiguration kinetis_configuration(KinetisProfile profile);
 bool kinetis_profile_from_name(const char* name, KinetisProfile* profile);
 const char* kinetis_profile_name(KinetisProfile profile);

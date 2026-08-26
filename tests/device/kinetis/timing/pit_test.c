@@ -34,7 +34,7 @@ static void write_u32(TestState* state, Kinetis* device, uint32_t address, uint3
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     write_u32(&state, device, SIM_SCGC6, read_u32(&state, device, SIM_SCGC6) | (1u << 23));
     write_u32(&state, device, PIT_MCR, 0);

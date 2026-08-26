@@ -10,7 +10,7 @@ typedef struct {
 } DeviceCensus;
 
 static Kinetis* create_device(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_MK22FN1M012;
     configuration.package = KINETIS_PACKAGE_LQ_144_LQFP;
     configuration.flash_size = 4096u;

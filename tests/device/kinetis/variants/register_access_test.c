@@ -41,7 +41,7 @@ static uint32_t width_mask(uint8_t width) {
 static Kinetis* create_device(TestState* state, const ProfileFixture* fixture) {
     const KinetisDeviceProfile* profile = kinetis_profile_get(fixture->profile);
     expect(state, profile != NULL, "profile != NULL");
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = fixture->profile;
     configuration.package = (KinetisPackage)fixture->package;
     configuration.flash_size = profile->program_flash_size;

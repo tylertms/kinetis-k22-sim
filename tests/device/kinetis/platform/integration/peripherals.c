@@ -581,7 +581,7 @@ static void expect_reset_domains(TestState* state, Kinetis* device) {
 }
 
 static void expect_copy(TestState* state, Kinetis* source_device) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.package = KINETIS_PACKAGE_DC_121_XFBGA;
     Kinetis* destination_device = kinetis_create(configuration);
     expect(state, destination_device != NULL, "destination_device != NULL");

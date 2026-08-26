@@ -305,7 +305,7 @@ static void test_memory_and_exclusive(Fixture* fixture) {
 
 int main(void) {
     TestState state = {0};
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size = 4096u;
     configuration.sram_size = 65536u;
     Kinetis* device = kinetis_create(configuration);

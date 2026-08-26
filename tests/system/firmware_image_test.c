@@ -185,7 +185,7 @@ static void test_symbol(TestState* state) {
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     uint8_t image[IMAGE_SIZE];
     initialize_image(image);

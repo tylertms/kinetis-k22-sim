@@ -159,19 +159,19 @@ static void expect_fail_closed(TestState* state) {
 }
 
 static void expect_invalid_configuration(TestState* state) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_COUNT;
     expect(state, kinetis_create(configuration) == NULL, "invalid profile is rejected");
-    configuration = kinetis_default_configuration();
+    configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.package = KINETIS_PACKAGE_COUNT;
     expect(state, kinetis_create(configuration) == NULL, "invalid package is rejected");
-    configuration = kinetis_default_configuration();
+    configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size = 0u;
     expect(state, kinetis_create(configuration) == NULL, "empty flash is rejected");
-    configuration = kinetis_default_configuration();
+    configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.flash_size++;
     expect(state, kinetis_create(configuration) == NULL, "oversized flash is rejected");
-    configuration = kinetis_default_configuration();
+    configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.sram_size = 0u;
     expect(state, kinetis_create(configuration) == NULL, "empty SRAM is rejected");
     for (KinetisProfile profile = 0; profile < KINETIS_PROFILE_COUNT; profile++) {

@@ -89,7 +89,7 @@ static void configure_watchdog(TestState* state, Kinetis* device, uint16_t timeo
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     const uint32_t vectors[2] = {0x20001000u, 0x00000101u};
     const uint16_t nop = 0xbf00u;

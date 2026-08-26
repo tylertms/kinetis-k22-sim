@@ -60,7 +60,7 @@ static void configure_transfer(TestState* state, Kinetis* device, uint32_t sourc
 
 int main(void) {
     TestState state = {0};
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = KINETIS_PROFILE_MK22FN1M012;
     Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");

@@ -39,7 +39,7 @@ static uint32_t read32(TestState* state, Kinetis* device, uint32_t address) {
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "device != NULL");
     expect(&state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
     const uint32_t scgc7 = read32(&state, device, SIM_SCGC7) | (1u << 1);

@@ -33,7 +33,7 @@ meson compile -C build/simulator
 ## Run Firmware
 
 ```
-kinetis_firmware_runner <IMAGE> --reset-address <ADDRESS> [OPTIONS]
+kinetis_firmware_runner <IMAGE> --profile <DEVICE> --reset-address <ADDRESS> [OPTIONS]
 ```
 
 ### Runner Options
@@ -41,7 +41,7 @@ kinetis_firmware_runner <IMAGE> --reset-address <ADDRESS> [OPTIONS]
 | Option | Description |
 | :--- | :--- |
 | `--reset-address <ADDR>` | Entry point / reset address (required). |
-| `--profile <DEVICE>` | Kinetis device profile. Defaults to `MK22FN51212`. |
+| `--profile <DEVICE>` | Kinetis device profile (required). |
 | `--package <CODE>` | Package code such as `LH`, `LL`, or `LQ`. |
 | `--binary-address <ADDR>` | Base address for raw binary images. |
 | `--stop-address <ADDR>` | Execution stop address. |

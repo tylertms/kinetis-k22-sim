@@ -22,8 +22,8 @@ static bool parse_uint64(const char* text, uint64_t* parsed_value) {
 
 static void print_usage(const char* program) {
     fprintf(stderr,
-            "usage: %s IMAGE --reset-address ADDRESS "
-            "[--profile DEVICE] [--package CODE] [--binary-address ADDRESS] "
+            "usage: %s IMAGE --profile DEVICE --reset-address ADDRESS "
+            "[--package CODE] [--binary-address ADDRESS] "
             "[--max-instructions COUNT] "
             "[--max-cycles COUNT] [--stop-address ADDRESS]\n",
             program);
@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
     bool binary_image_loaded = false;
     uint64_t stop_address = 0;
     bool stop_address_set = false;
-    KinetisProfile profile = KINETIS_PROFILE_MK22FN51212;
+    KinetisProfile profile = KINETIS_PROFILE_COUNT;
+    bool profile_set = false;
     KinetisPackage package = KINETIS_PACKAGE_DEFAULT;
     CortexM4RunLimits limits = {1000000, 10000000};
     for (int argument_index = 2; argument_index < argc; argument_index += 2) {
@@ -53,6 +54,7 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "unknown Kinetis profile: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
+            profile_set = true;
             continue;
         }
 
@@ -87,7 +89,7 @@ int main(int argc, char** argv) {
             return EXIT_FAILURE;
         }
     }
-    if (!reset_address_set) {
+    if (!profile_set || !reset_address_set) {
         print_usage(argv[0]);
         return EXIT_FAILURE;
     }

@@ -61,7 +61,7 @@ static const GateCase secondary_profile_cases[] = {
 };
 
 static Kinetis* create_device(TestState* state, KinetisProfile profile, KinetisPackage package) {
-    KinetisConfiguration configuration = kinetis_default_configuration();
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MK22FN51212);
     configuration.profile = profile;
     configuration.package = package;
     configuration.flash_size = 4096u;

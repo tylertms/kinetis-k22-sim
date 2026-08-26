@@ -52,7 +52,7 @@ static void expect_transfer(TestState* state, Kinetis* device, KinetisI2cTransfe
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
 
     expect(&state, device != NULL, "device != NULL");
     write_register32(&state, device, SIM_SCGC4,
