@@ -65,6 +65,7 @@ simulator_sources = files(
   'src/device/kinetis/variants/registers/mk22f12810.c',
   'src/device/kinetis/variants/registers/mk22f25612.c',
   'src/device/kinetis/variants/registers/mk22f51212.c',
+  'src/device/kinetis/variants/registers/mkv30f12810.c',
 )
 
 simulator = static_library(

@@ -510,6 +510,11 @@ void k22_timing_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1) {
     timing->sim_scgc4 = 0xf0100030u;
     timing->sim_scgc5 = 0x00040182u;
     timing->sim_scgc6 = 0x40000001u;
+    if (timing->profile->id == K22_PROFILE_MKV30F12810) {
+        timing->sim_sopt1 = 0x3000u;
+        timing->sim_scgc5 = 0x00040180u;
+        timing->sim_scgc6 = 1u;
+    }
     timing->sim_scgc7 = timing->profile->id == K22_PROFILE_MK22FN1M012 ||
                                 timing->profile->id == K22_PROFILE_MK22FX51212
                             ? 6u

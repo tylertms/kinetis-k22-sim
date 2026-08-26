@@ -8,6 +8,8 @@ const K22RegisterManifest* k22_register_manifest_get(K22ProfileId profile) {
     switch (profile) {
     case K22_PROFILE_MK22F12810:
         return k22_mk22f12810_register_manifest();
+    case K22_PROFILE_MKV30F12810:
+        return k22_mkv30f12810_register_manifest();
     case K22_PROFILE_MK22FN12812:
         return k22_mk22fn12812_register_manifest();
     case K22_PROFILE_MK22FN25612:

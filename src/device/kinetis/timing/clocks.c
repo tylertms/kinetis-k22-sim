@@ -152,10 +152,13 @@ bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uin
         *output_value = sim_fcfg1_value(timing);
         return true;
     case SIM_FCFG2:
-        *output_value = timing->profile->id == K22_PROFILE_MK22FN1M012 ||
-                                timing->profile->id == K22_PROFILE_MK22FX51212
-                            ? 0x7f7f0000u
-                            : 0x7fff0000u;
+        if (timing->profile->id == K22_PROFILE_MKV30F12810)
+            *output_value = 0xf900007fu;
+        else if (timing->profile->id == K22_PROFILE_MK22FN1M012 ||
+                 timing->profile->id == K22_PROFILE_MK22FX51212)
+            *output_value = 0x7f7f0000u;
+        else
+            *output_value = 0x7fff0000u;
         return true;
     default:
         return false;

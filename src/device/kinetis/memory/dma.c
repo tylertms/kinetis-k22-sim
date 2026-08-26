@@ -128,6 +128,8 @@ bool k22_data_internal_dma_source_always_enabled(const K22Data* data, uint8_t re
 }
 
 static uint64_t dma_source_mask(const K22Data* data) {
+    if (data->profile->id == K22_PROFILE_MKV30F12810)
+        return UINT64_C(0xf03f2f00f3f4c03c);
     if (data->profile->id == K22_PROFILE_MK22FN1M012 ||
         data->profile->id == K22_PROFILE_MK22FX51212)
         return UINT64_C(0xfffffffffffffffc);

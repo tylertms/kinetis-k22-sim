@@ -4,6 +4,7 @@
 #include "device/kinetis/variants/manifest.h"
 
 const K22RegisterManifest* k22_mk22f12810_register_manifest(void);
+const K22RegisterManifest* k22_mkv30f12810_register_manifest(void);
 const K22RegisterManifest* k22_mk22fn12812_register_manifest(void);
 const K22RegisterManifest* k22_mk22fn25612_register_manifest(void);
 const K22RegisterManifest* k22_mk22fn51212_register_manifest(void);

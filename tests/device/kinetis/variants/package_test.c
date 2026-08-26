@@ -42,6 +42,8 @@ static const ExpectedPackage expected_packages[] = {
 };
 
 static const ExpectedSelection expected_selections[] = {
+    EXPECTED(K22_PROFILE_MKV30F12810, K22_PACKAGE_LH_64_LQFP, 0x000c303fu, 0x000f000fu, 0x00000fffu,
+             0x000000ffu, 0x030f0003u, false, false),
     EXPECTED(K22_PROFILE_MK22F12810, K22_PACKAGE_AK_49_WLCSP, 0x000c001fu, 0x0003000fu, 0x000000ffu,
              0x000000ffu, 0x0000003fu, false, false),
     EXPECTED(K22_PROFILE_MK22F12810, K22_PACKAGE_LH_64_LQFP, 0x000c303fu, 0x000f000fu, 0x00000fffu,

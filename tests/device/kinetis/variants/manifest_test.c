@@ -19,6 +19,9 @@ static const char* const mk22f51212_peripherals[] = {
 static const char* const mk22f12_peripherals[] = {
 #include "device/kinetis/variants/expected/mk22f12_peripherals.def"
 };
+static const char* const mkv30f12810_peripherals[] = {
+#include "device/kinetis/variants/expected/mkv30f12810_peripherals.def"
+};
 #undef K22_EXPECTED_PERIPHERAL
 
 #define K22_EXPECTED_REGISTER(address, reset_value, reset_mask, implemented_mask, read_mask,       \
@@ -36,6 +39,9 @@ static const K22RegisterDescriptor mk22f51212_registers[] = {
 };
 static const K22RegisterDescriptor mk22f12_registers[] = {
 #include "device/kinetis/variants/expected/mk22f12_registers.def"
+};
+static const K22RegisterDescriptor mkv30f12810_registers[] = {
+#include "device/kinetis/variants/expected/mkv30f12810_registers.def"
 };
 #undef K22_EXPECTED_REGISTER
 
@@ -222,6 +228,7 @@ static void expect_manifest(TestState* state, K22ProfileId profile,
 int main(void) {
     TestState state = {0};
     expect_manifest(&state, K22_PROFILE_MK22F12810, &expected_manifests[0]);
+    expect_manifest(&state, K22_PROFILE_MKV30F12810, &expected_manifests[4]);
     expect_manifest(&state, K22_PROFILE_MK22FN12812, &expected_manifests[1]);
     expect_manifest(&state, K22_PROFILE_MK22FN25612, &expected_manifests[1]);
     expect_manifest(&state, K22_PROFILE_MK22FN51212, &expected_manifests[2]);
