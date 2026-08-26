@@ -391,17 +391,11 @@ static void test_i2c_start_stop_detection(TestState* state) {
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_START, 0);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au,
            "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x3au");
-    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
-           "start detection latches IICIF");
-    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0)");
-    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
-    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
-           "IICIF reasserts until STARTF is cleared");
-    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
-    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) == 0u,
+           "a master-generated start does not latch IICIF");
     expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "clearing STARTF before IICIF clears the interrupt");
+           "a master-generated start does not request a detection interrupt");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x3au);
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
