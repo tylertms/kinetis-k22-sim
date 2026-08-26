@@ -2,6 +2,13 @@
 
 enum { IRC48_CLOCK_HZ = 48000000u };
 
+static uint32_t rtc_clock_output_hz(const KinetisTiming* timing) {
+    return kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC) &&
+                   (timing->rtc_cr & 0x300u) == 0x100u
+               ? timing->rtc_oscillator_hz
+               : 0u;
+}
+
 bool kinetis_timing_internal_mcg_register(uint32_t offset) {
     return offset <= 6u || offset == 8u || (offset >= 10u && offset <= 13u);
 }
@@ -21,10 +28,7 @@ static uint32_t external_reference_clock_hz(const KinetisTiming* timing) {
     case 0u:
         return timing->external_oscillator_hz;
     case 1u:
-        return kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC) &&
-                       (timing->rtc_cr & 0x100u) != 0u
-                   ? timing->rtc_oscillator_hz
-                   : 0u;
+        return rtc_clock_output_hz(timing);
     case 2u:
         return IRC48_CLOCK_HZ;
     default:
@@ -85,9 +89,7 @@ uint32_t kinetis_timing_internal_erclk32k_hz(const KinetisTiming* timing) {
         return oscillator_hz >= 30000u && oscillator_hz <= 40000u ? oscillator_hz : 0u;
     }
     case 2u:
-        return timing->profile->id != KINETIS_PROFILE_MKV30F12810 && (timing->rtc_cr & 0x100u) != 0u
-                   ? timing->rtc_oscillator_hz
-                   : 0u;
+        return rtc_clock_output_hz(timing);
     case 3u:
         return timing->lpo_hz;
     default:

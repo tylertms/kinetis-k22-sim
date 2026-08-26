@@ -287,6 +287,11 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
     expect(state, kinetis_timing_core_clock_hz(&mcg_source) == mcg_source.rtc_oscillator_hz,
            "K22 external-reference mode uses the selected RTC oscillator");
+    mcg_source.rtc_cr = 0x300u;
+    kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == mcg_source.slow_irc_hz,
+           "K22 external-reference mode requires RTC clock output");
+    mcg_source.rtc_cr = 0x100u;
     mcg_source.mcg[0] = 6u << 3u;
     kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
     expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 1310720u,
@@ -305,6 +310,10 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     lptmr_source.rtc_cr = 0x100u;
     expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
            "MK22 ERCLK32K selects the enabled RTC oscillator");
+    lptmr_source.rtc_cr = 0x300u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
+           "MK22 ERCLK32K requires RTC clock output");
+    lptmr_source.rtc_cr = 0x100u;
     lptmr_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
     expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
            "KV30 reserved ERCLK32K selection is disabled");
