@@ -133,15 +133,16 @@ void kinetis_timing_internal_advance_wdog(KinetisTiming* timing, uint32_t cycles
     if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_WDOG))
         return;
     const bool update_was_open = timing->wdog_update_open;
+    const uint32_t bus_clock_hz =
+        kinetis_timing_bus_clock_running(timing) ? timing->bus_clock_hz : 0u;
     const uint64_t elapsed_bus_ticks = kinetis_timing_internal_clock_ticks(
-        &timing->wdog_bus_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
+        &timing->wdog_bus_remainder, cycles, bus_clock_hz, timing->core_clock_hz);
     if (advance_watchdog_bus_time(timing, elapsed_bus_ticks) ||
         (update_was_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
         return;
     const bool is_test_mode = (timing->wdog[0] & 0x4400u) == 0x0400u;
-    const uint32_t source_hz = is_test_mode || (timing->wdog[0] & (1u << 13u)) != 0u
-                                   ? timing->bus_clock_hz
-                                   : timing->lpo_hz;
+    const uint32_t source_hz =
+        is_test_mode || (timing->wdog[0] & (1u << 13u)) != 0u ? bus_clock_hz : timing->lpo_hz;
     const uint32_t divider = ((timing->wdog[11] & 0x700u) >> 8u) + 1u;
     const uint64_t elapsed_watchdog_ticks = kinetis_timing_internal_clock_ticks(
         &timing->wdog_remainder, cycles, source_hz / divider, timing->core_clock_hz);

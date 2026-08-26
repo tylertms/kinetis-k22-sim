@@ -566,7 +566,8 @@ static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_
         timing->debug_halted)
         return;
     uint32_t source_hz =
-        clock_select == 1u ? timing->bus_clock_hz : kinetis_timing_internal_fixed_clock_hz(timing);
+        clock_select == 1u ? (kinetis_timing_bus_clock_running(timing) ? timing->bus_clock_hz : 0u)
+                           : kinetis_timing_internal_fixed_clock_hz(timing);
     source_hz >>= ftm->sc & 7u;
     const uint64_t ticks = kinetis_timing_internal_clock_ticks(&ftm->remainder, cycles, source_hz,
                                                                timing->core_clock_hz);

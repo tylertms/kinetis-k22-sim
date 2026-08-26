@@ -33,7 +33,8 @@ static uint32_t advance_pit_channel_ticks(KinetisTiming* timing, uint8_t pit_cha
 void kinetis_timing_internal_advance_pit(KinetisTiming* timing, uint32_t cycles) {
     if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PIT) ||
         (timing->sim_scgc6 & (1u << 23u)) == 0 || (timing->pit_mcr & 2u) != 0 ||
-        ((timing->pit_mcr & 1u) != 0u && timing->debug_halted)) {
+        ((timing->pit_mcr & 1u) != 0u && timing->debug_halted) ||
+        !kinetis_timing_bus_clock_running(timing)) {
         return;
     }
     const uint64_t elapsed_ticks = kinetis_timing_internal_clock_ticks(
@@ -120,13 +121,13 @@ bool kinetis_timing_internal_pit_write(KinetisTiming* timing, uint32_t address, 
 static uint32_t lptmr_clock_hz(const KinetisTiming* timing) {
     switch (timing->lptmr_psr & 3u) {
     case 0:
-        return (timing->mcg[1] & 1u) != 0 ? timing->fast_irc_hz : timing->slow_irc_hz;
+        return kinetis_timing_internal_mcgir_clock_hz(timing);
     case 1:
         return timing->lpo_hz;
     case 2:
-        return timing->rtc_oscillator_hz;
+        return kinetis_timing_internal_erclk32k_hz(timing);
     default:
-        return timing->external_oscillator_hz;
+        return kinetis_timing_internal_oscer_clock_hz(timing);
     }
 }
 
@@ -329,7 +330,8 @@ static bool counter_reached(uint16_t start_counter, uint64_t ticks, uint32_t per
 
 void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles) {
     if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PDB0) ||
-        (timing->sim_scgc6 & (1u << 22u)) == 0 || (timing->pdb_sc & 1u) == 0) {
+        (timing->sim_scgc6 & (1u << 22u)) == 0 || (timing->pdb_sc & 1u) == 0 ||
+        !kinetis_timing_bus_clock_running(timing)) {
         return;
     }
     const uint64_t ticks = pdb_ticks(timing, cycles);

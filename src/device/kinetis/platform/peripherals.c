@@ -213,8 +213,7 @@ static bool cmt_write(Kinetis* device, uint32_t address, uint8_t byte_count, uin
 }
 
 void kinetis_internal_cmt_advance(Kinetis* device, uint32_t cycle_count) {
-    if (!device->cmt_running ||
-        (device->cpu != NULL && device->cpu->sleeping && (device->cpu->scr & 4u) != 0u))
+    if (!device->cmt_running || !kinetis_timing_bus_clock_running(&device->timing))
         return;
     const uint64_t core_clock_hz = kinetis_timing_core_clock_hz(&device->timing);
     const uint64_t bus_clock_hz = kinetis_timing_bus_clock_hz(&device->timing);

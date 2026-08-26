@@ -41,6 +41,42 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
                                    : reference_clock_hz * fll_multiplier;
 }
 
+uint32_t kinetis_timing_internal_mcgir_clock_hz(const KinetisTiming* timing) {
+    if (timing == NULL || (timing->mcg[0] & 2u) == 0u ||
+        (timing->deep_sleeping &&
+         ((timing->mcg[0] & 1u) == 0u || (timing->smc[3] != 2u && timing->smc[3] != 0x10u))))
+        return 0u;
+    return (timing->mcg[1] & 1u) != 0u ? timing->fast_irc_hz >> ((timing->mcg[8] >> 1u) & 7u)
+                                       : timing->slow_irc_hz;
+}
+
+uint32_t kinetis_timing_internal_oscer_clock_hz(const KinetisTiming* timing) {
+    if (timing == NULL || (timing->osc_cr & 0x80u) == 0u ||
+        (timing->deep_sleeping && (timing->osc_cr & 0x20u) == 0u))
+        return 0u;
+    return timing->external_oscillator_hz;
+}
+
+uint32_t kinetis_timing_internal_erclk32k_hz(const KinetisTiming* timing) {
+    if (timing == NULL)
+        return 0u;
+    switch ((timing->sim_sopt1 >> 18u) & 3u) {
+    case 0u:
+        return (timing->osc_cr & 0x80u) != 0u && timing->external_oscillator_hz >= 30000u &&
+                       timing->external_oscillator_hz <= 40000u
+                   ? timing->external_oscillator_hz
+                   : 0u;
+    case 2u:
+        return timing->profile->id != KINETIS_PROFILE_MKV30F12810 && (timing->rtc_cr & 0x100u) != 0u
+                   ? timing->rtc_oscillator_hz
+                   : 0u;
+    case 3u:
+        return timing->lpo_hz;
+    default:
+        return 0u;
+    }
+}
+
 uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
     if (timing == NULL || (timing->mcg[1] & 2u) != 0u || timing->deep_sleeping)
         return 0u;
@@ -63,29 +99,31 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
 }
 
 uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
-    if (timing == NULL)
+    if (timing == NULL ||
+        (timing->deep_sleeping && timing->smc[3] != 2u && timing->smc[3] != 0x10u))
         return 0u;
     switch ((timing->sim_sopt2 >> 26u) & 3u) {
     case 1u:
         switch ((timing->sim_sopt2 >> 16u) & 3u) {
         case 0u:
-            return calculate_fll_clock_hz(timing);
-        case 1u:
-            return ((timing->mcg[4] | timing->mcg[5]) & 0x40u) != 0u
-                       ? calculate_pll_clock_hz(timing)
+            return !timing->deep_sleeping && (timing->mcg[1] & 2u) == 0u &&
+                           (timing->mcg[5] & 0x40u) == 0u
+                       ? calculate_fll_clock_hz(timing)
                        : 0u;
+        case 1u:
+            if (((timing->mcg[4] | timing->mcg[5]) & 0x40u) == 0u ||
+                (timing->deep_sleeping && (timing->smc[3] != 2u || (timing->mcg[4] & 0x20u) == 0u)))
+                return 0u;
+            return calculate_pll_clock_hz(timing);
         case 3u:
-            return 48000000u;
+            return timing->deep_sleeping ? 0u : 48000000u;
         default:
             return 0u;
         }
     case 2u:
-        return (timing->osc_cr & 0x80u) != 0u ? timing->external_oscillator_hz : 0u;
+        return kinetis_timing_internal_oscer_clock_hz(timing);
     case 3u:
-        if ((timing->mcg[0] & 2u) == 0u)
-            return 0u;
-        return (timing->mcg[1] & 1u) != 0u ? timing->fast_irc_hz >> ((timing->mcg[8] >> 1u) & 7u)
-                                           : timing->slow_irc_hz;
+        return kinetis_timing_internal_mcgir_clock_hz(timing);
     default:
         return 0u;
     }

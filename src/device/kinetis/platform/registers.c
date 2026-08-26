@@ -231,6 +231,12 @@ void kinetis_peripheral_advance(Kinetis* device, uint32_t cycle_count) {
     kinetis_timing_set_debug_halted(&device->timing,
                                     device->cpu != NULL && device->cpu->debug.halted);
     kinetis_data_set_debug_halted(device->data, device->cpu != NULL && device->cpu->debug.halted);
+    kinetis_serial_set_clocks(&device->serial, kinetis_timing_core_clock_hz(&device->timing),
+                              kinetis_timing_bus_clock_hz(&device->timing),
+                              kinetis_timing_lpuart_clock_hz(&device->timing));
+    kinetis_serial_set_clock_domains(&device->serial,
+                                     kinetis_timing_system_clock_running(&device->timing),
+                                     kinetis_timing_bus_clock_running(&device->timing));
     kinetis_timing_advance(&device->timing, cycle_count);
     kinetis_data_advance(device->data, cycle_count);
     kinetis_serial_advance(&device->serial, cycle_count);

@@ -458,6 +458,26 @@ static void test_clock_domains(TestState* state) {
     kinetis_serial_advance(&serial, 40u);
     expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
            "I2C completes after 180 bus clocks");
+
+    write_register(state, &serial, serial.uart[0].base + 7u, 1u, 0x60u);
+    write_register(state, &serial, serial.uart[2].base + 7u, 1u, 0x62u);
+    kinetis_serial_set_clock_domains(&serial, false, false);
+    kinetis_serial_advance(&serial, 320u);
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "system-clocked UART stops with its clock domain");
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART stops with its clock domain");
+    kinetis_serial_set_clock_domains(&serial, true, false);
+    kinetis_serial_advance(&serial, 160u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "system-clocked UART resumes with its clock domain");
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART remains stopped independently");
+    kinetis_serial_set_clock_domains(&serial, true, true);
+    kinetis_serial_advance(&serial, 320u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART2, &transmitted_value),
+           "bus-clocked UART resumes with its clock domain");
+    kinetis_serial_set_clock_domains(NULL, false, false);
 }
 
 static void test_lpuart_clock_domain(TestState* state) {
@@ -481,6 +501,11 @@ static void test_lpuart_clock_domain(TestState* state) {
     kinetis_serial_advance(&serial, 1u);
     expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_LPUART0, &transmitted_value),
            "LPUART advances at its selected source rate");
+    write_register(state, &serial, LPUART0_BASE + 0x0cu, 4u, 0x6au);
+    kinetis_serial_set_clock_domains(&serial, false, false);
+    kinetis_serial_advance(&serial, 640u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "LPUART uses its independent clock in Stop");
 }
 
 static void test_i2c_start_stop_detection(TestState* state) {

@@ -982,3 +982,13 @@ uint32_t kinetis_timing_core_clock_hz(const KinetisTiming* timing) {
 uint32_t kinetis_timing_bus_clock_hz(const KinetisTiming* timing) {
     return timing == NULL ? 0 : timing->bus_clock_hz;
 }
+
+bool kinetis_timing_system_clock_running(const KinetisTiming* timing) {
+    return timing != NULL && !timing->deep_sleeping;
+}
+
+bool kinetis_timing_bus_clock_running(const KinetisTiming* timing) {
+    if (timing == NULL || !timing->deep_sleeping)
+        return timing != NULL;
+    return (timing->smc[1] & 7u) == 0u && ((timing->smc[2] >> 6u) & 3u) == 2u;
+}

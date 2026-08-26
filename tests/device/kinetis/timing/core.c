@@ -51,6 +51,18 @@ KinetisTimingSignals kinetis_timing_test_signals(Observations* observations) {
     return value;
 }
 
+static uint16_t lptmr_ticks_in_one_second(KinetisTiming timing, uint32_t prescaler) {
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    timing.sim_scgc5 |= 1u;
+    timing.lptmr_psr = prescaler | 4u;
+    timing.lptmr_cmr = 0xffffu;
+    timing.lptmr_csr = 1u;
+    timing.lptmr_counter = 0u;
+    timing.lptmr_remainder = 0u;
+    kinetis_timing_advance(&timing, timing.core_clock_hz);
+    return timing.lptmr_counter;
+}
+
 void kinetis_timing_test_expect_read(TestState* state, KinetisTiming* timing, uint32_t address,
                                      uint8_t size, uint32_t expected) {
     uint32_t value = 0xdeadbeefu;
@@ -133,6 +145,62 @@ void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
 }
 
 void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTiming* timing) {
+    KinetisTiming waiting = *timing;
+    kinetis_timing_set_cpu_sleeping(&waiting, true, false);
+    expect(state, kinetis_timing_system_clock_running(&waiting), "system clock runs in Wait");
+    expect(state, kinetis_timing_bus_clock_running(&waiting), "bus clock runs in Wait");
+
+    KinetisTiming stopped = *timing;
+    kinetis_timing_set_cpu_sleeping(&stopped, true, true);
+    expect(state, !kinetis_timing_system_clock_running(&stopped),
+           "system clock stops in normal Stop");
+    expect(state, !kinetis_timing_bus_clock_running(&stopped), "bus clock stops in normal Stop");
+    stopped.smc[2] = 2u << 6u;
+    expect(state, kinetis_timing_bus_clock_running(&stopped),
+           "bus clock remains active in partial Stop 2");
+    expect(state, !kinetis_timing_system_clock_running(NULL),
+           "null timing state has no system clock");
+    expect(state, !kinetis_timing_bus_clock_running(NULL), "null timing state has no bus clock");
+
+    stopped.pit_mcr = 0u;
+    stopped.sim_scgc6 |= 1u << 23u;
+    stopped.pit[0].load = 9u;
+    stopped.pit[0].current = 9u;
+    stopped.pit[0].control = 1u;
+    stopped.smc[2] = 0u;
+    kinetis_timing_advance(&stopped, 1u);
+    expect(state, stopped.pit[0].current == 9u, "PIT stops with the bus clock");
+    stopped.smc[2] = 2u << 6u;
+    kinetis_timing_advance(&stopped, 1u);
+    expect(state, stopped.pit[0].current == 8u, "PIT runs in partial Stop 2");
+
+    stopped.sim_scgc6 |= (1u << 22u) | (1u << 24u);
+    stopped.pdb_sc = 1u;
+    stopped.pdb_mod = 9u;
+    stopped.pdb_counter = 0u;
+    stopped.ftm[0].sc = 8u;
+    stopped.ftm[0].modulo = 9u;
+    stopped.ftm[0].counter = 0u;
+    stopped.smc[2] = 0u;
+    kinetis_timing_advance(&stopped, 1u);
+    expect(state, stopped.pdb_counter == 0u, "PDB stops with the bus clock");
+    expect(state, stopped.ftm[0].counter == 0u, "FTM stops with the bus clock");
+    stopped.smc[2] = 2u << 6u;
+    kinetis_timing_advance(&stopped, 1u);
+    expect(state, stopped.pdb_counter == 1u, "PDB runs in partial Stop 2");
+    expect(state, stopped.ftm[0].counter == 1u, "FTM runs in partial Stop 2");
+
+    stopped.lptmr_psr = 5u;
+    stopped.lptmr_cmr = 0xffffu;
+    stopped.lptmr_csr = 1u;
+    stopped.sim_scgc5 |= 1u;
+    stopped.lptmr_counter = 0u;
+    stopped.lptmr_remainder = 0u;
+    kinetis_timing_test_disable_watchdog_fixture(&stopped);
+    kinetis_timing_advance(&stopped,
+                           kinetis_timing_test_cycles_for_ticks(&stopped, 1u, stopped.lpo_hz));
+    expect(state, stopped.lptmr_counter == 1u, "LPO-clocked LPTMR runs in Stop");
+
     KinetisTiming clock_source = *timing;
     expect(state, kinetis_timing_lpuart_clock_hz(NULL) == 0u,
            "null timing state has no LPUART clock");
@@ -160,6 +228,74 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     clock_source.mcg[1] |= 1u;
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.fast_irc_hz / 2u,
            "LPUART selects divided fast MCGIRCLK");
+    clock_source.deep_sleeping = true;
+    clock_source.smc[3] = 2u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "MCGIRCLK stops without IREFSTEN");
+    clock_source.mcg[0] |= 1u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.fast_irc_hz / 2u,
+           "IREFSTEN keeps MCGIRCLK active in Stop");
+    clock_source.smc[3] = 0x20u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "LPUART clock sources stop in LLS");
+    clock_source.smc[3] = 2u;
+    clock_source.sim_sopt2 = 2u << 26u;
+    clock_source.osc_cr = 0x80u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "OSCERCLK stops without EREFSTEN");
+    clock_source.osc_cr |= 0x20u;
+    expect(state,
+           kinetis_timing_lpuart_clock_hz(&clock_source) == clock_source.external_oscillator_hz,
+           "EREFSTEN keeps OSCERCLK active in Stop");
+    clock_source.sim_sopt2 = 1u << 26u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "MCGFLLCLK stops in low-power modes");
+    clock_source.sim_sopt2 |= 3u << 16u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "IRC48M stops in low-power modes");
+    clock_source.sim_sopt2 = (1u << 26u) | (1u << 16u);
+    clock_source.mcg[4] = 0x40u;
+    clock_source.mcg[5] = 0u;
+    clock_source.smc[3] = 2u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
+           "PLL stops without PLLSTEN0");
+    clock_source.mcg[4] |= 0x20u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 96000000u,
+           "PLLSTEN0 keeps the PLL active in normal Stop");
+    clock_source.smc[3] = 0x10u;
+    expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u, "PLL stops in VLPS");
+
+    KinetisTiming lptmr_source = *timing;
+    lptmr_source.mcg[0] &= ~2u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 0u) == 0u,
+           "disabled MCGIRCLK does not clock LPTMR");
+    lptmr_source.mcg[0] |= 2u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 0u) == 32768u,
+           "LPTMR clock zero selects MCGIRCLK");
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 1u) == 1000u,
+           "LPTMR clock one selects LPO");
+    lptmr_source.sim_sopt1 = 2u << 18u;
+    lptmr_source.rtc_cr = 0x100u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
+           "MK22 ERCLK32K selects the enabled RTC oscillator");
+    lptmr_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
+           "KV30 reserved ERCLK32K selection is disabled");
+    lptmr_source.profile = timing->profile;
+    lptmr_source.sim_sopt1 = 0u;
+    lptmr_source.osc_cr = 0x80u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
+           "high-frequency system oscillator cannot drive ERCLK32K");
+    lptmr_source.external_oscillator_hz = 32768u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
+           "ERCLK32K selects an enabled 32 kHz system oscillator");
+    lptmr_source.external_oscillator_hz = timing->external_oscillator_hz;
+    lptmr_source.osc_cr = 0u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 3u) == 0u,
+           "disabled OSCERCLK does not clock LPTMR");
+    lptmr_source.osc_cr = 0x80u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 3u) == 4608u,
+           "LPTMR clock three selects OSCERCLK");
 
     kinetis_timing_test_expect_write(state, timing, MCG_C1, 1, 0x32u);
     kinetis_timing_test_expect_write(state, timing, MCG_C2, 1, 0xa0u);

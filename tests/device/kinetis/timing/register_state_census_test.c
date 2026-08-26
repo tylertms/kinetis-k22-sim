@@ -140,8 +140,8 @@ int main(void) {
             timing.pit[0].current ^ timing.lptmr_counter ^ timing.rtc_tsr ^ timing.pdb_counter);
     }
     expect(&state,
-           census.reads == 9044u && census.writes == 12102u &&
-               census.fingerprint == UINT64_C(6481870854195374495),
+           census.reads == 9044u && census.writes == 12089u &&
+               census.fingerprint == UINT64_C(15824878122998444534),
            "timing register state census matches");
     return test_finish(&state);
 }
