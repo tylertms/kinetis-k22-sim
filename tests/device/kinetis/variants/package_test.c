@@ -323,6 +323,32 @@ static void expect_kv30_adc_inputs(TestState* state) {
            "LF ADC0 channel 14 exists");
     expect(state, kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_B, 7u),
            "LH ADC1 channel 7B exists");
+    const uint8_t internal_channels[] = {26u, 27u, 29u, 30u};
+    for (size_t index = 0u; index < sizeof(internal_channels); index++) {
+        expect(
+            state,
+            kinetis_package_adc_input_exists(fm, 0u, KINETIS_ADC_MUX_A, internal_channels[index]) &&
+                kinetis_package_adc_input_exists(fm, 1u, KINETIS_ADC_MUX_A,
+                                                 internal_channels[index]),
+            "FM internal ADC input exists");
+    }
+}
+
+static void expect_k22_adc_inputs(TestState* state) {
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
+    const KinetisPackageSelection* lh = kinetis_package_select(profile, KINETIS_PACKAGE_LH_64_LQFP);
+    const KinetisPackageSelection* ll =
+        kinetis_package_select(profile, KINETIS_PACKAGE_LL_100_LQFP);
+    const KinetisPackageSelection* dc =
+        kinetis_package_select(profile, KINETIS_PACKAGE_DC_121_XFBGA);
+    expect(state, !kinetis_package_adc_input_exists(lh, 0u, KINETIS_ADC_MUX_A, 17u),
+           "LH ADC0 channel 17 is absent");
+    expect(state, !kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_A, 23u),
+           "LH ADC1 channel 23 is absent");
+    expect(state, kinetis_package_adc_input_exists(ll, 0u, KINETIS_ADC_MUX_A, 17u),
+           "LL ADC0 channel 17 exists");
+    expect(state, kinetis_package_adc_input_exists(dc, 1u, KINETIS_ADC_MUX_A, 23u),
+           "DC ADC1 channel 23 exists");
 }
 
 int main(void) {
@@ -332,5 +358,6 @@ int main(void) {
     expect_defaults(&state);
     expect_fail_closed(&state);
     expect_kv30_adc_inputs(&state);
+    expect_k22_adc_inputs(&state);
     return test_finish(&state);
 }

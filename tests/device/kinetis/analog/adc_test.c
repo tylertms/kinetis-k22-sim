@@ -32,7 +32,9 @@ static void write32(TestState* state, Kinetis* device, uint32_t address, uint32_
 
 int main(void) {
     TestState state = {0};
-    Kinetis* device = kinetis_create(kinetis_default_configuration());
+    KinetisConfiguration configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
+    configuration.package = KINETIS_PACKAGE_FM_32_QFN;
+    Kinetis* device = kinetis_create(configuration);
     expect(&state, device != NULL, "device != NULL");
     write32(&state, device, SIM_SCGC6, read32(&state, device, SIM_SCGC6) | (1u << 27));
     write32(&state, device, ADC0_CFG1, 0x0cu);

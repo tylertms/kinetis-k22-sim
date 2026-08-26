@@ -13,6 +13,31 @@ struct KinetisPackageSelection {
     uint32_t port_pin_mask[KINETIS_PACKAGE_PORT_COUNT];
 };
 
+typedef struct {
+    uint8_t instance;
+    KinetisAdcMux mux;
+    uint8_t channel;
+    uint8_t port;
+    uint8_t pin;
+} KinetisAdcPin;
+
+static const KinetisAdcPin k22_adc_pins[] = {
+    {0u, KINETIS_ADC_MUX_A, 8u, 1u, 0u},   {0u, KINETIS_ADC_MUX_A, 9u, 1u, 1u},
+    {0u, KINETIS_ADC_MUX_A, 12u, 1u, 2u},  {0u, KINETIS_ADC_MUX_A, 13u, 1u, 3u},
+    {0u, KINETIS_ADC_MUX_A, 14u, 2u, 0u},  {0u, KINETIS_ADC_MUX_A, 15u, 2u, 1u},
+    {0u, KINETIS_ADC_MUX_A, 17u, 4u, 24u}, {0u, KINETIS_ADC_MUX_A, 18u, 4u, 25u},
+    {0u, KINETIS_ADC_MUX_B, 4u, 2u, 2u},   {0u, KINETIS_ADC_MUX_B, 5u, 3u, 1u},
+    {0u, KINETIS_ADC_MUX_B, 6u, 3u, 5u},   {0u, KINETIS_ADC_MUX_B, 7u, 3u, 6u},
+    {1u, KINETIS_ADC_MUX_A, 4u, 4u, 0u},   {1u, KINETIS_ADC_MUX_A, 5u, 4u, 1u},
+    {1u, KINETIS_ADC_MUX_A, 6u, 4u, 2u},   {1u, KINETIS_ADC_MUX_A, 7u, 4u, 3u},
+    {1u, KINETIS_ADC_MUX_A, 8u, 1u, 0u},   {1u, KINETIS_ADC_MUX_A, 9u, 1u, 1u},
+    {1u, KINETIS_ADC_MUX_A, 12u, 1u, 6u},  {1u, KINETIS_ADC_MUX_A, 13u, 1u, 7u},
+    {1u, KINETIS_ADC_MUX_A, 14u, 1u, 10u}, {1u, KINETIS_ADC_MUX_A, 15u, 1u, 11u},
+    {1u, KINETIS_ADC_MUX_A, 17u, 0u, 17u}, {1u, KINETIS_ADC_MUX_B, 4u, 2u, 8u},
+    {1u, KINETIS_ADC_MUX_B, 5u, 2u, 9u},   {1u, KINETIS_ADC_MUX_B, 6u, 2u, 10u},
+    {1u, KINETIS_ADC_MUX_B, 7u, 2u, 11u},
+};
+
 static const KinetisPackageDescription packages[KINETIS_PACKAGE_COUNT] = {
     {KINETIS_PACKAGE_LH_64_LQFP, "LH", "64 LQFP", 64, 5},
     {KINETIS_PACKAGE_MP_64_MAPBGA, "MP", "64 MAPBGA", 64, 5},
@@ -180,22 +205,80 @@ static uint8_t kv30_package_index(KinetisPackage package) {
     }
 }
 
+static bool k22_adc_pin_exists(const KinetisPackageSelection* selection, uint8_t instance,
+                               KinetisAdcMux mux, uint8_t channel) {
+    for (size_t index = 0u; index < sizeof(k22_adc_pins) / sizeof(k22_adc_pins[0]); index++) {
+        const KinetisAdcPin* pin = &k22_adc_pins[index];
+        if (pin->instance == instance && pin->mux == mux && pin->channel == channel)
+            return kinetis_package_pin_exists(selection, pin->port, pin->pin);
+    }
+    return false;
+}
+
+static bool k22_adc_dedicated_input_exists(const KinetisPackageSelection* selection,
+                                           uint8_t instance, uint8_t channel) {
+    const KinetisPackageDescription* package = kinetis_package_selection_package(selection);
+    if (package == NULL)
+        return false;
+
+    if (instance == 0u) {
+        if (channel == 0u || channel == 3u || channel == 19u)
+            return true;
+        if (channel == 23u)
+            return kinetis_package_has_peripheral(selection, KINETIS_PERIPHERAL_DAC0);
+        if (channel == 1u || channel == 2u || channel == 20u)
+            return package->terminal_count >= 100u;
+        return (channel == 16u || channel == 21u || channel == 22u) &&
+               package->terminal_count >= 121u;
+    }
+
+    if (channel == 0u || channel == 3u || channel == 18u || channel == 19u || channel == 22u)
+        return true;
+    if (channel == 23u)
+        return kinetis_package_has_peripheral(selection, KINETIS_PERIPHERAL_DAC1);
+    if (channel == 1u || channel == 20u)
+        return package->terminal_count >= 100u;
+    return channel == 16u && package->terminal_count >= 121u;
+}
+
+static bool k22_adc_input_exists(const KinetisPackageSelection* selection, uint8_t instance,
+                                 KinetisAdcMux mux, uint8_t channel) {
+    const uint32_t internal_inputs =
+        (UINT32_C(1) << 26u) | (UINT32_C(1) << 27u) | (UINT32_C(1) << 29u) | (UINT32_C(1) << 30u);
+    if ((internal_inputs & (UINT32_C(1) << channel)) != 0u)
+        return true;
+    return k22_adc_pin_exists(selection, instance, mux, channel) ||
+           (mux == KINETIS_ADC_MUX_A &&
+            k22_adc_dedicated_input_exists(selection, instance, channel));
+}
+
 bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, uint8_t instance,
                                       KinetisAdcMux mux, uint8_t channel) {
     if (selection == NULL || instance >= 2u || (unsigned)mux >= KINETIS_ADC_MUX_COUNT ||
         channel >= 31u || (mux == KINETIS_ADC_MUX_B && (channel < 4u || channel > 7u)))
         return false;
-    if (selection->profile != KINETIS_PROFILE_MKV30F12810)
-        return true;
+    if (selection->profile == KINETIS_PROFILE_MKV30F12810) {
+        static const uint32_t inputs[3][2][KINETIS_ADC_MUX_COUNT] = {
+            {{0x6c86f3ffu, 0x000000f0u}, {0x6c84033fu, 0x000000f0u}},
+            {{0x6c86f3f7u, 0x000000f0u}, {0x6c04030eu, 0x00000000u}},
+            {{0x6c8683f6u, 0x000000d0u}, {0x6c040306u, 0x00000000u}},
+        };
+        const uint8_t package_index = kv30_package_index(selection->package);
+        return package_index < 3u &&
+               (inputs[package_index][instance][mux] & (UINT32_C(1) << channel)) != 0u;
+    }
 
-    static const uint32_t inputs[3][2][KINETIS_ADC_MUX_COUNT] = {
-        {{0x0086f3ffu, 0x000000f0u}, {0x0084033fu, 0x000000f0u}},
-        {{0x0086f3f7u, 0x000000f0u}, {0x0004030eu, 0x00000000u}},
-        {{0x008683f6u, 0x000000d0u}, {0x00040306u, 0x00000000u}},
-    };
-    const uint8_t package_index = kv30_package_index(selection->package);
-    return package_index < 3u &&
-           (inputs[package_index][instance][mux] & (UINT32_C(1) << channel)) != 0u;
+    switch (selection->profile) {
+    case KINETIS_PROFILE_MK22FN12810:
+    case KINETIS_PROFILE_MK22FN12812:
+    case KINETIS_PROFILE_MK22FN25612:
+    case KINETIS_PROFILE_MK22FN51212:
+    case KINETIS_PROFILE_MK22FN1M012:
+    case KINETIS_PROFILE_MK22FX51212:
+        return k22_adc_input_exists(selection, instance, mux, channel);
+    default:
+        return false;
+    }
 }
 
 bool kinetis_package_has_peripheral(const KinetisPackageSelection* selection,

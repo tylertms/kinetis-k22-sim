@@ -193,12 +193,12 @@ static void expect_pdb_data_triggers(TestState* state, Kinetis* device) {
                                clock_gate_value | (1u << 22u) | (1u << 27u) | (1u << 31u)),
         "cortex_m4_write_memory(cpu, SIM_SCGC6, 4, clock_gate_value | (1u << 22u) | (1u << 27u) | "
         "(1u << 31u))");
-    expect(state, kinetis_set_adc_input(device, 0, KINETIS_ADC_MUX_A, 5, 0x345u),
-           "kinetis_set_adc_input(device, 0, KINETIS_ADC_MUX_A, 5, 0x345u)");
+    expect(state, kinetis_set_adc_input(device, 0, KINETIS_ADC_MUX_A, 8, 0x345u),
+           "kinetis_set_adc_input(device, 0, KINETIS_ADC_MUX_A, 8, 0x345u)");
     expect(state, kinetis_integration_test_cpu_write8(device, ADC0_CFG1, 0x04u),
            "kinetis_integration_test_cpu_write8(device, ADC0_CFG1, 0x04u)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u)");
     expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC2, 0x40u),
            "kinetis_integration_test_cpu_write8(device, ADC0_SC2, 0x40u)");
 
@@ -251,18 +251,18 @@ static void expect_adc_alternate_triggers(TestState* state) {
            cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gate_value | (1u << 23u) | (1u << 27u)),
            "cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gate_value | (1u << 23u) | "
            "(1u << 27u))");
-    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 5u, 0x345u),
-           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 5u, 0x345u)");
-    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 6u, 0x456u),
-           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 6u, 0x456u)");
+    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 8u, 0x345u),
+           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 8u, 0x345u)");
+    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 9u, 0x456u),
+           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 9u, 0x456u)");
     expect(state, kinetis_integration_test_cpu_write8(device, ADC0_CFG1, 0x04u),
            "kinetis_integration_test_cpu_write8(device, ADC0_CFG1, 0x04u)");
     expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC2, 0x40u),
            "kinetis_integration_test_cpu_write8(device, ADC0_SC2, 0x40u)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1B, 6u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1B, 6u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1B, 9u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1B, 9u)");
     expect(state, cortex_m4_write_memory(cpu, PIT_MCR, 4u, 0u),
            "cortex_m4_write_memory(cpu, PIT_MCR, 4u, 0u)");
     expect(state, cortex_m4_write_memory(cpu, PIT_LDVAL0, 4u, 0u),
@@ -309,8 +309,8 @@ static void expect_adc_alternate_triggers(TestState* state) {
            "cortex_m4_write_memory(cpu, SIM_SCGC4, 4u, serial_clock_gate_value | (1u << 19u))");
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x81u),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x81u)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u)");
     expect(state, kinetis_set_cmp_input(device, 0u, 1u, 10u),
            "kinetis_set_cmp_input(device, 0u, 1u, 10u)");
     expect(state, kinetis_set_cmp_input(device, 0u, 2u, 20u),
@@ -332,8 +332,8 @@ static void expect_adc_alternate_triggers(TestState* state) {
            "cortex_m4_write_memory(cpu, SIM_SCGC5, 4u, clock_gate_value | 1u)");
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x8eu),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x8eu)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 6u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 6u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 9u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 9u)");
     expect(state, kinetis_set_lptmr_input(device, 0u, false),
            "kinetis_set_lptmr_input(device, 0u, false)");
     expect(state, cortex_m4_write_memory(cpu, LPTMR_PSR, 4u, 4u),
@@ -355,8 +355,8 @@ static void expect_adc_alternate_triggers(TestState* state) {
            "cortex_m4_write_memory(cpu, SIM_SCGC6, 4u, clock_gate_value | (1u << 24u))");
     expect(state, cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x88u),
            "cortex_m4_write_memory(cpu, SIM_SOPT7, 4u, 0x88u)");
-    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u),
-           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 5u)");
+    expect(state, kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u),
+           "kinetis_integration_test_cpu_write8(device, ADC0_SC1A, 8u)");
     expect(state, cortex_m4_write_memory(cpu, FTM0_MOD, 4u, 3u),
            "cortex_m4_write_memory(cpu, FTM0_MOD, 4u, 3u)");
     expect(state, cortex_m4_write_memory(cpu, FTM0_C0V, 4u, 2u),
