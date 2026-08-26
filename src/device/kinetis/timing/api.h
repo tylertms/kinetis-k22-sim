@@ -80,6 +80,7 @@ typedef struct {
     uint8_t hardware_trigger_pending_mask;
     uint8_t fault_flags_read_mask;
     uint8_t overflow_count;
+    uint8_t external_clock_edges;
     uint64_t deadtime_remainder;
     uint64_t fault_remainder;
 } KinetisFtmState;
@@ -112,6 +113,7 @@ typedef struct {
     uint32_t sim_scgc7;
     uint32_t sim_clkdiv1;
     uint32_t sim_clkdiv2;
+    bool ftm_clock_input[2];
     uint8_t mcg[14];
     uint8_t osc_cr;
     uint8_t osc_div;
@@ -215,6 +217,8 @@ bool kinetis_timing_ewm_output(const KinetisTiming* timing);
 void kinetis_timing_watchdog_advance(KinetisTiming* timing, uint32_t elapsed_watchdog_ticks);
 bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
                                   bool input_high);
+bool kinetis_timing_set_ftm_clock_input(KinetisTiming* timing, uint8_t input_index,
+                                        bool input_high);
 bool kinetis_timing_set_ftm_fault(KinetisTiming* timing, uint8_t instance, uint8_t input_index,
                                   bool input_high);
 bool kinetis_timing_trigger_ftm_hardware(KinetisTiming* timing, uint8_t instance, uint8_t trigger);

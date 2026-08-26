@@ -79,6 +79,12 @@ bool kinetis_set_ftm_input(Kinetis* device, uint8_t instance, uint8_t channel, b
     return kinetis_timing_set_ftm_input(&device->timing, instance, channel, input_high);
 }
 
+bool kinetis_set_ftm_clock_input(Kinetis* device, uint8_t input_index, bool input_high) {
+    if (device == NULL)
+        return false;
+    return kinetis_timing_set_ftm_clock_input(&device->timing, input_index, input_high);
+}
+
 bool kinetis_set_ftm_fault(Kinetis* device, uint8_t instance, uint8_t input_index,
                            bool input_high) {
     if (device == NULL)

@@ -228,6 +228,65 @@ void kinetis_timing_test_test_ftm(TestState* state, KinetisTiming* timing,
     kinetis_timing_test_expect_read(state, timing, FTM1_EXTTRIG, 4, 0x70u);
 }
 
+void kinetis_timing_test_test_ftm_clock_sources(TestState* state,
+                                                const KinetisDeviceProfile* profile) {
+    KinetisTiming timing;
+    Observations observations = {0};
+    expect(state,
+           kinetis_timing_init(&timing, profile, 8000000u, 32768u,
+                               kinetis_timing_test_signals(&observations)),
+           "FTM clock-source timing state initializes");
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C2, 1u, 0x10u);
+    kinetis_timing_test_expect_write(state, &timing, MCG_C1, 1u, 0x18u);
+    expect(state, kinetis_timing_internal_fixed_clock_hz(&timing) == 31250u,
+           "FTM fixed-frequency source follows the divided FLL reference");
+    kinetis_timing_test_expect_write(state, &timing, SIM_SCGC6, 4u, timing.sim_scgc6 | (1u << 24));
+    kinetis_timing_test_expect_write(state, &timing, FTM0_MOD, 4u, 100u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 2u << 3);
+    kinetis_timing_advance(&timing, 639u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_advance(&timing, 1u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 1u);
+
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, SIM_SOPT4, 4u, 1u << 24);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, (3u << 3) | 1u);
+    kinetis_timing_advance(&timing, 640u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 0u, true),
+           "unselected FTM clock input accepts a rising edge");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 0u, false),
+           "unselected FTM clock input accepts a falling edge");
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 1u, true),
+           "selected FTM clock input accepts its first rising edge");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 0u);
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 1u, true),
+           "steady FTM clock input is accepted");
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 1u, false),
+           "selected FTM clock input accepts a falling edge");
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 1u, true),
+           "selected FTM clock input accepts its second rising edge");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 1u);
+
+    kinetis_timing_test_expect_write(state, &timing, SIM_SOPT4, 4u, 0u);
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 0u, true),
+           "rerouted FTM clock accepts its first rising edge");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 1u);
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 0u, false),
+           "rerouted FTM clock accepts a falling edge");
+    expect(state, kinetis_timing_set_ftm_clock_input(&timing, 0u, true),
+           "rerouted FTM clock accepts its second rising edge");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4u, 2u);
+    expect(state, !kinetis_timing_set_ftm_clock_input(&timing, 2u, true),
+           "invalid FTM clock input is rejected");
+    expect(state, !kinetis_timing_set_ftm_clock_input(NULL, 0u, true),
+           "null FTM timing state is rejected");
+}
+
 void kinetis_timing_test_test_ftm_input_capture(TestState* state,
                                                 const KinetisDeviceProfile* profile) {
     KinetisTiming timing;

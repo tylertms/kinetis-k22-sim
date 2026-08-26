@@ -84,6 +84,7 @@ bool kinetis_timing_internal_write_wdog(KinetisTiming* timing, uint32_t address,
 uint32_t kinetis_timing_internal_rtc_access_reset(const KinetisTiming* timing);
 uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
                                              uint32_t source_hz, uint32_t core_hz);
+uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing);
 uint8_t kinetis_timing_internal_ftm_active_fault_mask(const KinetisFtmState* ftm);
 uint8_t kinetis_timing_internal_ftm_channel_count(const KinetisTiming* timing, uint8_t instance);
 uint8_t kinetis_timing_internal_ftm_fault_mode(const KinetisFtmState* ftm);

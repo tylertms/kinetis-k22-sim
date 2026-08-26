@@ -14,9 +14,7 @@ uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycle
     return accumulated_cycles / core_hz;
 }
 
-static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
-    const uint8_t mcg_c4_value = timing->mcg[3];
-    const uint16_t fll_multipliers[4] = {640u, 1280u, 1920u, 2560u};
+static uint32_t calculate_fll_reference_clock_hz(const KinetisTiming* timing) {
     uint32_t reference_clock_hz = timing->slow_irc_hz;
     if ((timing->mcg[0] & 4u) == 0) {
         const uint8_t reference_divider_index = (timing->mcg[0] >> 3u) & 7u;
@@ -27,6 +25,13 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
                                                : high_range_dividers[reference_divider_index];
         reference_clock_hz = timing->external_oscillator_hz / reference_divider;
     }
+    return reference_clock_hz;
+}
+
+static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
+    const uint8_t mcg_c4_value = timing->mcg[3];
+    const uint16_t fll_multipliers[4] = {640u, 1280u, 1920u, 2560u};
+    const uint32_t reference_clock_hz = calculate_fll_reference_clock_hz(timing);
     uint32_t fll_multiplier = fll_multipliers[(mcg_c4_value >> 5u) & 3u];
     if ((mcg_c4_value & 0x80u) != 0) {
         const uint16_t dmx_multipliers[4] = {732u, 1464u, 2197u, 2929u};
@@ -34,6 +39,17 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
     }
     return reference_clock_hz == 0 ? timing->slow_irc_hz * fll_multiplier
                                    : reference_clock_hz * fll_multiplier;
+}
+
+uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
+    if (timing == NULL)
+        return 0u;
+    const uint32_t reference_clock_hz = calculate_fll_reference_clock_hz(timing);
+    const uint32_t core_divider = ((timing->sim_clkdiv1 >> 28u) & 15u) + 1u;
+    const uint64_t mcg_output_clock_hz = (uint64_t)timing->core_clock_hz * core_divider;
+    return reference_clock_hz != 0u && reference_clock_hz <= mcg_output_clock_hz / 8u
+               ? reference_clock_hz
+               : 0u;
 }
 
 static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {

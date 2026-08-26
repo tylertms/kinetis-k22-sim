@@ -38,11 +38,16 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
     }
     KinetisFtmState* ftm = &timing->ftm[instance];
     if (offset == 0) {
+        const uint32_t previous_clock_configuration = ftm->sc & 0x1fu;
         const bool was_clock_stopped = (ftm->sc & 0x18u) == 0u;
         uint32_t overflow_flag = ftm->sc & 0x80u;
         if ((write_value & 0x80u) == 0u && ftm->overflow_flag_read)
             overflow_flag = 0u;
         ftm->sc = overflow_flag | (write_value & 0x7fu);
+        if ((ftm->sc & 0x1fu) != previous_clock_configuration) {
+            ftm->remainder = 0u;
+            ftm->external_clock_edges = 0u;
+        }
         ftm->overflow_flag_read = false;
         if (was_clock_stopped && (ftm->sc & 0x18u) != 0u && ftm->counter == ftm->initial &&
             (ftm->registers[6] & (1u << 6u)) != 0u)

@@ -124,6 +124,12 @@ static void test_data_api(TestState* state, Kinetis* device) {
            "!kinetis_set_ftm_input(device, 4u, 0u, false)");
     expect(state, !kinetis_set_ftm_input(NULL, 0u, 0u, false),
            "!kinetis_set_ftm_input(NULL, 0u, 0u, false)");
+    expect(state, kinetis_set_ftm_clock_input(device, 0u, true),
+           "kinetis_set_ftm_clock_input(device, 0u, true)");
+    expect(state, !kinetis_set_ftm_clock_input(device, 2u, false),
+           "!kinetis_set_ftm_clock_input(device, 2u, false)");
+    expect(state, !kinetis_set_ftm_clock_input(NULL, 0u, false),
+           "!kinetis_set_ftm_clock_input(NULL, 0u, false)");
     expect(state, kinetis_set_ftm_fault(device, 0u, 0u, true),
            "kinetis_set_ftm_fault(device, 0u, 0u, true)");
     expect(state, !kinetis_set_ftm_fault(device, 4u, 0u, false),

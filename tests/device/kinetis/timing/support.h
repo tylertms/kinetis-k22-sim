@@ -8,6 +8,7 @@
 
 enum {
     SIM_SCGC3 = 0x40048030u,
+    SIM_SOPT4 = 0x4004800cu,
     SIM_SOPT7 = 0x40048018u,
     SIM_SCGC5 = 0x40048038u,
     SIM_SCGC6 = 0x4004803cu,
@@ -128,6 +129,7 @@ typedef struct {
 
 uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
                                              uint32_t source_hz, uint32_t core_hz);
+uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing);
 void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles);
 
 KinetisTimingSignals kinetis_timing_test_signals(Observations* observations);
@@ -144,6 +146,8 @@ void kinetis_timing_test_test_ftm_input_capture(TestState* state,
 void kinetis_timing_test_test_ftm_output(TestState* state, const KinetisDeviceProfile* profile);
 void kinetis_timing_test_test_ftm(TestState* state, KinetisTiming* timing,
                                   Observations* observations);
+void kinetis_timing_test_test_ftm_clock_sources(TestState* state,
+                                                const KinetisDeviceProfile* profile);
 void kinetis_timing_test_test_ftm_census(TestState* state, KinetisTiming* timing);
 void kinetis_timing_test_test_state_census(TestState* state, KinetisTiming* timing);
 void kinetis_timing_test_test_low_leakage_wakeup(TestState* state, KinetisTiming* timing,

@@ -507,26 +507,10 @@ static void advance_ftm_up_down(KinetisTiming* timing, uint8_t instance, uint64_
     kinetis_timing_internal_update_ftm_irq(timing, instance);
 }
 
-static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_t cycles) {
+static void advance_ftm_ticks(KinetisTiming* timing, uint8_t instance, uint64_t ticks) {
     KinetisFtmState* ftm = &timing->ftm[instance];
-    if (is_ftm_quadrature_enabled(ftm))
+    if (ticks == 0u)
         return;
-    const uint8_t clock_select = (uint8_t)((ftm->sc >> 3u) & 3u);
-    if (!ftm_gate(timing, instance) || clock_select == 0 || timing->debug_halted) {
-        return;
-    }
-    uint32_t source_hz = timing->bus_clock_hz;
-    if (clock_select == 2u) {
-        source_hz = timing->rtc_oscillator_hz;
-    } else if (clock_select == 3u) {
-        source_hz = timing->external_oscillator_hz;
-    }
-    source_hz >>= ftm->sc & 7u;
-    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&ftm->remainder, cycles, source_hz,
-                                                               timing->core_clock_hz);
-    if (ticks == 0) {
-        return;
-    }
     if ((ftm->sc & (1u << 5u)) != 0u) {
         advance_ftm_up_down(timing, instance, ticks);
         return;
@@ -571,6 +555,49 @@ static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_
     }
     ftm_loading_point(ftm, overflows != 0u, overflows != 0u, match_mask);
     kinetis_timing_internal_update_ftm_irq(timing, instance);
+}
+
+static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_t cycles) {
+    KinetisFtmState* ftm = &timing->ftm[instance];
+    if (is_ftm_quadrature_enabled(ftm))
+        return;
+    const uint8_t clock_select = (uint8_t)((ftm->sc >> 3u) & 3u);
+    if (!ftm_gate(timing, instance) || clock_select == 0u || clock_select == 3u ||
+        timing->debug_halted)
+        return;
+    uint32_t source_hz =
+        clock_select == 1u ? timing->bus_clock_hz : kinetis_timing_internal_fixed_clock_hz(timing);
+    source_hz >>= ftm->sc & 7u;
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&ftm->remainder, cycles, source_hz,
+                                                               timing->core_clock_hz);
+    advance_ftm_ticks(timing, instance, ticks);
+}
+
+bool kinetis_timing_set_ftm_clock_input(KinetisTiming* timing, uint8_t input_index,
+                                        bool input_high) {
+    if (timing == NULL || timing->profile == NULL || input_index >= 2u)
+        return false;
+    const bool previous = timing->ftm_clock_input[input_index];
+    timing->ftm_clock_input[input_index] = input_high;
+    if (previous || !input_high)
+        return true;
+    for (uint8_t instance = 0u; instance < 4u; instance++) {
+        KinetisFtmState* ftm = &timing->ftm[instance];
+        const KinetisPeripheralId peripheral =
+            (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
+        const uint8_t selected_input = (uint8_t)((timing->sim_sopt4 >> (24u + instance)) & 1u);
+        if (selected_input != input_index || !kinetis_timing_internal_has(timing, peripheral) ||
+            !ftm_gate(timing, instance) || ((ftm->sc >> 3u) & 3u) != 3u ||
+            is_ftm_quadrature_enabled(ftm) || timing->debug_halted)
+            continue;
+        ftm->external_clock_edges++;
+        const uint8_t divider = (uint8_t)(1u << (ftm->sc & 7u));
+        if (ftm->external_clock_edges == divider) {
+            ftm->external_clock_edges = 0u;
+            advance_ftm_ticks(timing, instance, 1u);
+        }
+    }
+    return true;
 }
 
 static uint32_t ftm_input_threshold(const KinetisFtmState* ftm, uint8_t channel) {

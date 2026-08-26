@@ -125,7 +125,7 @@ int main(void) {
     mix(&census, kinetis_timing_get_ftm_output(&incomplete, 0u, 0u, &output));
     expect(&state,
            census.cases == 100000u && census.signals == 400000u &&
-               census.fingerprint == UINT64_C(11262719079239042716),
+               census.fingerprint == UINT64_C(8080721376136176376),
            "FTM state census matches");
     return test_finish(&state);
 }
