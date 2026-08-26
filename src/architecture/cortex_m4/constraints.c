@@ -205,7 +205,7 @@ static bool has_invalid_doubleword(uint16_t first, uint16_t second) {
     const uint8_t second_target = (uint8_t)((second >> 8) & 15u);
     const bool literal = load && base == 15u && pre_index && add && !write_back;
     return is_stack_or_program_counter(first_target) ||
-           is_stack_or_program_counter(second_target) || first_target == second_target ||
+           is_stack_or_program_counter(second_target) || (load && first_target == second_target) ||
            (base == 15u && !literal) ||
            (write_back && (base == first_target || base == second_target));
 }

@@ -88,6 +88,15 @@ static void test_doubleword(TestState* state, Kinetis* device) {
     expect(state, cortex_m4_get_register(cpu, 8) == 0x20000050u,
            "cortex_m4_get_register(cpu, 8) == 0x20000050u");
 
+    load_instruction(state, device, 0xe9c3u, 0x0000u);
+    cortex_m4_set_register(cpu, 0, 0x5aa55aa5u);
+    cortex_m4_set_register(cpu, 3, 0x20000040u);
+    execute(state, device);
+    expect(state, read_word(state, device, 0x20000040u) == 0x5aa55aa5u,
+           "read_word(state, device, 0x20000040u) == 0x5aa55aa5u");
+    expect(state, read_word(state, device, 0x20000044u) == 0x5aa55aa5u,
+           "read_word(state, device, 0x20000044u) == 0x5aa55aa5u");
+
     load_instruction(state, device, 0xe975u, 0x3403u);
     expect(state, kinetis_write(device, 0x20000054u, values, sizeof(values)),
            "kinetis_write(device, 0x20000054u, values, sizeof(values))");
