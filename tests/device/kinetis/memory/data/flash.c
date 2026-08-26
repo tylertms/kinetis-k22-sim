@@ -624,6 +624,12 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_write_fccob(state, data, 4u, 0x02u);
     kinetis_data_test_write_fccob(state, data, 5u, 0x04u);
     kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
+    kinetis_data_test_write_fccob(state, data, 4u, 0u);
+    kinetis_data_test_flash_command(state, data, 0x03u, 0x8003f8u, 40u);
+    expect(state, kinetis_data_test_read_fccob(state, data, 8u) == 0xf4u,
+           "Read Resource returns the encoded DEPART IFR byte");
+    expect(state, kinetis_data_test_read_fccob(state, data, 9u) == 0xc2u,
+           "Read Resource returns the encoded EEESIZE IFR byte");
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) == 0u");
     kinetis_data_test_write_fccob(state, data, 1u, 0u);

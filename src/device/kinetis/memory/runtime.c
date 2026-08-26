@@ -4,7 +4,7 @@
 #include <string.h>
 
 static uint32_t eeprom_size(const KinetisData* data) {
-    const uint8_t size_code = data->flash_data_ifr[0x3fdu];
+    const uint8_t size_code = data->flash_data_ifr[0x3fdu] & 0x0fu;
     return size_code >= 2u && size_code <= 9u ? 1u << (14u - size_code) : 0u;
 }
 
@@ -192,7 +192,7 @@ void kinetis_data_reset(KinetisData* data) {
     data->flash[0x16] = data->flash_config[0x0e];
     data->flash[0x17] = data->flash_config[0x0f];
     if (data->flexram != NULL) {
-        const uint8_t partition_code = data->flash_data_ifr[0x3fcu];
+        const uint8_t partition_code = data->flash_data_ifr[0x3fcu] & 0x0fu;
         const bool eeprom_partitioned = partition_code != 0xffu && partition_code != 0x00u &&
                                         partition_code != 0x0du && partition_code != 0x0fu &&
                                         data->eeprom != NULL;

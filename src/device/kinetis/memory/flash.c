@@ -65,7 +65,7 @@ static bool flash_load(KinetisData* data, uint32_t address, uint8_t byte_count,
 static uint32_t flash_data_size(const KinetisData* data) {
     if (!data->flash_partitioned)
         return data->profile->flexnvm_size;
-    switch (data->flash_data_ifr[0x3fcu]) {
+    switch (data->flash_data_ifr[0x3fcu] & 0x0fu) {
     case 0x00u:
     case 0x0du:
         return 0x20000u;
@@ -325,8 +325,8 @@ static bool flash_program_partition(KinetisData* data) {
         (eeprom_size_code > 9u && !eeprom_disabled) || no_eeprom != eeprom_disabled)
         return false;
     memset(data->flexnvm, 0xff, data->profile->flexnvm_size);
-    data->flash_data_ifr[0x3fcu] = partition_code;
-    data->flash_data_ifr[0x3fdu] = eeprom_size_code;
+    data->flash_data_ifr[0x3fcu] = (uint8_t)(0xf0u | partition_code);
+    data->flash_data_ifr[0x3fdu] = (uint8_t)(0xc0u | eeprom_size_code);
     data->flash_partitioned = true;
     data->flexram_eeprom = !no_eeprom;
     memset(data->eeprom, 0xff, data->profile->flexram_size);
