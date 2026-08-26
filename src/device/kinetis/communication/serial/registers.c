@@ -462,29 +462,39 @@ bool kinetis_serial_internal_write_uart(KinetisSerialUart* uart, bool lpuart,
 
 bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_offset,
                                       uint8_t byte_count, uint32_t* output_value) {
-    if (!spi->clock_enabled || byte_count != 4 || (register_offset & 3u) != 0)
+    if (!spi->clock_enabled)
         return false;
     kinetis_serial_internal_refresh_spi(spi);
-    if (register_offset == SPI_POPR) {
+    if (register_offset == SPI_POPR && (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
         uint16_t received = 0;
         if (kinetis_serial_internal_fifo_pop(&spi->receive, &received, NULL))
-            *output_value = received;
+            *output_value = received & (UINT32_MAX >> ((4u - byte_count) * 8u));
         else {
             spi->registers[SPI_SR / 4] |= 1u << 19;
-            *output_value = spi->registers[SPI_POPR / 4];
+            *output_value = spi->registers[SPI_POPR / 4] & (UINT32_MAX >> ((4u - byte_count) * 8u));
         }
         kinetis_serial_internal_refresh_spi(spi);
         return true;
     }
+    if (byte_count != 4u || (register_offset & 3u) != 0u)
+        return false;
     *output_value = spi->registers[register_offset / 4];
     return true;
 }
 
 bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_offset,
                                        uint8_t byte_count, uint32_t write_value) {
-    if (!spi->clock_enabled || byte_count != 4 || (register_offset & 3u) != 0)
+    if (!spi->clock_enabled)
         return false;
-    if (register_offset == SPI_MCR) {
+    if (register_offset == SPI_PUSHR &&
+        (byte_count == 1u || byte_count == 2u || byte_count == 4u)) {
+        uint16_t command = byte_count == 4u ? (uint16_t)(write_value >> 16) : 0u;
+        if (!kinetis_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth,
+                                               (uint16_t)write_value, command))
+            spi->registers[SPI_SR / 4] |= 1u << 27;
+    } else if (byte_count != 4u || (register_offset & 3u) != 0u) {
+        return false;
+    } else if (register_offset == SPI_MCR) {
         if ((write_value & (1u << 10)) != 0)
             fifo_clear(&spi->receive);
         if ((write_value & (1u << 11)) != 0)
@@ -492,11 +502,6 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
         spi->registers[register_offset / 4] = write_value & ~0x00000c00u;
     } else if (register_offset == SPI_SR) {
         spi->registers[register_offset / 4] &= ~(write_value & 0xba0a0000u);
-    } else if (register_offset == SPI_PUSHR) {
-        uint16_t command = (uint16_t)(write_value >> 16);
-        if (!kinetis_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth,
-                                               (uint16_t)write_value, command))
-            spi->registers[SPI_SR / 4] |= 1u << 27;
     } else if (register_offset == SPI_POPR) {
     } else {
         spi->registers[register_offset / 4] = write_value;

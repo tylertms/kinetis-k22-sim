@@ -217,6 +217,16 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "read_register(state, &serial, SPI0_BASE, 4) == 0x00004001u");
     write_register(state, &serial, SPI0_BASE, 4, 0);
     write_register(state, &serial, SPI0_BASE + 0x30, 4, 3u << 16);
+    expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0),
+           "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0)");
+    write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x5au);
+    kinetis_serial_advance(&serial, 64);
+    expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 1) == 0xabu,
+           "read_register(state, &serial, SPI0_BASE + 0x38, 1) == 0xabu");
+    uint16_t transmitted_value;
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value),
+           "kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value)");
+    expect(state, transmitted_value == 0x5au, "transmitted_value == 0x5au");
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0)");
     write_register(state, &serial, SPI0_BASE + 0x34, 4, 0xabcdu);
@@ -230,7 +240,6 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "!kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_SPI0)");
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0x1234u,
            "read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0x1234u");
-    uint16_t transmitted_value;
     expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value),
            "kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted_value)");
     expect(state, transmitted_value == 0xabcdu, "transmitted_value == 0xabcdu");
