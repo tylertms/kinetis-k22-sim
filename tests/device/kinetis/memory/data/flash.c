@@ -641,6 +641,14 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_flash_command(state, data, 0x08u, 0u, 2000u);
     expect(state, bus.flash[0u] == 0xffu, "bus.flash[0u] == 0xffu");
     kinetis_data_test_write_value(state, data, 0x10000000u, 1u, 0u);
+    data->flash[0x16u] = 0xfeu;
+    kinetis_data_test_flash_command(state, data, 0x44u, 0u, 2000u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x10u) != 0u,
+           "Erase All Blocks respects EEPROM protection");
+    expect(state, kinetis_data_test_read_value(state, data, 0x10000000u, 1u) == 0u,
+           "protected EEPROM remains programmed");
+    kinetis_data_test_clear_flash_status(state, data);
+    data->flash[0x16u] = 0xffu;
     kinetis_data_test_flash_command(state, data, 0x44u, 0u, 2000u);
     expect(state, kinetis_data_test_read_value(state, data, 0x10000000u, 1u) == 0xffu,
            "kinetis_data_test_read_value(state, data, 0x10000000u, 1u) == 0xffu");

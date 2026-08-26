@@ -528,7 +528,7 @@ static void flash_execute(KinetisData* data) {
         protection_failure =
             flash_memory_range_protected(data, 0, data->profile->program_flash_size);
         if (!protection_failure && data->profile->flexnvm_size != 0u)
-            protection_failure = data->flash[0x17u] != 0xffu;
+            protection_failure = data->flash[0x16u] != 0xffu || data->flash[0x17u] != 0xffu;
         if (!protection_failure) {
             valid = flash_erase(data, 0, data->profile->program_flash_size);
             if (valid && data->profile->flexnvm_size != 0u)
