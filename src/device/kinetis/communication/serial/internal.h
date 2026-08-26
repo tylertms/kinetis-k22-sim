@@ -6,6 +6,7 @@
 #include <string.h>
 
 enum {
+    UART_C1 = 0x02,
     UART_C2 = 0x03,
     UART_S1 = 0x04,
     UART_S2 = 0x05,

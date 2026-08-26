@@ -45,14 +45,20 @@ bool kinetis_serial_write(KinetisSerial* serial, uint32_t address, uint8_t byte_
 static uint32_t uart_frame_cycles(const KinetisSerialUart* uart, bool is_lpuart) {
     if (is_lpuart) {
         uint32_t baud_register = kinetis_serial_internal_load32(&uart->registers[LPUART_BAUD]);
+        uint32_t control_register = kinetis_serial_internal_load32(&uart->registers[LPUART_CTRL]);
         uint32_t baud_divisor = baud_register & 0x1fffu;
         uint32_t oversampling_rate = ((baud_register >> 24) & 0x1fu) + 1u;
-        return (baud_divisor == 0 ? 1u : baud_divisor * oversampling_rate) * 10u;
+        uint32_t frame_bits = 10u + ((baud_register >> 13) & 1u);
+        frame_bits += (baud_register & (1u << 29)) != 0 ? 2u : (control_register >> 4) & 1u;
+        return (baud_divisor == 0 ? 1u : baud_divisor * oversampling_rate) * frame_bits;
     }
     uint32_t baud_divisor = ((uint32_t)(uart->registers[0] & 0x1fu) << 8) | uart->registers[1];
     uint32_t baud_fraction = uart->registers[UART_C4] & 0x1fu;
     uint32_t thirty_second_cycles = baud_divisor * 512u + baud_fraction * 16u;
-    return thirty_second_cycles == 0 ? 1u : (thirty_second_cycles * 10u + 31u) / 32u;
+    uint32_t frame_bits = 10u;
+    frame_bits +=
+        (uart->registers[UART_C4] & 0x20u) != 0 ? 2u : (uart->registers[UART_C1] >> 4) & 1u;
+    return thirty_second_cycles == 0 ? 1u : (thirty_second_cycles * frame_bits + 31u) / 32u;
 }
 
 static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint64_t cycles) {

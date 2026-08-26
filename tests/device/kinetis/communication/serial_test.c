@@ -208,6 +208,36 @@ static void test_lpuart(TestState* state) {
            "(read_register(state, &serial, LPUART0_BASE + 4, 4) & 0x00010000u) == 0");
 }
 
+static void test_uart_frame_lengths(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MK22FN51212);
+    uint16_t transmitted_value = 0;
+
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true),
+           "kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true)");
+    write_register(state, &serial, UART0_BASE + 1, 1, 1u);
+    write_register(state, &serial, UART0_BASE + 2, 1, 1u << 4);
+    write_register(state, &serial, UART0_BASE + 3, 1, 1u << 3);
+    write_register(state, &serial, UART0_BASE + 7, 1, 0x11u);
+    kinetis_serial_advance(&serial, 175u);
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "eleven-bit UART frame remains active before its final clock");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
+           "eleven-bit UART frame completes on its final clock");
+
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_LPUART0, true),
+           "kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_LPUART0, true)");
+    write_register(state, &serial, LPUART0_BASE, 4, 0x0f002001u);
+    write_register(state, &serial, LPUART0_BASE + 8, 4, 1u << 19);
+    write_register(state, &serial, LPUART0_BASE + 0x0c, 4, 0x22u);
+    kinetis_serial_advance(&serial, 175u);
+    expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "two-stop-bit LPUART frame remains active before its final clock");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "two-stop-bit LPUART frame completes on its final clock");
+}
+
 static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MK22FN51212);
 
@@ -845,6 +875,7 @@ int main(void) {
     test_uart_transfer_status_interrupt_and_dma(&state);
     test_uart_fifo_overrun_flush_and_copy(&state);
     test_lpuart(&state);
+    test_uart_frame_lengths(&state);
     test_spi_transfer_fifo_interrupt_dma_and_errors(&state);
     test_spi_profile_presence(&state);
     test_i2c_master_events_timing_irq_and_dma(&state);
