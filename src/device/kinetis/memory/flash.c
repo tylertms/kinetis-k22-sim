@@ -68,7 +68,6 @@ static uint32_t flash_data_size(const KinetisData* data) {
     switch (data->flash_data_ifr[0x3fcu]) {
     case 0x00u:
     case 0x0du:
-    case 0x0fu:
         return 0x20000u;
     case 0x03u:
         return 0x18000u;
@@ -305,20 +304,18 @@ static bool flash_verify_key(KinetisData* data) {
 }
 
 static bool flash_program_partition(KinetisData* data) {
-    static const uint8_t valid_partition_codes[] = {0x00u, 0x03u, 0x04u, 0x05u, 0x08u,
-                                                    0x0bu, 0x0cu, 0x0du, 0x0fu};
+    static const uint8_t valid_partition_codes[] = {0x00u, 0x03u, 0x04u, 0x05u,
+                                                    0x08u, 0x0bu, 0x0cu, 0x0du};
     if (data->profile->flexnvm_size == 0u || data->flash_partitioned)
         return false;
-    const uint8_t load_code = flash_fccob(data, 3u);
     const uint8_t eeprom_size_code = flash_fccob(data, 4u);
     const uint8_t partition_code = flash_fccob(data, 5u);
     bool valid_partition_code = false;
     for (size_t code_index = 0u; code_index < sizeof(valid_partition_codes); code_index++)
         valid_partition_code |= partition_code == valid_partition_codes[code_index];
-    const bool no_eeprom =
-        partition_code == 0x00u || partition_code == 0x0du || partition_code == 0x0fu;
+    const bool no_eeprom = partition_code == 0x00u || partition_code == 0x0du;
     const bool eeprom_disabled = eeprom_size_code == 0x0fu;
-    if (load_code > 1u || (eeprom_size_code & 0xc0u) != 0u || (partition_code & 0xf0u) != 0u ||
+    if ((eeprom_size_code & 0xc0u) != 0u || (partition_code & 0xf0u) != 0u ||
         !valid_partition_code || (eeprom_size_code < 2u && !eeprom_disabled) ||
         (eeprom_size_code > 9u && !eeprom_disabled) || no_eeprom != eeprom_disabled)
         return false;

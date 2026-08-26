@@ -306,17 +306,18 @@ static void test_flash_swap_indicator_failures(TestState* state) {
 static void test_flash_partition_codes(TestState* state) {
     static const struct {
         uint8_t code;
+        uint8_t unused_fccob3;
         uint32_t data_size;
-    } cases[] = {{0x00u, 0x20000u}, {0x03u, 0x18000u}, {0x04u, 0x10000u},
-                 {0x05u, 0u},       {0x08u, 0u},       {0x0bu, 0x8000u},
-                 {0x0cu, 0x10000u}, {0x0du, 0x20000u}, {0x0fu, 0x20000u}};
+    } cases[] = {{0x00u, 0xa5u, 0x20000u}, {0x03u, 0u, 0x18000u}, {0x04u, 0u, 0x10000u},
+                 {0x05u, 0u, 0u},          {0x08u, 0u, 0u},       {0x0bu, 0u, 0x8000u},
+                 {0x0cu, 0u, 0x10000u},    {0x0du, 0u, 0x20000u}};
     const uint8_t phrase[8] = {1u, 3u, 5u, 7u, 9u, 11u, 13u, 15u};
     for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); index++) {
         TestBus bus;
         memset(&bus, 0, sizeof(bus));
         memset(bus.flash, 0xff, sizeof(bus.flash));
         KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FX51212);
-        kinetis_data_test_write_fccob(state, data, 3u, 0u);
+        kinetis_data_test_write_fccob(state, data, 3u, cases[index].unused_fccob3);
         kinetis_data_test_write_fccob(state, data, 4u,
                                       cases[index].data_size == 0x20000u ? 0x0fu : 2u);
         kinetis_data_test_write_fccob(state, data, 5u, cases[index].code);
@@ -354,6 +355,17 @@ static void test_flash_partition_codes(TestState* state) {
         }
         kinetis_data_destroy(data);
     }
+
+    TestBus bus;
+    memset(&bus, 0, sizeof(bus));
+    memset(bus.flash, 0xff, sizeof(bus.flash));
+    KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FX51212);
+    kinetis_data_test_write_fccob(state, data, 4u, 0x0fu);
+    kinetis_data_test_write_fccob(state, data, 5u, 0x0fu);
+    kinetis_data_test_flash_command_without_address(state, data, 0x80u, 2000u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
+           "reserved FlexNVM partition code is rejected");
+    kinetis_data_destroy(data);
 }
 
 int main(void) {
