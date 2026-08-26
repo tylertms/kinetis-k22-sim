@@ -103,12 +103,6 @@ static void test_configuration_errors(TestState* state, const KinetisDeviceProfi
            "reserved DMA source size records SAE");
 
     prepare_descriptor(data);
-    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 8u, 4u, 0u);
-    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
-           "zero DMA byte count is rejected");
-    expect(state, error_status(data) == UINT32_C(0x80000008), "zero DMA byte count records NCE");
-
-    prepare_descriptor(data);
     kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 6u, 2u, UINT32_C(0x0100));
     kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 0u, 4u, UINT32_C(0x20000001));
     kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 4u, 2u, 1u);
@@ -125,6 +119,39 @@ static void test_configuration_errors(TestState* state, const KinetisDeviceProfi
            "mismatched DMA iteration linking is rejected");
     expect(state, error_status(data) == UINT32_C(0x80000008),
            "mismatched DMA iteration linking records NCE");
+    kinetis_data_destroy(data);
+}
+
+static void test_minor_byte_count_formats(TestState* state, const KinetisDeviceProfile* profile) {
+    BusState bus = {0u};
+    KinetisData* data =
+        kinetis_data_create(profile, (KinetisDataBus){&bus, bus_read, bus_write, NULL, NULL, NULL});
+    expect(state, data != NULL, "create DMA for minor byte count formats");
+    if (data == NULL)
+        return;
+
+    prepare_descriptor(data);
+    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 0u, 4u, UINT32_C(0x10000000));
+    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 8u, 4u, UINT32_C(0x40000000));
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "minor-loop-disabled DMA uses all 32 count bits");
+    expect(state, error_status(data) == UINT32_C(0x80000002),
+           "full-width minor count reaches the source bus");
+
+    prepare_descriptor(data);
+    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 0u, 4u, UINT32_C(0x10000000));
+    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 8u, 4u, 0u);
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "zero full-width minor count starts a 4 GiB transfer");
+    expect(state, error_status(data) == UINT32_C(0x80000002),
+           "zero full-width minor count reaches the source bus");
+
+    prepare_descriptor(data);
+    kinetis_data_internal_store_bytes(data->dma, 0u, 4u, UINT32_C(0x80));
+    kinetis_data_internal_store_bytes(data->dma + UINT32_C(0x1000), 8u, 4u, UINT32_C(0x400));
+    expect(state, kinetis_data_internal_dma_service_channel(data, 0u),
+           "mapped minor loop without offsets uses the 30-bit count");
+    expect(state, bus.reads == UINT32_C(0x400), "mapped minor loop transfers 1024 bytes");
     kinetis_data_destroy(data);
 }
 
@@ -218,6 +245,7 @@ int main(void) {
         test_missing_bus_callbacks(&state, profile);
         test_error_replacement(&state, profile);
         test_configuration_errors(&state, profile);
+        test_minor_byte_count_formats(&state, profile);
         test_scatter_gather(&state, profile);
         test_burst_sizes(&state, profile);
         test_channel_boundaries(&state, profile);

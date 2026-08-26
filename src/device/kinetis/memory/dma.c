@@ -261,10 +261,18 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         kinetis_data_internal_load_bytes(transfer_descriptor, 8u, 4u);
     const bool minor_offset_mapping =
         (kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 0x80u) != 0u;
-    const uint32_t transfer_byte_count =
-        minor_offset_mapping ? minor_loop_config & 0x3ffu : minor_loop_config & 0x3fffffffu;
+    const bool source_minor_offset =
+        minor_offset_mapping && (minor_loop_config & 0x80000000u) != 0u;
+    const bool destination_minor_offset =
+        minor_offset_mapping && (minor_loop_config & 0x40000000u) != 0u;
+    const bool minor_offset_enabled = source_minor_offset || destination_minor_offset;
+    uint64_t transfer_byte_count = minor_loop_config;
+    if (!minor_offset_mapping && transfer_byte_count == 0u)
+        transfer_byte_count = UINT64_C(1) << 32u;
+    else if (minor_offset_mapping)
+        transfer_byte_count &= minor_offset_enabled ? 0x3ffu : 0x3fffffffu;
     int32_t minor_loop_offset = 0;
-    if (minor_offset_mapping) {
+    if (minor_offset_enabled) {
         minor_loop_offset = (int32_t)((minor_loop_config >> 10u) & 0xfffffu);
         if ((minor_loop_offset & 0x80000) != 0)
             minor_loop_offset |= (int32_t)0xfff00000u;
@@ -298,7 +306,7 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         configuration_error |= 1u << 4u;
     const uint16_t encoded_initial_iteration =
         (uint16_t)kinetis_data_internal_load_bytes(transfer_descriptor, 0x1eu, 2u);
-    if (iteration_count == 0u || transfer_byte_count == 0u ||
+    if (iteration_count == 0u ||
         (encoded_iteration & 0x8000u) != (encoded_initial_iteration & 0x8000u) ||
         (source_transfer_size != 0u && transfer_byte_count % source_transfer_size != 0u) ||
         (destination_transfer_size != 0u && transfer_byte_count % destination_transfer_size != 0u))
@@ -313,8 +321,8 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
     data->dma_active |= (uint16_t)(1u << channel);
     uint8_t transfer_buffer[32] = {0u};
     uint8_t buffered_bytes = 0u;
-    uint32_t source_bytes = 0u;
-    uint32_t destination_bytes = 0u;
+    uint64_t source_bytes = 0u;
+    uint64_t destination_bytes = 0u;
     while (destination_bytes < transfer_byte_count) {
         while (buffered_bytes < destination_transfer_size && source_bytes < transfer_byte_count) {
             if (!dma_bus_read_transfer(data, source_address, source_transfer_size,
@@ -343,9 +351,9 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         buffered_bytes = (uint8_t)(buffered_bytes - destination_transfer_size);
         memmove(transfer_buffer, transfer_buffer + destination_transfer_size, buffered_bytes);
     }
-    if (minor_offset_mapping && (minor_loop_config & 0x80000000u) != 0u)
+    if (source_minor_offset)
         source_address = (uint32_t)((int64_t)source_address + minor_loop_offset);
-    if (minor_offset_mapping && (minor_loop_config & 0x40000000u) != 0u)
+    if (destination_minor_offset)
         destination_address = (uint32_t)((int64_t)destination_address + minor_loop_offset);
     data->dma_active &= (uint16_t)~(1u << channel);
     kinetis_data_internal_store_bytes(transfer_descriptor, 0x1cu, 2u, running_control);
