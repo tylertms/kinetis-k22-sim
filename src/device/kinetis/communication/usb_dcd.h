@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_USBDCD_H
-#define KINETIS_SIM_K22_USBDCD_H
+#ifndef KINETIS_SIM_USBDCD_H
+#define KINETIS_SIM_USBDCD_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,14 +7,14 @@
 #include "kinetis.h"
 
 typedef enum {
-    K22_USBDCD_IDLE,
-    K22_USBDCD_DATA_CONTACT,
-    K22_USBDCD_PRIMARY_DELAY,
-    K22_USBDCD_PRIMARY_DETECTION,
-    K22_USBDCD_WAIT_PULLUP,
-    K22_USBDCD_SECONDARY_DELAY,
-    K22_USBDCD_SECONDARY_DETECTION,
-} K22UsbDcdPhase;
+    KINETIS_USBDCD_IDLE,
+    KINETIS_USBDCD_DATA_CONTACT,
+    KINETIS_USBDCD_PRIMARY_DELAY,
+    KINETIS_USBDCD_PRIMARY_DETECTION,
+    KINETIS_USBDCD_WAIT_PULLUP,
+    KINETIS_USBDCD_SECONDARY_DELAY,
+    KINETIS_USBDCD_SECONDARY_DETECTION,
+} KinetisUsbDcdPhase;
 
 typedef struct {
     uint32_t control;
@@ -25,20 +25,20 @@ typedef struct {
     uint32_t timer2;
     uint64_t clock_cycles;
     uint16_t phase_elapsed;
-    K22UsbDcdPhase phase;
+    KinetisUsbDcdPhase phase;
     KinetisUsbCharger charger;
     bool pullup;
-} K22UsbDcd;
+} KinetisUsbDcd;
 
-void k22_usbdcd_reset(K22UsbDcd* usbdcd);
-bool k22_usbdcd_copy(K22UsbDcd* destination, const K22UsbDcd* source);
-bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
-                     uint32_t* output_value);
-bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
-                      uint32_t write_value);
-void k22_usbdcd_advance(K22UsbDcd* usbdcd, uint64_t cycles);
-bool k22_usbdcd_set_charger(K22UsbDcd* usbdcd, KinetisUsbCharger charger);
-bool k22_usbdcd_set_pullup(K22UsbDcd* usbdcd, bool enabled);
-bool k22_usbdcd_irq(const K22UsbDcd* usbdcd);
+void kinetis_usbdcd_reset(KinetisUsbDcd* usbdcd);
+bool kinetis_usbdcd_copy(KinetisUsbDcd* destination, const KinetisUsbDcd* source);
+bool kinetis_usbdcd_read(KinetisUsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                         uint32_t* output_value);
+bool kinetis_usbdcd_write(KinetisUsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                          uint32_t write_value);
+void kinetis_usbdcd_advance(KinetisUsbDcd* usbdcd, uint64_t cycles);
+bool kinetis_usbdcd_set_charger(KinetisUsbDcd* usbdcd, KinetisUsbCharger charger);
+bool kinetis_usbdcd_set_pullup(KinetisUsbDcd* usbdcd, bool enabled);
+bool kinetis_usbdcd_irq(const KinetisUsbDcd* usbdcd);
 
 #endif

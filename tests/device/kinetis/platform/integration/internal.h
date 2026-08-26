@@ -96,24 +96,24 @@ typedef struct {
     uint32_t call_count;
 } WaitFixture;
 
-bool k22_integration_test_cpu_write8(Kinetis* device, uint32_t address, uint8_t write_value);
-bool k22_integration_test_read16(Kinetis* device, uint32_t address, uint16_t* read_value);
-bool k22_integration_test_read32(Kinetis* device, uint32_t address, uint32_t* read_value);
-bool k22_integration_test_read8(Kinetis* device, uint32_t address, uint8_t* read_value);
-bool k22_integration_test_write16(Kinetis* device, uint32_t address, uint16_t write_value);
-bool k22_integration_test_write32(Kinetis* device, uint32_t address, uint32_t write_value);
-Kinetis* k22_integration_test_create_device(TestState* state, KinetisPackage package);
-Kinetis* k22_integration_test_create_f12_device(TestState* state, KinetisPackage package);
-void k22_integration_test_expect_can_irq_level(TestState* state);
-void k22_integration_test_expect_clock_gates(TestState* state, Kinetis* device);
-void k22_integration_test_expect_fmc_cache(TestState* state);
-void k22_integration_test_expect_fmc_invalidation_and_locking(TestState* state);
-void k22_integration_test_expect_integrated_flash_command(TestState* state, Kinetis* device);
-void k22_integration_test_expect_integrated_flash_swap(TestState* state);
-void k22_integration_test_expect_io_irq_levels(TestState* state, Kinetis* device);
-void k22_integration_test_expect_manifest_fallback(TestState* state, Kinetis* device);
-void k22_integration_test_expect_memory_domains(TestState* state);
-void k22_integration_test_expect_package_selection(TestState* state);
-void k22_integration_test_expect_package_serial_extensions(TestState* state);
+bool kinetis_integration_test_cpu_write8(Kinetis* device, uint32_t address, uint8_t write_value);
+bool kinetis_integration_test_read16(Kinetis* device, uint32_t address, uint16_t* read_value);
+bool kinetis_integration_test_read32(Kinetis* device, uint32_t address, uint32_t* read_value);
+bool kinetis_integration_test_read8(Kinetis* device, uint32_t address, uint8_t* read_value);
+bool kinetis_integration_test_write16(Kinetis* device, uint32_t address, uint16_t write_value);
+bool kinetis_integration_test_write32(Kinetis* device, uint32_t address, uint32_t write_value);
+Kinetis* kinetis_integration_test_create_device(TestState* state, KinetisPackage package);
+Kinetis* kinetis_integration_test_create_f12_device(TestState* state, KinetisPackage package);
+void kinetis_integration_test_expect_can_irq_level(TestState* state);
+void kinetis_integration_test_expect_clock_gates(TestState* state, Kinetis* device);
+void kinetis_integration_test_expect_fmc_cache(TestState* state);
+void kinetis_integration_test_expect_fmc_invalidation_and_locking(TestState* state);
+void kinetis_integration_test_expect_integrated_flash_command(TestState* state, Kinetis* device);
+void kinetis_integration_test_expect_integrated_flash_swap(TestState* state);
+void kinetis_integration_test_expect_io_irq_levels(TestState* state, Kinetis* device);
+void kinetis_integration_test_expect_manifest_fallback(TestState* state, Kinetis* device);
+void kinetis_integration_test_expect_memory_domains(TestState* state);
+void kinetis_integration_test_expect_package_selection(TestState* state);
+void kinetis_integration_test_expect_package_serial_extensions(TestState* state);
 
 #endif

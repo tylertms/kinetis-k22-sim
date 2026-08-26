@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_TIMING_INTERNAL_H
-#define KINETIS_SIM_K22_TIMING_INTERNAL_H
+#ifndef KINETIS_SIM_TIMING_INTERNAL_H
+#define KINETIS_SIM_TIMING_INTERNAL_H
 
 #include "device/kinetis/timing/api.h"
 
@@ -50,65 +50,65 @@ enum {
     IRQ_FTM3 = 71u,
 };
 
-bool k22_timing_internal_contains(const K22Timing* timing, K22PeripheralId peripheral,
-                                  uint32_t access_address, uint8_t access_size);
-bool k22_timing_internal_ftm_input_capture_mode(const K22FtmState* ftm, uint8_t channel);
-bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* instance,
-                                      uint32_t* offset);
-bool k22_timing_internal_ftm_output_compare_mode(const K22FtmState* ftm, uint8_t channel);
-bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t offset,
-                                  uint8_t size, uint32_t* output_value);
-bool k22_timing_internal_has(const K22Timing* timing, K22PeripheralId peripheral);
-bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing);
-bool k22_timing_internal_mcg_register(uint32_t offset);
-bool k22_timing_internal_pdb_auxiliary_offset(uint32_t offset);
-bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value);
-bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value);
-bool k22_timing_internal_read_byte_block(const uint8_t* bytes, uint32_t base_address,
-                                         uint32_t block_length, uint32_t address, uint8_t size,
-                                         uint32_t* output_value);
-bool k22_timing_internal_read_ewm(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value);
-bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value);
-bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t* output_value);
-bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value);
-bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value);
-bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t size,
-                                    uint32_t write_value);
-uint32_t k22_timing_internal_rtc_access_reset(const K22Timing* timing);
-uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, uint32_t source_hz,
-                                         uint32_t core_hz);
-uint8_t k22_timing_internal_ftm_active_fault_mask(const K22FtmState* ftm);
-uint8_t k22_timing_internal_ftm_channel_count(const K22Timing* timing, uint8_t instance);
-uint8_t k22_timing_internal_ftm_fault_mode(const K22FtmState* ftm);
-void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_ftm(K22Timing* timing, uint8_t instance, uint32_t cycles);
-void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_rtc(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles);
-void k22_timing_internal_ftm_apply_software_sync(K22FtmState* ftm);
-void k22_timing_internal_ftm_trigger(K22Timing* timing, uint8_t instance);
-void k22_timing_internal_ftm_update_fault_status(K22FtmState* ftm);
-void k22_timing_internal_request_dma(const K22Timing* timing, uint8_t request_source);
-void k22_timing_internal_set_irq(const K22Timing* timing, uint8_t interrupt_number,
-                                 bool interrupt_asserted);
-void k22_timing_internal_signal_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
-void k22_timing_internal_trigger_adc_alternate(K22Timing* timing, uint8_t adc_source);
-void k22_timing_internal_trigger_dma(const K22Timing* timing, uint8_t dma_channel);
-void k22_timing_internal_trigger(K22Timing* timing, K22TimingTrigger trigger_type,
-                                 uint8_t peripheral_instance, uint8_t peripheral_channel);
-void k22_timing_internal_update_clocks(K22Timing* timing);
-void k22_timing_internal_update_ftm_irq(const K22Timing* timing, uint8_t instance);
-void k22_timing_internal_update_llwu_irq(const K22Timing* timing);
-void k22_timing_internal_update_pmc_irq(const K22Timing* timing);
-void k22_timing_internal_update_rtc_irq(const K22Timing* timing);
+bool kinetis_timing_internal_contains(const KinetisTiming* timing, KinetisPeripheralId peripheral,
+                                      uint32_t access_address, uint8_t access_size);
+bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisFtmState* ftm, uint8_t channel);
+bool kinetis_timing_internal_ftm_location(const KinetisTiming* timing, uint32_t address,
+                                          uint8_t* instance, uint32_t* offset);
+bool kinetis_timing_internal_ftm_output_compare_mode(const KinetisFtmState* ftm, uint8_t channel);
+bool kinetis_timing_internal_ftm_read(KinetisTiming* timing, uint8_t instance, uint32_t offset,
+                                      uint8_t size, uint32_t* output_value);
+bool kinetis_timing_internal_has(const KinetisTiming* timing, KinetisPeripheralId peripheral);
+bool kinetis_timing_internal_lptmr_selected_active(const KinetisTiming* timing);
+bool kinetis_timing_internal_mcg_register(uint32_t offset);
+bool kinetis_timing_internal_pdb_auxiliary_offset(uint32_t offset);
+bool kinetis_timing_internal_pit_read(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value);
+bool kinetis_timing_internal_pit_write(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value);
+bool kinetis_timing_internal_read_byte_block(const uint8_t* bytes, uint32_t base_address,
+                                             uint32_t block_length, uint32_t address, uint8_t size,
+                                             uint32_t* output_value);
+bool kinetis_timing_internal_read_ewm(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value);
+bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value);
+bool kinetis_timing_internal_read_wdog(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t* output_value);
+bool kinetis_timing_internal_write_ewm(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value);
+bool kinetis_timing_internal_write_sim(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value);
+bool kinetis_timing_internal_write_wdog(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                        uint32_t write_value);
+uint32_t kinetis_timing_internal_rtc_access_reset(const KinetisTiming* timing);
+uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
+                                             uint32_t source_hz, uint32_t core_hz);
+uint8_t kinetis_timing_internal_ftm_active_fault_mask(const KinetisFtmState* ftm);
+uint8_t kinetis_timing_internal_ftm_channel_count(const KinetisTiming* timing, uint8_t instance);
+uint8_t kinetis_timing_internal_ftm_fault_mode(const KinetisFtmState* ftm);
+void kinetis_timing_internal_advance_ewm(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_ftm(KinetisTiming* timing, uint8_t instance, uint32_t cycles);
+void kinetis_timing_internal_advance_lptmr(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_pit(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_rtc(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_wdog(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_ftm_apply_software_sync(KinetisFtmState* ftm);
+void kinetis_timing_internal_ftm_trigger(KinetisTiming* timing, uint8_t instance);
+void kinetis_timing_internal_ftm_update_fault_status(KinetisFtmState* ftm);
+void kinetis_timing_internal_request_dma(const KinetisTiming* timing, uint8_t request_source);
+void kinetis_timing_internal_set_irq(const KinetisTiming* timing, uint8_t interrupt_number,
+                                     bool interrupt_asserted);
+void kinetis_timing_internal_signal_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1);
+void kinetis_timing_internal_trigger_adc_alternate(KinetisTiming* timing, uint8_t adc_source);
+void kinetis_timing_internal_trigger_dma(const KinetisTiming* timing, uint8_t dma_channel);
+void kinetis_timing_internal_trigger(KinetisTiming* timing, KinetisTimingTrigger trigger_type,
+                                     uint8_t peripheral_instance, uint8_t peripheral_channel);
+void kinetis_timing_internal_update_clocks(KinetisTiming* timing);
+void kinetis_timing_internal_update_ftm_irq(const KinetisTiming* timing, uint8_t instance);
+void kinetis_timing_internal_update_llwu_irq(const KinetisTiming* timing);
+void kinetis_timing_internal_update_pmc_irq(const KinetisTiming* timing);
+void kinetis_timing_internal_update_rtc_irq(const KinetisTiming* timing);
 
 #endif

@@ -84,7 +84,7 @@ static void configure_watchdog(TestState* state, Kinetis* device, uint16_t timeo
     write_u16(state, device, WDOG_TOVALH, 0);
     write_u16(state, device, WDOG_TOVALL, timeout_value);
     write_u16(state, device, WDOG_STCTRLH, enabled ? 1u : 0u);
-    kinetis_advance(device, k22_test_core_cycles_for_bus_cycles(device, 260u));
+    kinetis_advance(device, kinetis_test_core_cycles_for_bus_cycles(device, 260u));
 }
 
 int main(void) {

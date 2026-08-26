@@ -117,7 +117,7 @@ static void exercise_profile(TestState* state, StatefulCensus* census, KinetisPr
         return;
     for (uint32_t iteration = 0u; iteration < 30000u; iteration++) {
         const uint32_t random_value = next_random(census);
-        const K22RegisterDescriptor* descriptor =
+        const KinetisRegisterDescriptor* descriptor =
             &device->manifest->registers[random_value % device->manifest->register_count];
         const uint32_t address = descriptor->address + ((random_value >> 25u) == 0u ? 1u : 0u);
         const uint8_t access_size =

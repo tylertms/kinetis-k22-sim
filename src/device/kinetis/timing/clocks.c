@@ -1,11 +1,11 @@
 #include "internal.h"
 
-bool k22_timing_internal_mcg_register(uint32_t offset) {
+bool kinetis_timing_internal_mcg_register(uint32_t offset) {
     return offset <= 6u || offset == 8u || (offset >= 10u && offset <= 13u);
 }
 
-uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, uint32_t source_hz,
-                                         uint32_t core_hz) {
+uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
+                                             uint32_t source_hz, uint32_t core_hz) {
     if (source_hz == 0 || core_hz == 0) {
         return 0;
     }
@@ -14,7 +14,7 @@ uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, u
     return accumulated_cycles / core_hz;
 }
 
-static uint32_t calculate_fll_clock_hz(const K22Timing* timing) {
+static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
     const uint8_t mcg_c4_value = timing->mcg[3];
     const uint16_t fll_multipliers[4] = {640u, 1280u, 1920u, 2560u};
     uint32_t reference_clock_hz = timing->slow_irc_hz;
@@ -36,7 +36,7 @@ static uint32_t calculate_fll_clock_hz(const K22Timing* timing) {
                                    : reference_clock_hz * fll_multiplier;
 }
 
-static uint32_t calculate_pll_clock_hz(const K22Timing* timing) {
+static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
     if (timing->external_oscillator_hz == 0) {
         return 0;
     }
@@ -46,7 +46,7 @@ static uint32_t calculate_pll_clock_hz(const K22Timing* timing) {
                       (pll_divider * 2u));
 }
 
-void k22_timing_internal_update_clocks(K22Timing* timing) {
+void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
@@ -87,15 +87,15 @@ void k22_timing_internal_update_clocks(K22Timing* timing) {
     }
 }
 
-static uint32_t sim_fcfg1_value(const K22Timing* timing) {
+static uint32_t sim_fcfg1_value(const KinetisTiming* timing) {
     return timing->profile->program_flash_size >= 1024u * 1024u ||
                    timing->profile->flexnvm_size != 0
                ? 0xff0f0f00u
                : 0x0f0f0f00u;
 }
 
-bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value) {
+bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value) {
     if (size != 4) {
         return false;
     }
@@ -125,8 +125,8 @@ bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uin
         *output_value = timing->profile->sim_sdid_reset;
         return true;
     case SIM_SCGC3:
-        if (timing->profile->id != K22_PROFILE_MK22FN1M012 &&
-            timing->profile->id != K22_PROFILE_MK22FX51212)
+        if (timing->profile->id != KINETIS_PROFILE_MK22FN1M012 &&
+            timing->profile->id != KINETIS_PROFILE_MK22FX51212)
             return false;
         *output_value = timing->sim_scgc3;
         return true;
@@ -152,10 +152,10 @@ bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uin
         *output_value = sim_fcfg1_value(timing);
         return true;
     case SIM_FCFG2:
-        if (timing->profile->id == K22_PROFILE_MKV30F12810)
+        if (timing->profile->id == KINETIS_PROFILE_MKV30F12810)
             *output_value = 0xf900007fu;
-        else if (timing->profile->id == K22_PROFILE_MK22FN1M012 ||
-                 timing->profile->id == K22_PROFILE_MK22FX51212)
+        else if (timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
+                 timing->profile->id == KINETIS_PROFILE_MK22FX51212)
             *output_value = 0x7f7f0000u;
         else
             *output_value = 0x7fff0000u;
@@ -165,8 +165,8 @@ bool k22_timing_internal_read_sim(const K22Timing* timing, uint32_t address, uin
     }
 }
 
-bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value) {
+bool kinetis_timing_internal_write_sim(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value) {
     if (size != 4) {
         return false;
     }
@@ -193,8 +193,8 @@ bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t 
         timing->sim_sopt8 = write_value;
         return true;
     case SIM_SCGC3:
-        if (timing->profile->id != K22_PROFILE_MK22FN1M012 &&
-            timing->profile->id != K22_PROFILE_MK22FX51212)
+        if (timing->profile->id != KINETIS_PROFILE_MK22FN1M012 &&
+            timing->profile->id != KINETIS_PROFILE_MK22FX51212)
             return false;
         timing->sim_scgc3 = write_value;
         return true;
@@ -212,7 +212,7 @@ bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t 
         return true;
     case SIM_CLKDIV1:
         timing->sim_clkdiv1 = write_value;
-        k22_timing_internal_update_clocks(timing);
+        kinetis_timing_internal_update_clocks(timing);
         return true;
     case SIM_CLKDIV2:
         timing->sim_clkdiv2 = write_value;
@@ -222,9 +222,9 @@ bool k22_timing_internal_write_sim(K22Timing* timing, uint32_t address, uint8_t 
     }
 }
 
-bool k22_timing_internal_read_byte_block(const uint8_t* bytes, uint32_t base_address,
-                                         uint32_t block_length, uint32_t address, uint8_t size,
-                                         uint32_t* output_value) {
+bool kinetis_timing_internal_read_byte_block(const uint8_t* bytes, uint32_t base_address,
+                                             uint32_t block_length, uint32_t address, uint8_t size,
+                                             uint32_t* output_value) {
     if (size != 1 || address < base_address || address >= base_address + block_length) {
         return false;
     }

@@ -47,7 +47,7 @@ static void mix(SdhcCensus* census, uint32_t mix_value) {
     census->fingerprint = (census->fingerprint ^ mix_value) * UINT64_C(1099511628211);
 }
 
-static void randomize_state(K22Sdhc* sdhc, SdhcCensus* census) {
+static void randomize_state(KinetisSdhc* sdhc, SdhcCensus* census) {
     for (uint8_t register_index = 0u; register_index < 64u; register_index++) {
         sdhc->registers[register_index] = next_random(census);
     }
@@ -69,11 +69,11 @@ static void randomize_state(K22Sdhc* sdhc, SdhcCensus* census) {
 int main(void) {
     TestState state = {0u, 0u, 0u};
     SdhcCensus census = {{0u}, UINT32_C(0xa4093822), 0u, 0u, UINT64_C(14695981039346656037)};
-    K22Sdhc sdhc;
-    expect(&state, k22_sdhc_init(&sdhc, (K22SdhcBus){&census, bus_read, bus_write}),
+    KinetisSdhc sdhc;
+    expect(&state, kinetis_sdhc_init(&sdhc, (KinetisSdhcBus){&census, bus_read, bus_write}),
            "initialize SDHC state census");
     uint8_t card[2048] = {0u};
-    expect(&state, k22_sdhc_insert(&sdhc, card, sizeof(card), false),
+    expect(&state, kinetis_sdhc_state_insert(&sdhc, card, sizeof(card), false),
            "insert SDHC state census card");
     for (uint32_t iteration_index = 0u; iteration_index < 100000u; iteration_index++) {
         randomize_state(&sdhc, &census);
@@ -82,20 +82,20 @@ int main(void) {
         const uint8_t access_size = (uint8_t)(random_value % 6u);
         uint32_t read_value = UINT32_MAX;
         const bool read_succeeded =
-            k22_sdhc_read(&sdhc, register_address, access_size, &read_value);
-        const bool write_succeeded = k22_sdhc_write(&sdhc, register_address, access_size,
-                                                    random_value ^ UINT32_C(0x5aa5a55a));
+            kinetis_sdhc_read(&sdhc, register_address, access_size, &read_value);
+        const bool write_succeeded = kinetis_sdhc_write(&sdhc, register_address, access_size,
+                                                        random_value ^ UINT32_C(0x5aa5a55a));
         census.reads += read_succeeded;
         census.writes += write_succeeded;
         mix(&census, read_succeeded | (write_succeeded << 1u));
         mix(&census, read_value);
         mix(&census, sdhc.registers[(random_value >> 16u) % 64u]);
-        mix(&census, k22_sdhc_irq(&sdhc));
+        mix(&census, kinetis_sdhc_irq(&sdhc));
     }
     expect(&state,
            census.reads == 2864u && census.writes == 1723u &&
                census.fingerprint == UINT64_C(8440844145325666953),
            "SDHC state census matches");
-    k22_sdhc_destroy(&sdhc);
+    kinetis_sdhc_destroy(&sdhc);
     return test_finish(&state);
 }

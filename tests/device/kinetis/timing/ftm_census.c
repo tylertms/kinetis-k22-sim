@@ -11,7 +11,7 @@ static void mix(FtmCensus* census, uint32_t value) {
     census->fingerprint = (census->fingerprint ^ value) * UINT64_C(1099511628211);
 }
 
-static void register_census(K22Timing* timing, FtmCensus* census) {
+static void register_census(KinetisTiming* timing, FtmCensus* census) {
     static const uint8_t sizes[] = {1u, 2u, 4u};
     static const uint32_t values[] = {
         0u,
@@ -39,9 +39,9 @@ static void register_census(K22Timing* timing, FtmCensus* census) {
                     const uint32_t address = base + offset;
                     const uint8_t size = sizes[size_index];
                     const uint32_t value = values[value_index];
-                    const bool written = k22_timing_write(timing, address, size, value);
+                    const bool written = kinetis_timing_write(timing, address, size, value);
                     uint32_t read_value = 0u;
-                    const bool read = k22_timing_read(timing, address, size, &read_value);
+                    const bool read = kinetis_timing_read(timing, address, size, &read_value);
                     census->accepted_writes += written;
                     census->accepted_reads += read;
                     mix(census, address);
@@ -50,18 +50,18 @@ static void register_census(K22Timing* timing, FtmCensus* census) {
                     mix(census, written);
                     mix(census, read);
                     mix(census, read_value);
-                    k22_timing_advance(timing, (uint32_t)(value_index + 1u));
+                    kinetis_timing_advance(timing, (uint32_t)(value_index + 1u));
                 }
             }
         }
     }
 }
 
-static void runtime_census(K22Timing* timing, FtmCensus* census) {
+static void runtime_census(KinetisTiming* timing, FtmCensus* census) {
     timing->sim_scgc3 |= 1u << 25u;
     timing->sim_scgc6 |= 0x07000040u;
     for (uint8_t instance = 0u; instance < 4u; instance++) {
-        K22FtmState* ftm = &timing->ftm[instance];
+        KinetisFtmState* ftm = &timing->ftm[instance];
         const uint8_t channels = instance == 0u || instance == 3u ? 8u : 2u;
         for (uint8_t alignment = 0u; alignment < 2u; alignment++) {
             for (uint8_t edges = 0u; edges < 4u; edges++) {
@@ -75,7 +75,7 @@ static void runtime_census(K22Timing* timing, FtmCensus* census) {
                     ftm->channel_sc[channel] = 0x20u | ((uint32_t)edges << 2u);
                     ftm->channel_value[channel] = (uint16_t)(channel % 6u);
                 }
-                k22_timing_advance(timing, 32u);
+                kinetis_timing_advance(timing, 32u);
                 for (uint8_t channel = 0u; channel < channels; channel++) {
                     census->asserted_outputs += ftm->channel_output[channel];
                     mix(census, ftm->channel_output[channel]);
@@ -92,26 +92,27 @@ static void runtime_census(K22Timing* timing, FtmCensus* census) {
         ftm->channel_sc[0] = 0x20u;
         ftm->channel_value[0] = 1u;
         ftm->channel_value[1] = 3u;
-        k22_timing_advance(timing, 16u);
+        kinetis_timing_advance(timing, 16u);
         mix(census, ftm->channel_output[0]);
 
         if (channels > 4u) {
             ftm->channel_sc[4] = 4u;
-            mix(census, k22_timing_set_ftm_input(timing, instance, 4u, true));
-            k22_timing_advance(timing, 16u);
+            mix(census, kinetis_timing_set_ftm_input(timing, instance, 4u, true));
+            kinetis_timing_advance(timing, 16u);
             mix(census, ftm->channel_value[4]);
         }
     }
 }
 
-static void signal_census(K22Timing* timing, FtmCensus* census) {
+static void signal_census(KinetisTiming* timing, FtmCensus* census) {
     for (uint8_t instance = 0u; instance < 5u; instance++) {
         for (uint8_t channel = 0u; channel < 10u; channel++) {
             for (uint8_t high = 0u; high < 2u; high++) {
-                const bool input = k22_timing_set_ftm_input(timing, instance, channel, high != 0u);
+                const bool input =
+                    kinetis_timing_set_ftm_input(timing, instance, channel, high != 0u);
                 bool output_high = false;
                 const bool output =
-                    k22_timing_get_ftm_output(timing, instance, channel, &output_high);
+                    kinetis_timing_get_ftm_output(timing, instance, channel, &output_high);
                 census->asserted_outputs += output && output_high;
                 mix(census, input);
                 mix(census, output);
@@ -120,18 +121,18 @@ static void signal_census(K22Timing* timing, FtmCensus* census) {
         }
         for (uint8_t input = 0u; input < 5u; input++) {
             for (uint8_t high = 0u; high < 2u; high++) {
-                mix(census, k22_timing_set_ftm_fault(timing, instance, input, high != 0u));
+                mix(census, kinetis_timing_set_ftm_fault(timing, instance, input, high != 0u));
             }
         }
         for (uint8_t trigger = 0u; trigger < 4u; trigger++) {
-            mix(census, k22_timing_trigger_ftm_hardware(timing, instance, trigger));
+            mix(census, kinetis_timing_trigger_ftm_hardware(timing, instance, trigger));
         }
     }
 }
 
-void k22_timing_test_test_ftm_census(TestState* state, K22Timing* timing) {
+void kinetis_timing_test_test_ftm_census(TestState* state, KinetisTiming* timing) {
     FtmCensus census = {0u, 0u, 0u, UINT64_C(14695981039346656037)};
-    k22_timing_reset(timing, 0x82u, 0u);
+    kinetis_timing_reset(timing, 0x82u, 0u);
     register_census(timing, &census);
     runtime_census(timing, &census);
     signal_census(timing, &census);

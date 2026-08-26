@@ -36,15 +36,15 @@ static Kinetis* create_device(TestState* test_state) {
 
 static void io_write(TestState* test_state, Kinetis* device, uint32_t register_address,
                      uint8_t access_size, uint32_t write_value) {
-    expect(test_state, k22_io_write(&device->io, register_address, access_size, write_value),
-           "k22_io_write(&device->io, register_address, access_size, write_value)");
+    expect(test_state, kinetis_io_write(&device->io, register_address, access_size, write_value),
+           "kinetis_io_write(&device->io, register_address, access_size, write_value)");
 }
 
 static void serial_write(TestState* test_state, Kinetis* device, uint32_t register_address,
                          uint8_t access_size, uint32_t write_value) {
     expect(test_state,
-           k22_serial_write(&device->serial, register_address, access_size, write_value),
-           "k22_serial_write(&device->serial, register_address, access_size, write_value)");
+           kinetis_serial_write(&device->serial, register_address, access_size, write_value),
+           "kinetis_serial_write(&device->serial, register_address, access_size, write_value)");
 }
 
 static void test_data_api(TestState* state, Kinetis* device) {
@@ -157,10 +157,10 @@ static void test_data_api(TestState* state, Kinetis* device) {
 }
 
 static void test_serial_api(TestState* state, Kinetis* device) {
-    expect(state, !k22_serial_set_clock_gate(NULL, K22_PERIPHERAL_UART0, true),
+    expect(state, !kinetis_serial_set_clock_gate(NULL, KINETIS_PERIPHERAL_UART0, true),
            "null serial state rejects clock-gate changes");
-    expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true),
-           "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true)");
+    expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_UART0, true),
+           "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_UART0, true)");
     serial_write(state, device, UART0 + 3u, 1u, 0x08u);
     serial_write(state, device, UART0 + 7u, 1u, 0x44u);
     expect(state, kinetis_serial_receive(device, KINETIS_SERIAL_UART1, 0x5au, 0u),
@@ -172,9 +172,9 @@ static void test_serial_api(TestState* state, Kinetis* device) {
            "!kinetis_serial_transmit(device, KINETIS_SERIAL_UART1, &transmitted_value)");
     expect(state, !kinetis_serial_transmit(device, KINETIS_SERIAL_UART0, &transmitted_value),
            "!kinetis_serial_transmit(device, KINETIS_SERIAL_UART0, &transmitted_value)");
-    expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true),
-           "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_UART0, true)");
-    k22_serial_advance_endpoint(&device->serial, K22_SERIAL_UART0);
+    expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_UART0, true),
+           "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_UART0, true)");
+    kinetis_serial_advance_endpoint(&device->serial, KINETIS_SERIAL_UART0);
     expect(state, kinetis_serial_transmit(device, KINETIS_SERIAL_UART0, &transmitted_value),
            "kinetis_serial_transmit(device, KINETIS_SERIAL_UART0, &transmitted_value)");
     expect(state, transmitted_value == 0x44u, "transmitted_value == 0x44u");
@@ -183,11 +183,11 @@ static void test_serial_api(TestState* state, Kinetis* device) {
            "!kinetis_serial_transmit(device, KINETIS_SERIAL_ENDPOINT_COUNT, "
            "&transmitted_value)");
 
-    expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_SPI0, true),
-           "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_SPI0, true)");
+    expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI0, true),
+           "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_SPI0, true)");
     serial_write(state, device, SPI0, 4u, 0u);
     serial_write(state, device, SPI0 + 0x34u, 4u, 0x98030055u);
-    k22_serial_advance(&device->serial, 64u);
+    kinetis_serial_advance(&device->serial, 64u);
     KinetisSpiTransfer spi_transfer;
     expect(state, kinetis_spi_transfer(device, KINETIS_SERIAL_SPI0, &spi_transfer),
            "kinetis_spi_transfer(device, KINETIS_SERIAL_SPI0, &spi_transfer)");
@@ -204,10 +204,10 @@ static void test_serial_api(TestState* state, Kinetis* device) {
     expect(state, !kinetis_spi_transfer(device, KINETIS_SERIAL_SPI0, &spi_transfer),
            "empty SPI transfer queue is reported");
 
-    expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C0, true),
-           "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C0, true)");
-    expect(state, k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C1, true),
-           "k22_serial_set_clock_gate(&device->serial, K22_PERIPHERAL_I2C1, true)");
+    expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_I2C0, true),
+           "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_I2C0, true)");
+    expect(state, kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_I2C1, true),
+           "kinetis_serial_set_clock_gate(&device->serial, KINETIS_PERIPHERAL_I2C1, true)");
     serial_write(state, device, I2C0 + 2u, 1u, 0xf0u);
     serial_write(state, device, I2C1 + 2u, 1u, 0xf0u);
     serial_write(state, device, I2C0 + 4u, 1u, 0x52u);
@@ -254,11 +254,11 @@ static void test_serial_api(TestState* state, Kinetis* device) {
            "legacy serial APIs reject null arguments");
     uint16_t uart_received_count = 0u;
     uint16_t spi_received_count = 0u;
-    while (uart_received_count <= K22_SERIAL_FIFO_CAPACITY &&
+    while (uart_received_count <= KINETIS_SERIAL_FIFO_CAPACITY &&
            kinetis_uart1_receive(device, (uint8_t)uart_received_count, 0u)) {
         uart_received_count++;
     }
-    while (spi_received_count <= K22_SERIAL_FIFO_CAPACITY &&
+    while (spi_received_count <= KINETIS_SERIAL_FIFO_CAPACITY &&
            kinetis_spi0_receive(device, spi_received_count)) {
         spi_received_count++;
     }
@@ -269,7 +269,7 @@ static void test_serial_api(TestState* state, Kinetis* device) {
 }
 
 static void test_io_api(TestState* state, Kinetis* device) {
-    k22_io_set_clock(&device->io, K22_PERIPHERAL_USB0, true);
+    kinetis_io_set_clock(&device->io, KINETIS_PERIPHERAL_USB0, true);
     io_write(state, device, USB0 + 0x84u, 1u, 1u << 3u);
     io_write(state, device, USB0 + 0x94u, 1u, 1u);
     expect(state, kinetis_usb_token(device, 3u, 0x69u, false),
@@ -277,7 +277,7 @@ static void test_io_api(TestState* state, Kinetis* device) {
     expect(state, !kinetis_usb_token(NULL, 0u, 0u, false),
            "!kinetis_usb_token(NULL, 0u, 0u, false)");
 
-    k22_io_set_clock(&device->io, K22_PERIPHERAL_CAN0, true);
+    kinetis_io_set_clock(&device->io, KINETIS_PERIPHERAL_CAN0, true);
     io_write(state, device, CAN0, 4u, 0x0fu);
     io_write(state, device, CAN0 + 0x10u, 4u, 0u);
     io_write(state, device, CAN0 + 0x28u, 4u, 1u);
@@ -288,7 +288,7 @@ static void test_io_api(TestState* state, Kinetis* device) {
     expect(state, !kinetis_can_receive(device, NULL), "!kinetis_can_receive(device, NULL)");
     expect(state, !kinetis_can_receive(NULL, &can_frame), "!kinetis_can_receive(NULL, &can_frame)");
 
-    k22_io_set_clock(&device->io, K22_PERIPHERAL_I2S0, true);
+    kinetis_io_set_clock(&device->io, KINETIS_PERIPHERAL_I2S0, true);
     io_write(state, device, I2S0, 4u, UINT32_C(0x80000000));
     io_write(state, device, I2S0 + 0x80u, 4u, UINT32_C(0x80000000));
     io_write(state, device, I2S0 + 0x20u, 4u, 0x11223344u);
@@ -410,7 +410,7 @@ static void test_guards(TestState* state, Kinetis* device) {
            "SDHC card reads require a device");
 }
 
-#ifdef K22_TEST_ALLOCATION_FAILURE
+#ifdef KINETIS_TEST_ALLOCATION_FAILURE
 static void test_allocation_failures(TestState* state) {
     KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.profile = KINETIS_PROFILE_MK22FN1M012;
@@ -452,7 +452,7 @@ int main(void) {
     test_guards(&state, device);
     kinetis_destroy(device);
     test_mkv30_package_and_channels(&state);
-#ifdef K22_TEST_ALLOCATION_FAILURE
+#ifdef KINETIS_TEST_ALLOCATION_FAILURE
     test_allocation_failures(&state);
 #endif
     return test_finish(&state);

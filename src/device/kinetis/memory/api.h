@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_DATA_H
-#define KINETIS_SIM_K22_DATA_H
+#ifndef KINETIS_SIM_DATA_H
+#define KINETIS_SIM_DATA_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -7,70 +7,74 @@
 
 #include "device/kinetis/variants/profile.h"
 
-typedef struct K22Data K22Data;
+typedef struct KinetisData KinetisData;
 
 typedef enum {
-    K22_DATA_INTERRUPT_DMA0,
-    K22_DATA_INTERRUPT_DMA1,
-    K22_DATA_INTERRUPT_DMA2,
-    K22_DATA_INTERRUPT_DMA3,
-    K22_DATA_INTERRUPT_DMA4,
-    K22_DATA_INTERRUPT_DMA5,
-    K22_DATA_INTERRUPT_DMA6,
-    K22_DATA_INTERRUPT_DMA7,
-    K22_DATA_INTERRUPT_DMA8,
-    K22_DATA_INTERRUPT_DMA9,
-    K22_DATA_INTERRUPT_DMA10,
-    K22_DATA_INTERRUPT_DMA11,
-    K22_DATA_INTERRUPT_DMA12,
-    K22_DATA_INTERRUPT_DMA13,
-    K22_DATA_INTERRUPT_DMA14,
-    K22_DATA_INTERRUPT_DMA15,
-    K22_DATA_INTERRUPT_DMA_ERROR,
-    K22_DATA_INTERRUPT_FTFA,
-    K22_DATA_INTERRUPT_FLASH_COLLISION,
-    K22_DATA_INTERRUPT_ADC0,
-    K22_DATA_INTERRUPT_ADC1,
-    K22_DATA_INTERRUPT_DAC0,
-    K22_DATA_INTERRUPT_DAC1,
-    K22_DATA_INTERRUPT_CMP0,
-    K22_DATA_INTERRUPT_CMP1,
-    K22_DATA_INTERRUPT_CMP2,
-    K22_DATA_INTERRUPT_RNG,
-    K22_DATA_INTERRUPT_COUNT,
-} K22DataInterrupt;
+    KINETIS_DATA_INTERRUPT_DMA0,
+    KINETIS_DATA_INTERRUPT_DMA1,
+    KINETIS_DATA_INTERRUPT_DMA2,
+    KINETIS_DATA_INTERRUPT_DMA3,
+    KINETIS_DATA_INTERRUPT_DMA4,
+    KINETIS_DATA_INTERRUPT_DMA5,
+    KINETIS_DATA_INTERRUPT_DMA6,
+    KINETIS_DATA_INTERRUPT_DMA7,
+    KINETIS_DATA_INTERRUPT_DMA8,
+    KINETIS_DATA_INTERRUPT_DMA9,
+    KINETIS_DATA_INTERRUPT_DMA10,
+    KINETIS_DATA_INTERRUPT_DMA11,
+    KINETIS_DATA_INTERRUPT_DMA12,
+    KINETIS_DATA_INTERRUPT_DMA13,
+    KINETIS_DATA_INTERRUPT_DMA14,
+    KINETIS_DATA_INTERRUPT_DMA15,
+    KINETIS_DATA_INTERRUPT_DMA_ERROR,
+    KINETIS_DATA_INTERRUPT_FTFA,
+    KINETIS_DATA_INTERRUPT_FLASH_COLLISION,
+    KINETIS_DATA_INTERRUPT_ADC0,
+    KINETIS_DATA_INTERRUPT_ADC1,
+    KINETIS_DATA_INTERRUPT_DAC0,
+    KINETIS_DATA_INTERRUPT_DAC1,
+    KINETIS_DATA_INTERRUPT_CMP0,
+    KINETIS_DATA_INTERRUPT_CMP1,
+    KINETIS_DATA_INTERRUPT_CMP2,
+    KINETIS_DATA_INTERRUPT_RNG,
+    KINETIS_DATA_INTERRUPT_COUNT,
+} KinetisDataInterrupt;
 
 typedef struct {
     void* context;
     bool (*read)(void* context, uint32_t address, uint8_t byte_count, uint32_t* output_value);
     bool (*write)(void* context, uint32_t address, uint8_t byte_count, uint32_t write_value);
     bool (*program)(void* context, uint32_t address, uint8_t byte_count, uint32_t write_value);
-    void (*interrupt)(void* context, K22DataInterrupt interrupt, bool asserted);
+    void (*interrupt)(void* context, KinetisDataInterrupt interrupt, bool asserted);
     void (*dma_complete)(void* context, uint8_t request_source);
-} K22DataBus;
+} KinetisDataBus;
 
-K22Data* k22_data_create(const K22Profile* profile, K22DataBus bus);
-void k22_data_destroy(K22Data* data);
-void k22_data_reset(K22Data* data);
-bool k22_data_copy(K22Data* destination, const K22Data* source);
-bool k22_data_read(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t* output_value);
-bool k22_data_write(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t write_value);
-void k22_data_advance(K22Data* data, uint32_t cycle_count);
-void k22_data_set_debug_halted(K22Data* data, bool halted);
-bool k22_data_dma_request(K22Data* data, uint8_t request_source);
-bool k22_data_dma_trigger(K22Data* data, uint8_t channel);
-void k22_data_adc_trigger(K22Data* data, uint8_t instance);
-void k22_data_adc_pretrigger(K22Data* data, uint8_t instance, uint8_t pretrigger);
-bool k22_data_set_adc_input(K22Data* data, uint8_t instance, uint8_t channel,
-                            uint16_t sample_value);
-bool k22_data_set_cmp_input(K22Data* data, uint8_t instance, uint8_t input_index,
-                            uint8_t input_level);
-bool k22_data_get_cmp_output(const K22Data* data, uint8_t instance, bool* output_high);
-bool k22_data_get_dac_output(const K22Data* data, uint8_t instance, uint16_t* output_value);
-void k22_data_dac_trigger(K22Data* data, uint8_t instance);
-void k22_data_rng_seed(K22Data* data, uint32_t seed_value);
-bool k22_data_set_flash_configuration(K22Data* data, const uint8_t* bytes, size_t byte_count);
-bool k22_data_flash_read(K22Data* data, bool data_flash, uint32_t byte_offset, uint8_t byte_count);
-uint32_t k22_data_program_flash_address(const K22Data* data, uint32_t address);
+KinetisData* kinetis_data_create(const KinetisDeviceProfile* profile, KinetisDataBus bus);
+void kinetis_data_destroy(KinetisData* data);
+void kinetis_data_reset(KinetisData* data);
+bool kinetis_data_copy(KinetisData* destination, const KinetisData* source);
+bool kinetis_data_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                       uint32_t* output_value);
+bool kinetis_data_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                        uint32_t write_value);
+void kinetis_data_advance(KinetisData* data, uint32_t cycle_count);
+void kinetis_data_set_debug_halted(KinetisData* data, bool halted);
+bool kinetis_data_dma_request(KinetisData* data, uint8_t request_source);
+bool kinetis_data_dma_trigger(KinetisData* data, uint8_t channel);
+void kinetis_data_adc_trigger(KinetisData* data, uint8_t instance);
+void kinetis_data_adc_pretrigger(KinetisData* data, uint8_t instance, uint8_t pretrigger);
+bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, uint8_t channel,
+                                uint16_t sample_value);
+bool kinetis_data_set_cmp_input(KinetisData* data, uint8_t instance, uint8_t input_index,
+                                uint8_t input_level);
+bool kinetis_data_get_cmp_output(const KinetisData* data, uint8_t instance, bool* output_high);
+bool kinetis_data_get_dac_output(const KinetisData* data, uint8_t instance, uint16_t* output_value);
+void kinetis_data_dac_trigger(KinetisData* data, uint8_t instance);
+void kinetis_data_rng_seed(KinetisData* data, uint32_t seed_value);
+bool kinetis_data_set_flash_configuration(KinetisData* data, const uint8_t* bytes,
+                                          size_t byte_count);
+bool kinetis_data_flash_read(KinetisData* data, bool data_flash, uint32_t byte_offset,
+                             uint8_t byte_count);
+uint32_t kinetis_data_program_flash_address(const KinetisData* data, uint32_t address);
 
 #endif

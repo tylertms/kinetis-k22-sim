@@ -28,7 +28,7 @@ static uint32_t address_for(uint32_t random) {
     return bases[region] + ((random >> 8u) % spans[region]);
 }
 
-static void randomize_state(K22Data* data, DataStateCensus* census, uint32_t random) {
+static void randomize_state(KinetisData* data, DataStateCensus* census, uint32_t random) {
     const uint32_t second = next_random(census);
     const uint8_t channel = (uint8_t)((random >> 16u) % data->dma_channel_count);
     const uint32_t tcd = 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
@@ -76,11 +76,11 @@ static void randomize_state(K22Data* data, DataStateCensus* census, uint32_t ran
     data->crc_control = next_random(census);
 }
 
-void k22_data_test_test_state_census(TestState* state) {
+void kinetis_data_test_test_state_census(TestState* state) {
     static TestBus bus;
     memset(&bus, 0, sizeof(bus));
     DataStateCensus census = {UINT32_C(0x3c6ef372), 0u, 0u, 0u, UINT64_C(14695981039346656037)};
-    K22Data* data = k22_data_test_create(state, &bus, K22_PROFILE_MK22FN51212);
+    KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN51212);
     if (data == NULL)
         return;
     for (uint32_t iteration = 0u; iteration < 50000u; iteration++) {
@@ -89,21 +89,24 @@ void k22_data_test_test_state_census(TestState* state) {
         const uint32_t address = address_for(random);
         const uint8_t size = (uint8_t)(random % 6u);
         uint32_t value = UINT32_MAX;
-        const bool read = k22_data_read(data, address, size, &value);
-        const bool written = k22_data_write(data, address, size, random ^ UINT32_C(0xa5a55a5a));
-        const bool requested = k22_data_dma_request(data, (uint8_t)(random >> 24u));
-        const bool triggered = k22_data_dma_trigger(data, (uint8_t)((random >> 20u) % 18u));
-        const bool adc = k22_data_set_adc_input(data, (uint8_t)((random >> 8u) % 3u),
-                                                (uint8_t)((random >> 16u) % 34u), (uint16_t)random);
-        const bool cmp = k22_data_set_cmp_input(data, (uint8_t)((random >> 10u) % 4u),
-                                                (uint8_t)((random >> 18u) % 10u), (uint8_t)random);
+        const bool read = kinetis_data_read(data, address, size, &value);
+        const bool written = kinetis_data_write(data, address, size, random ^ UINT32_C(0xa5a55a5a));
+        const bool requested = kinetis_data_dma_request(data, (uint8_t)(random >> 24u));
+        const bool triggered = kinetis_data_dma_trigger(data, (uint8_t)((random >> 20u) % 18u));
+        const bool adc =
+            kinetis_data_set_adc_input(data, (uint8_t)((random >> 8u) % 3u),
+                                       (uint8_t)((random >> 16u) % 34u), (uint16_t)random);
+        const bool cmp =
+            kinetis_data_set_cmp_input(data, (uint8_t)((random >> 10u) % 4u),
+                                       (uint8_t)((random >> 18u) % 10u), (uint8_t)random);
         uint16_t dac_value = 0u;
-        const bool dac = k22_data_get_dac_output(data, (uint8_t)((random >> 12u) % 3u), &dac_value);
-        k22_data_adc_trigger(data, (uint8_t)((random >> 14u) % 3u));
-        k22_data_adc_pretrigger(data, (uint8_t)((random >> 16u) % 3u),
-                                (uint8_t)((random >> 22u) % 4u));
-        k22_data_dac_trigger(data, (uint8_t)((random >> 18u) % 3u));
-        k22_data_advance(data, (random & 31u) + 1u);
+        const bool dac =
+            kinetis_data_get_dac_output(data, (uint8_t)((random >> 12u) % 3u), &dac_value);
+        kinetis_data_adc_trigger(data, (uint8_t)((random >> 14u) % 3u));
+        kinetis_data_adc_pretrigger(data, (uint8_t)((random >> 16u) % 3u),
+                                    (uint8_t)((random >> 22u) % 4u));
+        kinetis_data_dac_trigger(data, (uint8_t)((random >> 18u) % 3u));
+        kinetis_data_advance(data, (random & 31u) + 1u);
         census.reads += read;
         census.writes += written;
         census.signals += requested + triggered + adc + cmp + dac;
@@ -117,5 +120,5 @@ void k22_data_test_test_state_census(TestState* state) {
            census.reads == 19524u && census.writes == 19053u && census.signals == 86424u &&
                census.fingerprint == UINT64_C(5457665838010798238),
            "data state census matches");
-    k22_data_destroy(data);
+    kinetis_data_destroy(data);
 }

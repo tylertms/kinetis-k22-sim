@@ -54,7 +54,7 @@ static Kinetis* create_device(TestState* state) {
     expect(state, kinetis_load(device, 0x100u, &program, sizeof(program)),
            "kinetis_load(device, 0x100u, &program, sizeof(program))");
     expect(state, kinetis_reset(device), "kinetis_reset(device)");
-    expect(state, k22_test_disable_watchdog(device), "k22_test_disable_watchdog(device)");
+    expect(state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
     return device;
 }
 
@@ -166,17 +166,17 @@ static void test_event_capacity(TestState* state, Kinetis* device) {
     while (kinetis_next_event(device, &pending_event)) {
     }
 
-    k22_io_set_clock(&device->io, K22_PERIPHERAL_PORTD, true);
-    expect(state, k22_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u),
-           "k22_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u)");
-    for (uint32_t event_index = 0u; event_index < K22_EVENT_CAPACITY + 1u; event_index++) {
-        expect(state, k22_io_drive_pin(&device->io, 3u, 1u, false),
-               "k22_io_drive_pin(&device->io, 3u, 1u, false)");
-        expect(state, k22_io_drive_pin(&device->io, 3u, 1u, true),
-               "k22_io_drive_pin(&device->io, 3u, 1u, true)");
+    kinetis_io_set_clock(&device->io, KINETIS_PERIPHERAL_PORTD, true);
+    expect(state, kinetis_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u),
+           "kinetis_io_write(&device->io, 0x4004c004u, 4u, 1u << 16u)");
+    for (uint32_t event_index = 0u; event_index < KINETIS_EVENT_CAPACITY + 1u; event_index++) {
+        expect(state, kinetis_io_drive_pin(&device->io, 3u, 1u, false),
+               "kinetis_io_drive_pin(&device->io, 3u, 1u, false)");
+        expect(state, kinetis_io_drive_pin(&device->io, 3u, 1u, true),
+               "kinetis_io_drive_pin(&device->io, 3u, 1u, true)");
     }
-    expect(state, device->event_count == K22_EVENT_CAPACITY,
-           "device->event_count == K22_EVENT_CAPACITY");
+    expect(state, device->event_count == KINETIS_EVENT_CAPACITY,
+           "device->event_count == KINETIS_EVENT_CAPACITY");
     expect(state, device->event_read_index != 0u, "device->event_read_index != 0u");
 }
 
@@ -329,7 +329,7 @@ static void test_retention(TestState* state, Kinetis* device) {
     expect(state, kinetis_reset(device), "kinetis_reset(device)");
     expect(state, read32(state, device, RFVBAT_REG0) == 0u,
            "read32(state, device, RFVBAT_REG0) == 0u");
-    expect(state, k22_test_disable_watchdog(device), "k22_test_disable_watchdog(device)");
+    expect(state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
 }
 
 int main(void) {

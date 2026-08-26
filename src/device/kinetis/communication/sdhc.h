@@ -1,23 +1,23 @@
-#ifndef KINETIS_SIM_K22_SDHC_H
-#define KINETIS_SIM_K22_SDHC_H
+#ifndef KINETIS_SIM_SDHC_H
+#define KINETIS_SIM_SDHC_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-typedef bool (*K22SdhcBusRead)(void* context, uint32_t bus_address, uint8_t access_size,
-                               uint32_t* read_value);
-typedef bool (*K22SdhcBusWrite)(void* context, uint32_t bus_address, uint8_t access_size,
-                                uint32_t write_value);
+typedef bool (*KinetisSdhcBusRead)(void* context, uint32_t bus_address, uint8_t access_size,
+                                   uint32_t* read_value);
+typedef bool (*KinetisSdhcBusWrite)(void* context, uint32_t bus_address, uint8_t access_size,
+                                    uint32_t write_value);
 
 typedef struct {
     void* context;
-    K22SdhcBusRead read;
-    K22SdhcBusWrite write;
-} K22SdhcBus;
+    KinetisSdhcBusRead read;
+    KinetisSdhcBusWrite write;
+} KinetisSdhcBus;
 
 typedef struct {
-    K22SdhcBus bus;
+    KinetisSdhcBus bus;
     uint32_t registers[64];
     uint8_t* card;
     size_t card_size;
@@ -32,21 +32,22 @@ typedef struct {
     bool selected;
     bool transfer_read;
     bool transfer_multiple;
-} K22Sdhc;
+} KinetisSdhc;
 
-bool k22_sdhc_init(K22Sdhc* sdhc, K22SdhcBus bus);
-void k22_sdhc_destroy(K22Sdhc* sdhc);
-void k22_sdhc_reset(K22Sdhc* sdhc);
-bool k22_sdhc_copy(K22Sdhc* destination, const K22Sdhc* source, K22SdhcBus bus);
-void k22_sdhc_set_clock(K22Sdhc* sdhc, bool enabled);
-bool k22_sdhc_insert(K22Sdhc* sdhc, const void* card_data, size_t card_size, bool write_protected);
-void k22_sdhc_eject(K22Sdhc* sdhc);
-bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t card_offset, void* card_data,
-                        size_t byte_count);
-bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
-                   uint32_t* read_value);
-bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
-                    uint32_t write_value);
-bool k22_sdhc_irq(const K22Sdhc* sdhc);
+bool kinetis_sdhc_init(KinetisSdhc* sdhc, KinetisSdhcBus bus);
+void kinetis_sdhc_destroy(KinetisSdhc* sdhc);
+void kinetis_sdhc_reset(KinetisSdhc* sdhc);
+bool kinetis_sdhc_copy(KinetisSdhc* destination, const KinetisSdhc* source, KinetisSdhcBus bus);
+void kinetis_sdhc_set_clock(KinetisSdhc* sdhc, bool enabled);
+bool kinetis_sdhc_state_insert(KinetisSdhc* sdhc, const void* card_data, size_t card_size,
+                               bool write_protected);
+void kinetis_sdhc_state_eject(KinetisSdhc* sdhc);
+bool kinetis_sdhc_state_read_card(const KinetisSdhc* sdhc, size_t card_offset, void* card_data,
+                                  size_t byte_count);
+bool kinetis_sdhc_read(KinetisSdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                       uint32_t* read_value);
+bool kinetis_sdhc_write(KinetisSdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                        uint32_t write_value);
+bool kinetis_sdhc_irq(const KinetisSdhc* sdhc);
 
 #endif

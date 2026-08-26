@@ -6,61 +6,62 @@ typedef struct {
     bool high;
 } LlwuEdgeCase;
 
-static void test_invalid_state(TestState* state, K22Timing* timing) {
-    K22Timing invalid = {0};
-    K22Timing destination;
+static void test_invalid_state(TestState* state, KinetisTiming* timing) {
+    KinetisTiming invalid = {0};
+    KinetisTiming destination;
     uint32_t value = 0u;
 
-    expect(state, !k22_timing_read(&invalid, 0u, 1u, &value),
-           "k22_timing_read rejects an uninitialized state");
-    expect(state, !k22_timing_read(timing, 0u, 1u, NULL),
-           "k22_timing_read rejects a null destination");
-    expect(state, !k22_timing_write(&invalid, 0u, 1u, 0u),
-           "k22_timing_write rejects an uninitialized state");
-    k22_timing_advance(&invalid, 1u);
-    k22_timing_advance(timing, 0u);
-    k22_timing_reset(&invalid, 0u, 0u);
-    k22_timing_warm_reset(NULL, 0u, 0u);
-    k22_timing_warm_reset(&invalid, 0u, 0u);
-    expect(state, !k22_timing_trigger_low_voltage_warning(&invalid),
+    expect(state, !kinetis_timing_read(&invalid, 0u, 1u, &value),
+           "kinetis_timing_read rejects an uninitialized state");
+    expect(state, !kinetis_timing_read(timing, 0u, 1u, NULL),
+           "kinetis_timing_read rejects a null destination");
+    expect(state, !kinetis_timing_write(&invalid, 0u, 1u, 0u),
+           "kinetis_timing_write rejects an uninitialized state");
+    kinetis_timing_advance(&invalid, 1u);
+    kinetis_timing_advance(timing, 0u);
+    kinetis_timing_reset(&invalid, 0u, 0u);
+    kinetis_timing_warm_reset(NULL, 0u, 0u);
+    kinetis_timing_warm_reset(&invalid, 0u, 0u);
+    expect(state, !kinetis_timing_trigger_low_voltage_warning(&invalid),
            "low-voltage warning rejects an uninitialized state");
-    expect(state, !k22_timing_trigger_low_voltage_detect(&invalid),
+    expect(state, !kinetis_timing_trigger_low_voltage_detect(&invalid),
            "low-voltage detect rejects an uninitialized state");
-    expect(state, !k22_timing_set_llwu_pin(&invalid, 0u, false),
+    expect(state, !kinetis_timing_set_llwu_pin(&invalid, 0u, false),
            "LLWU pin input rejects an uninitialized state");
-    expect(state, !k22_timing_trigger_llwu_module(&invalid, 0u),
+    expect(state, !kinetis_timing_trigger_llwu_module(&invalid, 0u),
            "LLWU module input rejects an uninitialized state");
-    k22_timing_set_cpu_sleeping(&invalid, true, true);
-    expect(state, !k22_timing_set_ewm_input(&invalid, false),
+    kinetis_timing_set_cpu_sleeping(&invalid, true, true);
+    expect(state, !kinetis_timing_set_ewm_input(&invalid, false),
            "EWM input rejects an uninitialized state");
-    expect(state, !k22_timing_ewm_output(&invalid), "EWM output rejects an uninitialized state");
-    k22_timing_watchdog_advance(NULL, 1u);
-    k22_timing_watchdog_advance(&invalid, 1u);
-    k22_timing_watchdog_advance(timing, 0u);
-    expect(state, !k22_timing_projected_watchdog_read(NULL, 0u, 2u, &value),
+    expect(state, !kinetis_timing_ewm_output(&invalid),
+           "EWM output rejects an uninitialized state");
+    kinetis_timing_watchdog_advance(NULL, 1u);
+    kinetis_timing_watchdog_advance(&invalid, 1u);
+    kinetis_timing_watchdog_advance(timing, 0u);
+    expect(state, !kinetis_timing_projected_watchdog_read(NULL, 0u, 2u, &value),
            "projected watchdog reads reject a null state");
-    expect(state, !k22_timing_projected_watchdog_read(timing, 0u, 2u, NULL),
+    expect(state, !kinetis_timing_projected_watchdog_read(timing, 0u, 2u, NULL),
            "projected watchdog reads require a destination");
-    expect(state, !k22_timing_copy(&destination, NULL, k22_timing_test_signals(NULL)),
+    expect(state, !kinetis_timing_copy(&destination, NULL, kinetis_timing_test_signals(NULL)),
            "timing copy rejects a null source");
-    expect(state, !k22_timing_copy(&destination, &invalid, k22_timing_test_signals(NULL)),
+    expect(state, !kinetis_timing_copy(&destination, &invalid, kinetis_timing_test_signals(NULL)),
            "timing copy rejects an uninitialized source");
-    expect(state, k22_timing_bus_clock_hz(NULL) == 0u, "null timing state has no bus clock");
+    expect(state, kinetis_timing_bus_clock_hz(NULL) == 0u, "null timing state has no bus clock");
 }
 
-static void test_voltage_modes(TestState* state, K22Timing* timing) {
+static void test_voltage_modes(TestState* state, KinetisTiming* timing) {
     const uint8_t modes[] = {1u, 2u, 0x80u, 4u};
 
     for (size_t index = 0u; index < sizeof(modes) / sizeof(modes[0]); index++) {
         timing->smc[3] = modes[index];
-        expect(state, k22_timing_trigger_low_voltage_warning(timing),
+        expect(state, kinetis_timing_trigger_low_voltage_warning(timing),
                "low-voltage warning accepts each power mode");
-        expect(state, k22_timing_trigger_low_voltage_detect(timing),
+        expect(state, kinetis_timing_trigger_low_voltage_detect(timing),
                "low-voltage detect accepts each power mode");
     }
 }
 
-static void test_llwu_edges(TestState* state, K22Timing* timing) {
+static void test_llwu_edges(TestState* state, KinetisTiming* timing) {
     const LlwuEdgeCase cases[] = {
         {0u, false, false}, {1u, false, true}, {1u, true, false}, {1u, false, false},
         {2u, true, false},  {2u, false, true}, {2u, true, true},  {3u, false, true},
@@ -74,30 +75,30 @@ static void test_llwu_edges(TestState* state, K22Timing* timing) {
     for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); index++) {
         timing->llwu[3] = (uint8_t)(cases[index].edge << 6u);
         timing->llwu_pin_level[pin] = cases[index].previous;
-        expect(state, k22_timing_set_llwu_pin(timing, pin, cases[index].high),
+        expect(state, kinetis_timing_set_llwu_pin(timing, pin, cases[index].high),
                "LLWU accepts every edge transition");
     }
 
     timing->smc[3] = 1u;
     timing->llwu[4] = 1u;
-    expect(state, k22_timing_trigger_llwu_module(timing, 0u),
+    expect(state, kinetis_timing_trigger_llwu_module(timing, 0u),
            "LLWU ignores enabled modules outside low-leakage mode");
     timing->smc[3] = 0x20u;
     timing->llwu[4] = 0u;
-    expect(state, k22_timing_trigger_llwu_module(timing, 0u),
+    expect(state, kinetis_timing_trigger_llwu_module(timing, 0u),
            "LLWU ignores disabled modules in low-leakage mode");
 }
 
-static void enter_sleep(K22Timing* timing, uint8_t stop_mode, uint8_t protection) {
+static void enter_sleep(KinetisTiming* timing, uint8_t stop_mode, uint8_t protection) {
     timing->cpu_sleeping = false;
     timing->deep_sleeping = false;
     timing->smc_run_status = 1u;
     timing->smc[0] = protection;
     timing->smc[1] = stop_mode;
-    k22_timing_set_cpu_sleeping(timing, true, true);
+    kinetis_timing_set_cpu_sleeping(timing, true, true);
 }
 
-static void test_sleep_modes(K22Timing* timing) {
+static void test_sleep_modes(KinetisTiming* timing) {
     enter_sleep(timing, 0u, 0u);
     enter_sleep(timing, 2u, 0u);
     enter_sleep(timing, 2u, 0x20u);
@@ -110,30 +111,30 @@ static void test_sleep_modes(K22Timing* timing) {
     timing->cpu_sleeping = false;
     timing->deep_sleeping = false;
     timing->smc_run_status = 4u;
-    k22_timing_set_cpu_sleeping(timing, true, false);
-    k22_timing_set_cpu_sleeping(timing, false, false);
+    kinetis_timing_set_cpu_sleeping(timing, true, false);
+    kinetis_timing_set_cpu_sleeping(timing, false, false);
     timing->smc[3] = 0x40u;
-    k22_timing_set_cpu_sleeping(timing, false, false);
+    kinetis_timing_set_cpu_sleeping(timing, false, false);
 }
 
-static void test_ftm_boundaries(TestState* state, K22Timing* timing) {
-    K22Profile empty_profile = {0};
-    K22Timing unavailable = {.profile = &empty_profile};
+static void test_ftm_boundaries(TestState* state, KinetisTiming* timing) {
+    KinetisDeviceProfile empty_profile = {0};
+    KinetisTiming unavailable = {.profile = &empty_profile};
     bool high = false;
 
-    expect(state, !k22_timing_set_ftm_input(&unavailable, 0u, 0u, true),
+    expect(state, !kinetis_timing_set_ftm_input(&unavailable, 0u, 0u, true),
            "absent FTM rejects channel input");
-    expect(state, !k22_timing_set_ftm_fault(&unavailable, 0u, 0u, true),
+    expect(state, !kinetis_timing_set_ftm_fault(&unavailable, 0u, 0u, true),
            "absent FTM rejects fault input");
-    expect(state, !k22_timing_trigger_ftm_hardware(&unavailable, 0u, 0u),
+    expect(state, !kinetis_timing_trigger_ftm_hardware(&unavailable, 0u, 0u),
            "absent FTM rejects hardware triggers");
-    expect(state, !k22_timing_get_ftm_output(&unavailable, 0u, 0u, &high),
+    expect(state, !kinetis_timing_get_ftm_output(&unavailable, 0u, 0u, &high),
            "absent FTM has no channel output");
-    expect(state, !k22_timing_get_ftm_output(timing, 0u, 0u, NULL),
+    expect(state, !kinetis_timing_get_ftm_output(timing, 0u, 0u, NULL),
            "FTM output requires a destination");
 }
 
-void k22_timing_test_test_api_boundaries(TestState* state, K22Timing* timing) {
+void kinetis_timing_test_test_api_boundaries(TestState* state, KinetisTiming* timing) {
     test_invalid_state(state, timing);
     test_voltage_modes(state, timing);
     test_llwu_edges(state, timing);

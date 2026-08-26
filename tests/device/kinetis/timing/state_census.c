@@ -21,7 +21,7 @@ static void mix(TimingStateCensus* census, uint32_t value) {
     census->fingerprint = (census->fingerprint ^ value) * UINT64_C(1099511628211);
 }
 
-static void randomize_ftm(K22FtmState* ftm, TimingStateCensus* census) {
+static void randomize_ftm(KinetisFtmState* ftm, TimingStateCensus* census) {
     ftm->sc = next_random(census);
     ftm->counter = (uint16_t)next_random(census);
     ftm->modulo = (uint16_t)next_random(census);
@@ -70,31 +70,31 @@ static void randomize_ftm(K22FtmState* ftm, TimingStateCensus* census) {
     ftm->fault_flags_read_mask = (uint8_t)(flags >> 24u);
 }
 
-void k22_timing_test_test_state_census(TestState* state, K22Timing* timing) {
+void kinetis_timing_test_test_state_census(TestState* state, KinetisTiming* timing) {
     TimingStateCensus census = {UINT32_C(0xb7e15162), 0u, 0u, 0u, UINT64_C(14695981039346656037)};
     timing->sim_scgc3 = UINT32_MAX;
     timing->sim_scgc6 = UINT32_MAX;
     for (uint32_t iteration = 0u; iteration < 20000u; iteration++) {
         const uint8_t instance = (uint8_t)(iteration & 3u);
-        K22FtmState* ftm = &timing->ftm[instance];
+        KinetisFtmState* ftm = &timing->ftm[instance];
         randomize_ftm(ftm, &census);
         const uint32_t random = next_random(&census);
         const uint32_t address =
             FTM0_SC + (uint32_t)instance * 0x1000u + ((random >> 8u) % 41u) * 4u;
         const uint8_t size = (uint8_t[]){1u, 2u, 4u}[random % 3u];
-        const bool written = k22_timing_write(timing, address, size, random);
+        const bool written = kinetis_timing_write(timing, address, size, random);
         uint32_t value = UINT32_MAX;
-        const bool read = k22_timing_read(timing, address, size, &value);
-        const bool input = k22_timing_set_ftm_input(timing, instance, (uint8_t)(random >> 16u) % 9u,
-                                                    (random & 1u) != 0u);
-        const bool fault = k22_timing_set_ftm_fault(timing, instance, (uint8_t)(random >> 20u) % 5u,
-                                                    (random & 2u) != 0u);
+        const bool read = kinetis_timing_read(timing, address, size, &value);
+        const bool input = kinetis_timing_set_ftm_input(
+            timing, instance, (uint8_t)(random >> 16u) % 9u, (random & 1u) != 0u);
+        const bool fault = kinetis_timing_set_ftm_fault(
+            timing, instance, (uint8_t)(random >> 20u) % 5u, (random & 2u) != 0u);
         const bool trigger =
-            k22_timing_trigger_ftm_hardware(timing, instance, (uint8_t)(random >> 24u) % 4u);
+            kinetis_timing_trigger_ftm_hardware(timing, instance, (uint8_t)(random >> 24u) % 4u);
         bool high = false;
         const bool output =
-            k22_timing_get_ftm_output(timing, instance, (uint8_t)(random >> 12u) % 9u, &high);
-        k22_timing_advance(timing, (random & 31u) + 1u);
+            kinetis_timing_get_ftm_output(timing, instance, (uint8_t)(random >> 12u) % 9u, &high);
+        kinetis_timing_advance(timing, (random & 31u) + 1u);
         census.writes += written;
         census.reads += read;
         census.signals += input + fault + trigger + output;

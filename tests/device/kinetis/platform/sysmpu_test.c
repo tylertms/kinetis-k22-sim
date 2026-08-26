@@ -91,11 +91,12 @@ int main(void) {
            "(read_debug(&state, device, SYSMPU_RGD0_WORD3) & 1u) != 0u");
     expect(&state, (read_debug(&state, device, SYSMPU_CESR) & 1u) != 0u,
            "(read_debug(&state, device, SYSMPU_CESR) & 1u) != 0u");
-    expect(&state, k22_io_clock_enabled(&device->io, K22_PERIPHERAL_SYSMPU),
-           "k22_io_clock_enabled(&device->io, K22_PERIPHERAL_SYSMPU)");
+    expect(&state, kinetis_io_clock_enabled(&device->io, KINETIS_PERIPHERAL_SYSMPU),
+           "kinetis_io_clock_enabled(&device->io, KINETIS_PERIPHERAL_SYSMPU)");
 
-    expect(&state, !k22_io_sysmpu_access(&device->io, destination, 2u, true, K22_SYSMPU_WRITE),
-           "!k22_io_sysmpu_access(&device->io, destination, 2u, true, K22_SYSMPU_WRITE)");
+    expect(&state,
+           !kinetis_io_sysmpu_access(&device->io, destination, 2u, true, KINETIS_SYSMPU_WRITE),
+           "!kinetis_io_sysmpu_access(&device->io, destination, 2u, true, KINETIS_SYSMPU_WRITE)");
     write_debug(&state, device, SYSMPU_CESR, &(uint32_t){(1u << 27u) | 1u}, sizeof(uint32_t));
     expect(&state,
            kinetis_memory_read(device, source, 1u, CORTEX_M4_ACCESS_DATA, &memory_read_value),

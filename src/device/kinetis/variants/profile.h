@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_PROFILE_H
-#define KINETIS_SIM_K22_PROFILE_H
+#ifndef KINETIS_SIM_PROFILE_H
+#define KINETIS_SIM_PROFILE_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -7,97 +7,86 @@
 
 #include "kinetis.h"
 
-typedef KinetisProfile K22ProfileId;
-
-#define K22_PROFILE_MK22F12810 KINETIS_PROFILE_MK22F12810
-#define K22_PROFILE_MKV30F12810 KINETIS_PROFILE_MKV30F12810
-#define K22_PROFILE_MK22FN12812 KINETIS_PROFILE_MK22FN12812
-#define K22_PROFILE_MK22FN25612 KINETIS_PROFILE_MK22FN25612
-#define K22_PROFILE_MK22FN51212 KINETIS_PROFILE_MK22FN51212
-#define K22_PROFILE_MK22FN1M012 KINETIS_PROFILE_MK22FN1M012
-#define K22_PROFILE_MK22FX51212 KINETIS_PROFILE_MK22FX51212
-#define K22_PROFILE_COUNT KINETIS_PROFILE_COUNT
+typedef enum {
+    KINETIS_PERIPHERAL_FLASH_CONFIG,
+    KINETIS_PERIPHERAL_AIPS0,
+    KINETIS_PERIPHERAL_AIPS1,
+    KINETIS_PERIPHERAL_AXBS,
+    KINETIS_PERIPHERAL_DMA,
+    KINETIS_PERIPHERAL_FB,
+    KINETIS_PERIPHERAL_SYSMPU,
+    KINETIS_PERIPHERAL_FMC,
+    KINETIS_PERIPHERAL_FTFA,
+    KINETIS_PERIPHERAL_FTFE,
+    KINETIS_PERIPHERAL_DMAMUX,
+    KINETIS_PERIPHERAL_CAN0,
+    KINETIS_PERIPHERAL_FTM0,
+    KINETIS_PERIPHERAL_FTM1,
+    KINETIS_PERIPHERAL_FTM2,
+    KINETIS_PERIPHERAL_FTM3,
+    KINETIS_PERIPHERAL_ADC0,
+    KINETIS_PERIPHERAL_ADC1,
+    KINETIS_PERIPHERAL_DAC0,
+    KINETIS_PERIPHERAL_DAC1,
+    KINETIS_PERIPHERAL_RNG,
+    KINETIS_PERIPHERAL_LPUART0,
+    KINETIS_PERIPHERAL_SPI0,
+    KINETIS_PERIPHERAL_SPI1,
+    KINETIS_PERIPHERAL_SPI2,
+    KINETIS_PERIPHERAL_SDHC,
+    KINETIS_PERIPHERAL_I2S0,
+    KINETIS_PERIPHERAL_CRC,
+    KINETIS_PERIPHERAL_USBDCD,
+    KINETIS_PERIPHERAL_PDB0,
+    KINETIS_PERIPHERAL_PIT,
+    KINETIS_PERIPHERAL_RTC,
+    KINETIS_PERIPHERAL_RFVBAT,
+    KINETIS_PERIPHERAL_LPTMR0,
+    KINETIS_PERIPHERAL_RFSYS,
+    KINETIS_PERIPHERAL_SIM,
+    KINETIS_PERIPHERAL_PORTA,
+    KINETIS_PERIPHERAL_PORTB,
+    KINETIS_PERIPHERAL_PORTC,
+    KINETIS_PERIPHERAL_PORTD,
+    KINETIS_PERIPHERAL_PORTE,
+    KINETIS_PERIPHERAL_WDOG,
+    KINETIS_PERIPHERAL_EWM,
+    KINETIS_PERIPHERAL_CMT,
+    KINETIS_PERIPHERAL_MCG,
+    KINETIS_PERIPHERAL_OSC,
+    KINETIS_PERIPHERAL_I2C0,
+    KINETIS_PERIPHERAL_I2C1,
+    KINETIS_PERIPHERAL_I2C2,
+    KINETIS_PERIPHERAL_UART0,
+    KINETIS_PERIPHERAL_UART1,
+    KINETIS_PERIPHERAL_UART2,
+    KINETIS_PERIPHERAL_UART3,
+    KINETIS_PERIPHERAL_UART4,
+    KINETIS_PERIPHERAL_UART5,
+    KINETIS_PERIPHERAL_USB0,
+    KINETIS_PERIPHERAL_CMP0,
+    KINETIS_PERIPHERAL_CMP1,
+    KINETIS_PERIPHERAL_CMP2,
+    KINETIS_PERIPHERAL_VREF,
+    KINETIS_PERIPHERAL_LLWU,
+    KINETIS_PERIPHERAL_PMC,
+    KINETIS_PERIPHERAL_SMC,
+    KINETIS_PERIPHERAL_RCM,
+    KINETIS_PERIPHERAL_GPIOA,
+    KINETIS_PERIPHERAL_GPIOB,
+    KINETIS_PERIPHERAL_GPIOC,
+    KINETIS_PERIPHERAL_GPIOD,
+    KINETIS_PERIPHERAL_GPIOE,
+    KINETIS_PERIPHERAL_MCM,
+    KINETIS_PERIPHERAL_COUNT,
+} KinetisPeripheralId;
 
 typedef enum {
-    K22_PERIPHERAL_FLASH_CONFIG,
-    K22_PERIPHERAL_AIPS0,
-    K22_PERIPHERAL_AIPS1,
-    K22_PERIPHERAL_AXBS,
-    K22_PERIPHERAL_DMA,
-    K22_PERIPHERAL_FB,
-    K22_PERIPHERAL_SYSMPU,
-    K22_PERIPHERAL_FMC,
-    K22_PERIPHERAL_FTFA,
-    K22_PERIPHERAL_FTFE,
-    K22_PERIPHERAL_DMAMUX,
-    K22_PERIPHERAL_CAN0,
-    K22_PERIPHERAL_FTM0,
-    K22_PERIPHERAL_FTM1,
-    K22_PERIPHERAL_FTM2,
-    K22_PERIPHERAL_FTM3,
-    K22_PERIPHERAL_ADC0,
-    K22_PERIPHERAL_ADC1,
-    K22_PERIPHERAL_DAC0,
-    K22_PERIPHERAL_DAC1,
-    K22_PERIPHERAL_RNG,
-    K22_PERIPHERAL_LPUART0,
-    K22_PERIPHERAL_SPI0,
-    K22_PERIPHERAL_SPI1,
-    K22_PERIPHERAL_SPI2,
-    K22_PERIPHERAL_SDHC,
-    K22_PERIPHERAL_I2S0,
-    K22_PERIPHERAL_CRC,
-    K22_PERIPHERAL_USBDCD,
-    K22_PERIPHERAL_PDB0,
-    K22_PERIPHERAL_PIT,
-    K22_PERIPHERAL_RTC,
-    K22_PERIPHERAL_RFVBAT,
-    K22_PERIPHERAL_LPTMR0,
-    K22_PERIPHERAL_RFSYS,
-    K22_PERIPHERAL_SIM,
-    K22_PERIPHERAL_PORTA,
-    K22_PERIPHERAL_PORTB,
-    K22_PERIPHERAL_PORTC,
-    K22_PERIPHERAL_PORTD,
-    K22_PERIPHERAL_PORTE,
-    K22_PERIPHERAL_WDOG,
-    K22_PERIPHERAL_EWM,
-    K22_PERIPHERAL_CMT,
-    K22_PERIPHERAL_MCG,
-    K22_PERIPHERAL_OSC,
-    K22_PERIPHERAL_I2C0,
-    K22_PERIPHERAL_I2C1,
-    K22_PERIPHERAL_I2C2,
-    K22_PERIPHERAL_UART0,
-    K22_PERIPHERAL_UART1,
-    K22_PERIPHERAL_UART2,
-    K22_PERIPHERAL_UART3,
-    K22_PERIPHERAL_UART4,
-    K22_PERIPHERAL_UART5,
-    K22_PERIPHERAL_USB0,
-    K22_PERIPHERAL_CMP0,
-    K22_PERIPHERAL_CMP1,
-    K22_PERIPHERAL_CMP2,
-    K22_PERIPHERAL_VREF,
-    K22_PERIPHERAL_LLWU,
-    K22_PERIPHERAL_PMC,
-    K22_PERIPHERAL_SMC,
-    K22_PERIPHERAL_RCM,
-    K22_PERIPHERAL_GPIOA,
-    K22_PERIPHERAL_GPIOB,
-    K22_PERIPHERAL_GPIOC,
-    K22_PERIPHERAL_GPIOD,
-    K22_PERIPHERAL_GPIOE,
-    K22_PERIPHERAL_MCM,
-    K22_PERIPHERAL_COUNT,
-} K22PeripheralId;
-
-typedef enum {
-    K22_CPU_ARCHITECTURE_ARMV7E_M,
-} K22CpuArchitecture;
+    KINETIS_CPU_ARCHITECTURE_ARMV7E_M,
+} KinetisCpuArchitecture;
 
 typedef struct {
-    K22CpuArchitecture architecture;
+    KinetisCpuArchitecture architecture;
     uint8_t core_revision_major;
     uint8_t core_revision_minor;
     uint8_t nvic_priority_bits;
@@ -108,16 +97,16 @@ typedef struct {
     bool has_vtor;
     bool has_systick;
     uint32_t maximum_core_clock_hz;
-} K22CpuOptions;
+} KinetisCpuOptions;
 
 typedef struct {
-    K22PeripheralId id;
+    KinetisPeripheralId id;
     uint32_t address;
     uint32_t size;
-} K22PeripheralBlock;
+} KinetisPeripheralBlock;
 
 typedef struct {
-    K22ProfileId id;
+    KinetisProfile id;
     const char* name;
     uint32_t program_flash_size;
     uint32_t sram_lower_address;
@@ -132,24 +121,24 @@ typedef struct {
     uint32_t sim_sdid_mask;
     uint8_t fmc_set_count;
     uint8_t fmc_line_size;
-    K22CpuOptions cpu;
-    const K22PeripheralBlock* peripheral_blocks;
+    KinetisCpuOptions cpu;
+    const KinetisPeripheralBlock* peripheral_blocks;
     size_t peripheral_block_count;
-} K22Profile;
+} KinetisDeviceProfile;
 
 typedef struct {
-    K22PeripheralId id;
+    KinetisPeripheralId id;
     uint32_t block_address;
     uint32_t block_size;
     uint32_t offset;
-} K22PeripheralLocation;
+} KinetisPeripheralLocation;
 
-const K22Profile* k22_profile_get(K22ProfileId id);
-const K22Profile* k22_profile_find(const char* profile_name);
-bool k22_profile_has_peripheral(const K22Profile* profile, K22PeripheralId id);
-bool k22_profile_peripheral_block(const K22Profile* profile, K22PeripheralId id,
-                                  K22PeripheralBlock* block_out);
-bool k22_profile_resolve_peripheral(const K22Profile* profile, uint32_t address,
-                                    uint8_t access_size, K22PeripheralLocation* location);
+const KinetisDeviceProfile* kinetis_profile_get(KinetisProfile id);
+const KinetisDeviceProfile* kinetis_profile_find(const char* profile_name);
+bool kinetis_profile_has_peripheral(const KinetisDeviceProfile* profile, KinetisPeripheralId id);
+bool kinetis_profile_peripheral_block(const KinetisDeviceProfile* profile, KinetisPeripheralId id,
+                                      KinetisPeripheralBlock* block_out);
+bool kinetis_profile_resolve_peripheral(const KinetisDeviceProfile* profile, uint32_t address,
+                                        uint8_t access_size, KinetisPeripheralLocation* location);
 
 #endif

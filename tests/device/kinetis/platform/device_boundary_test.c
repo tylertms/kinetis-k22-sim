@@ -66,15 +66,15 @@ static void access_census(Kinetis* device, DeviceCensus* census) {
 }
 
 static void copy_guard_cases(TestState* state, Kinetis* destination, Kinetis* source) {
-    const K22Profile* profile = source->profile;
-    const K22PackageSelection* package = source->package;
+    const KinetisDeviceProfile* profile = source->profile;
+    const KinetisPackageSelection* package = source->package;
     const size_t flash_size = source->configuration.flash_size;
     const size_t sram_size = source->configuration.sram_size;
 
-    source->profile = k22_profile_get(K22_PROFILE_MK22FN51212);
+    source->profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
     expect(state, !kinetis_copy(destination, source), "copy rejects a different profile");
     source->profile = profile;
-    source->package = k22_package_select(source->profile, K22_PACKAGE_DC_121_XFBGA);
+    source->package = kinetis_package_select(source->profile, KINETIS_PACKAGE_DC_121_XFBGA);
     expect(state, !kinetis_copy(destination, source), "copy rejects a different package");
     source->package = package;
     source->configuration.flash_size++;
@@ -183,14 +183,14 @@ static void register_state_cases(TestState* state, Kinetis* first, Kinetis* seco
            "register comparison projects a committed watchdog update");
 }
 
-#ifdef K22_TEST_ALLOCATION_FAILURE
+#ifdef KINETIS_TEST_ALLOCATION_FAILURE
 static void copy_allocation_cases(TestState* state, Kinetis* destination, Kinetis* source) {
     static const uint8_t window_data[] = {1u, 2u, 3u, 4u};
     static const uint8_t card[512] = {0u};
     expect(state,
            kinetis_flexbus_attach(source, 0x60000000u, window_data, sizeof(window_data), false),
            "attach source FlexBus window");
-    expect(state, k22_sdhc_insert(&source->sdhc, card, sizeof(card), false),
+    expect(state, kinetis_sdhc_state_insert(&source->sdhc, card, sizeof(card), false),
            "insert source SDHC card");
     uint32_t failure_count = 0u;
     bool copy_succeeded = false;
@@ -217,7 +217,7 @@ int main(void) {
         access_census(destination_device, &census);
         copy_guard_cases(&state, destination_device, source_device);
         register_state_cases(&state, destination_device, source_device);
-#ifdef K22_TEST_ALLOCATION_FAILURE
+#ifdef KINETIS_TEST_ALLOCATION_FAILURE
         copy_allocation_cases(&state, destination_device, source_device);
 #endif
         flexbus_cases(&state, destination_device);

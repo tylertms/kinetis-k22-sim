@@ -16,7 +16,7 @@ enum {
 };
 
 typedef struct {
-    K22PeripheralId peripheral_id;
+    KinetisPeripheralId peripheral_id;
     uint32_t register_address;
     uint8_t gate_bit;
 } GateCase;
@@ -27,37 +27,37 @@ typedef struct {
 } RegisterAccess;
 
 static const GateCase cases[] = {
-    {K22_PERIPHERAL_DMA, SIM_SCGC7, 1u},     {K22_PERIPHERAL_FB, SIM_SCGC7, 0u},
-    {K22_PERIPHERAL_SYSMPU, SIM_SCGC7, 2u},  {K22_PERIPHERAL_FTFE, SIM_SCGC6, 0u},
-    {K22_PERIPHERAL_DMAMUX, SIM_SCGC6, 1u},  {K22_PERIPHERAL_CAN0, SIM_SCGC6, 4u},
-    {K22_PERIPHERAL_FTM0, SIM_SCGC6, 24u},   {K22_PERIPHERAL_FTM1, SIM_SCGC6, 25u},
-    {K22_PERIPHERAL_FTM2, SIM_SCGC3, 24u},   {K22_PERIPHERAL_FTM3, SIM_SCGC3, 25u},
-    {K22_PERIPHERAL_ADC0, SIM_SCGC6, 27u},   {K22_PERIPHERAL_ADC1, SIM_SCGC3, 27u},
-    {K22_PERIPHERAL_DAC0, SIM_SCGC2, 12u},   {K22_PERIPHERAL_DAC1, SIM_SCGC2, 13u},
-    {K22_PERIPHERAL_SPI0, SIM_SCGC6, 12u},   {K22_PERIPHERAL_SPI1, SIM_SCGC6, 13u},
-    {K22_PERIPHERAL_SPI2, SIM_SCGC3, 12u},   {K22_PERIPHERAL_SDHC, SIM_SCGC3, 17u},
-    {K22_PERIPHERAL_I2S0, SIM_SCGC6, 15u},   {K22_PERIPHERAL_CRC, SIM_SCGC6, 18u},
-    {K22_PERIPHERAL_USBDCD, SIM_SCGC6, 21u}, {K22_PERIPHERAL_PDB0, SIM_SCGC6, 22u},
-    {K22_PERIPHERAL_PIT, SIM_SCGC6, 23u},    {K22_PERIPHERAL_RTC, SIM_SCGC6, 29u},
-    {K22_PERIPHERAL_LPTMR0, SIM_SCGC5, 0u},  {K22_PERIPHERAL_CMT, SIM_SCGC4, 2u},
-    {K22_PERIPHERAL_I2C0, SIM_SCGC4, 6u},    {K22_PERIPHERAL_I2C1, SIM_SCGC4, 7u},
-    {K22_PERIPHERAL_I2C2, SIM_SCGC1, 6u},    {K22_PERIPHERAL_UART0, SIM_SCGC4, 10u},
-    {K22_PERIPHERAL_UART1, SIM_SCGC4, 11u},  {K22_PERIPHERAL_UART2, SIM_SCGC4, 12u},
-    {K22_PERIPHERAL_UART3, SIM_SCGC4, 13u},  {K22_PERIPHERAL_UART4, SIM_SCGC1, 10u},
-    {K22_PERIPHERAL_UART5, SIM_SCGC1, 11u},  {K22_PERIPHERAL_USB0, SIM_SCGC4, 18u},
-    {K22_PERIPHERAL_CMP0, SIM_SCGC4, 19u},   {K22_PERIPHERAL_CMP1, SIM_SCGC4, 19u},
-    {K22_PERIPHERAL_CMP2, SIM_SCGC4, 19u},   {K22_PERIPHERAL_VREF, SIM_SCGC4, 20u},
-    {K22_PERIPHERAL_PORTA, SIM_SCGC5, 9u},   {K22_PERIPHERAL_PORTB, SIM_SCGC5, 10u},
-    {K22_PERIPHERAL_PORTC, SIM_SCGC5, 11u},  {K22_PERIPHERAL_PORTD, SIM_SCGC5, 12u},
-    {K22_PERIPHERAL_PORTE, SIM_SCGC5, 13u},  {K22_PERIPHERAL_GPIOA, SIM_SCGC5, 9u},
-    {K22_PERIPHERAL_GPIOB, SIM_SCGC5, 10u},  {K22_PERIPHERAL_GPIOC, SIM_SCGC5, 11u},
-    {K22_PERIPHERAL_GPIOD, SIM_SCGC5, 12u},  {K22_PERIPHERAL_GPIOE, SIM_SCGC5, 13u},
+    {KINETIS_PERIPHERAL_DMA, SIM_SCGC7, 1u},     {KINETIS_PERIPHERAL_FB, SIM_SCGC7, 0u},
+    {KINETIS_PERIPHERAL_SYSMPU, SIM_SCGC7, 2u},  {KINETIS_PERIPHERAL_FTFE, SIM_SCGC6, 0u},
+    {KINETIS_PERIPHERAL_DMAMUX, SIM_SCGC6, 1u},  {KINETIS_PERIPHERAL_CAN0, SIM_SCGC6, 4u},
+    {KINETIS_PERIPHERAL_FTM0, SIM_SCGC6, 24u},   {KINETIS_PERIPHERAL_FTM1, SIM_SCGC6, 25u},
+    {KINETIS_PERIPHERAL_FTM2, SIM_SCGC3, 24u},   {KINETIS_PERIPHERAL_FTM3, SIM_SCGC3, 25u},
+    {KINETIS_PERIPHERAL_ADC0, SIM_SCGC6, 27u},   {KINETIS_PERIPHERAL_ADC1, SIM_SCGC3, 27u},
+    {KINETIS_PERIPHERAL_DAC0, SIM_SCGC2, 12u},   {KINETIS_PERIPHERAL_DAC1, SIM_SCGC2, 13u},
+    {KINETIS_PERIPHERAL_SPI0, SIM_SCGC6, 12u},   {KINETIS_PERIPHERAL_SPI1, SIM_SCGC6, 13u},
+    {KINETIS_PERIPHERAL_SPI2, SIM_SCGC3, 12u},   {KINETIS_PERIPHERAL_SDHC, SIM_SCGC3, 17u},
+    {KINETIS_PERIPHERAL_I2S0, SIM_SCGC6, 15u},   {KINETIS_PERIPHERAL_CRC, SIM_SCGC6, 18u},
+    {KINETIS_PERIPHERAL_USBDCD, SIM_SCGC6, 21u}, {KINETIS_PERIPHERAL_PDB0, SIM_SCGC6, 22u},
+    {KINETIS_PERIPHERAL_PIT, SIM_SCGC6, 23u},    {KINETIS_PERIPHERAL_RTC, SIM_SCGC6, 29u},
+    {KINETIS_PERIPHERAL_LPTMR0, SIM_SCGC5, 0u},  {KINETIS_PERIPHERAL_CMT, SIM_SCGC4, 2u},
+    {KINETIS_PERIPHERAL_I2C0, SIM_SCGC4, 6u},    {KINETIS_PERIPHERAL_I2C1, SIM_SCGC4, 7u},
+    {KINETIS_PERIPHERAL_I2C2, SIM_SCGC1, 6u},    {KINETIS_PERIPHERAL_UART0, SIM_SCGC4, 10u},
+    {KINETIS_PERIPHERAL_UART1, SIM_SCGC4, 11u},  {KINETIS_PERIPHERAL_UART2, SIM_SCGC4, 12u},
+    {KINETIS_PERIPHERAL_UART3, SIM_SCGC4, 13u},  {KINETIS_PERIPHERAL_UART4, SIM_SCGC1, 10u},
+    {KINETIS_PERIPHERAL_UART5, SIM_SCGC1, 11u},  {KINETIS_PERIPHERAL_USB0, SIM_SCGC4, 18u},
+    {KINETIS_PERIPHERAL_CMP0, SIM_SCGC4, 19u},   {KINETIS_PERIPHERAL_CMP1, SIM_SCGC4, 19u},
+    {KINETIS_PERIPHERAL_CMP2, SIM_SCGC4, 19u},   {KINETIS_PERIPHERAL_VREF, SIM_SCGC4, 20u},
+    {KINETIS_PERIPHERAL_PORTA, SIM_SCGC5, 9u},   {KINETIS_PERIPHERAL_PORTB, SIM_SCGC5, 10u},
+    {KINETIS_PERIPHERAL_PORTC, SIM_SCGC5, 11u},  {KINETIS_PERIPHERAL_PORTD, SIM_SCGC5, 12u},
+    {KINETIS_PERIPHERAL_PORTE, SIM_SCGC5, 13u},  {KINETIS_PERIPHERAL_GPIOA, SIM_SCGC5, 9u},
+    {KINETIS_PERIPHERAL_GPIOB, SIM_SCGC5, 10u},  {KINETIS_PERIPHERAL_GPIOC, SIM_SCGC5, 11u},
+    {KINETIS_PERIPHERAL_GPIOD, SIM_SCGC5, 12u},  {KINETIS_PERIPHERAL_GPIOE, SIM_SCGC5, 13u},
 };
 
 static const GateCase secondary_profile_cases[] = {
-    {K22_PERIPHERAL_RNG, SIM_SCGC6, 9u},   {K22_PERIPHERAL_LPUART0, SIM_SCGC6, 10u},
-    {K22_PERIPHERAL_FTM2, SIM_SCGC6, 26u}, {K22_PERIPHERAL_FTM3, SIM_SCGC6, 6u},
-    {K22_PERIPHERAL_ADC1, SIM_SCGC6, 7u},  {K22_PERIPHERAL_DAC1, SIM_SCGC6, 8u},
+    {KINETIS_PERIPHERAL_RNG, SIM_SCGC6, 9u},   {KINETIS_PERIPHERAL_LPUART0, SIM_SCGC6, 10u},
+    {KINETIS_PERIPHERAL_FTM2, SIM_SCGC6, 26u}, {KINETIS_PERIPHERAL_FTM3, SIM_SCGC6, 6u},
+    {KINETIS_PERIPHERAL_ADC1, SIM_SCGC6, 7u},  {KINETIS_PERIPHERAL_DAC1, SIM_SCGC6, 8u},
 };
 
 static Kinetis* create_device(TestState* state, KinetisProfile profile, KinetisPackage package) {
@@ -71,17 +71,17 @@ static Kinetis* create_device(TestState* state, KinetisProfile profile, KinetisP
     return device;
 }
 
-static RegisterAccess readable_register(Kinetis* device, K22PeripheralId peripheral_id) {
-    K22PeripheralBlock block;
-    if (!k22_profile_peripheral_block(device->profile, peripheral_id, &block)) {
+static RegisterAccess readable_register(Kinetis* device, KinetisPeripheralId peripheral_id) {
+    KinetisPeripheralBlock block;
+    if (!kinetis_profile_peripheral_block(device->profile, peripheral_id, &block)) {
         return (RegisterAccess){0u, 0u};
     }
     for (size_t register_index = 0u; register_index < device->manifest->register_count;
          register_index++) {
-        const K22RegisterDescriptor* descriptor = &device->manifest->registers[register_index];
+        const KinetisRegisterDescriptor* descriptor = &device->manifest->registers[register_index];
         if (descriptor->address >= block.address &&
             descriptor->address < block.address + block.size &&
-            (descriptor->access & K22_REGISTER_ACCESS_READ) != 0u) {
+            (descriptor->access & KINETIS_REGISTER_ACCESS_READ) != 0u) {
             return (RegisterAccess){descriptor->address, (uint8_t)(descriptor->width / 8u)};
         }
     }
@@ -101,8 +101,8 @@ static void clear_gates(TestState* state, Kinetis* device) {
                                        SIM_SCGC5, SIM_SCGC6, SIM_SCGC7};
     for (size_t register_index = 0u;
          register_index < sizeof(gate_registers) / sizeof(gate_registers[0]); register_index++) {
-        if (k22_register_manifest_lookup(device->profile->id, gate_registers[register_index],
-                                         32u) != NULL) {
+        if (kinetis_register_manifest_lookup(device->profile->id, gate_registers[register_index],
+                                             32u) != NULL) {
             expect(state,
                    kinetis_peripheral_write(device, gate_registers[register_index], 4u,
                                             CORTEX_M4_ACCESS_DEBUG, 0u),

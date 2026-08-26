@@ -27,16 +27,16 @@ static void mix_fingerprint(PeripheralStateCensus* census, uint32_t input_value)
 
 static void randomize_state(Kinetis* device, PeripheralStateCensus* census, uint32_t random_value) {
     const uint32_t next_value = next_random(census);
-    kinetis_internal_raw_store(device, K22_AIPS0 + 0x20u + ((random_value >> 20u) & 0x1cu), 4u,
+    kinetis_internal_raw_store(device, KINETIS_AIPS0 + 0x20u + ((random_value >> 20u) & 0x1cu), 4u,
                                random_value);
-    kinetis_internal_raw_store(device, K22_AIPS1 + 0x20u + ((next_value >> 20u) & 0x1cu), 4u,
+    kinetis_internal_raw_store(device, KINETIS_AIPS1 + 0x20u + ((next_value >> 20u) & 0x1cu), 4u,
                                next_value);
 
-    const uint32_t axbs_base = K22_AXBS + ((random_value >> 8u) % 5u) * 0x100u;
+    const uint32_t axbs_base = KINETIS_AXBS + ((random_value >> 8u) % 5u) * 0x100u;
     kinetis_internal_raw_store(device, axbs_base + 0x10u, 4u, next_value);
 
     for (uint8_t register_offset = 0u; register_offset < 12u; register_offset++) {
-        kinetis_internal_raw_store(device, K22_CMT + register_offset, 1u,
+        kinetis_internal_raw_store(device, KINETIS_CMT + register_offset, 1u,
                                    (uint8_t)next_random(census));
     }
 
@@ -72,10 +72,10 @@ int main(void) {
     for (uint32_t iteration = 0u; iteration < 100000u; iteration++) {
         const uint32_t random_value = next_random(&census);
         randomize_state(device, &census, random_value);
-        const K22RegisterDescriptor* descriptor =
+        const KinetisRegisterDescriptor* descriptor =
             &device->manifest->registers[(random_value >> 8u) % device->manifest->register_count];
-        K22PeripheralLocation location;
-        const bool resolved = k22_profile_resolve_peripheral(
+        KinetisPeripheralLocation location;
+        const bool resolved = kinetis_profile_resolve_peripheral(
             device->profile, descriptor->address, (uint8_t)(descriptor->width / 8u), &location);
         if (!resolved) {
             expect(&state, false, "resolve peripheral state census register");
@@ -85,15 +85,15 @@ int main(void) {
         const CortexM4Access access = (CortexM4Access)((random_value >> 20u) % 5u);
         const bool write_access = (random_value & 1u) != 0u;
         const uint32_t peripheral_address =
-            K22_PERIPHERAL_BASE + ((random_value >> 4u) % K22_PERIPHERAL_SIZE);
-        const uint32_t axbs_address = K22_AXBS + ((random_value >> 12u) % 0x520u);
+            KINETIS_PERIPHERAL_BASE + ((random_value >> 4u) % KINETIS_PERIPHERAL_SIZE);
+        const uint32_t axbs_address = KINETIS_AXBS + ((random_value >> 12u) % 0x520u);
         const bool aips_access_allowed =
             kinetis_internal_aips_access_allowed(device, peripheral_address, access, write_access);
         const bool axbs_write_allowed = kinetis_internal_axbs_write_allowed(device, axbs_address);
         const bool peripheral_clock_enabled = kinetis_internal_peripheral_clock_enabled(
-            device, (K22PeripheralId)((random_value >> 24u) % (K22_PERIPHERAL_COUNT + 2u)));
+            device, (KinetisPeripheralId)((random_value >> 24u) % (KINETIS_PERIPHERAL_COUNT + 2u)));
         const bool debug_clock_enabled = kinetis_internal_enable_debug_clock(
-            device, (K22PeripheralId)((random_value >> 16u) % (K22_PERIPHERAL_COUNT + 2u)));
+            device, (KinetisPeripheralId)((random_value >> 16u) % (KINETIS_PERIPHERAL_COUNT + 2u)));
         uint32_t read_value = UINT32_MAX;
         const bool read_succeeded = kinetis_internal_semantic_read(
             device, location.id, descriptor->address, access_size, &read_value);

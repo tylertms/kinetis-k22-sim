@@ -30,26 +30,26 @@ static void record_write(Census* census, bool accepted) {
 
 static void exercise_access(Census* census, Kinetis* device, uint32_t address, uint8_t size,
                             uint32_t value) {
-    k22_timing_reset(&device->timing, 0x80u, 0u);
-    k22_io_reset(&device->io);
-    k22_serial_reset(&device->serial);
-    k22_data_reset(device->data);
+    kinetis_timing_reset(&device->timing, 0x80u, 0u);
+    kinetis_io_reset(&device->io);
+    kinetis_serial_reset(&device->serial);
+    kinetis_data_reset(device->data);
     uint32_t read_value = UINT32_MAX;
-    bool read_accepted = k22_timing_read(&device->timing, address, size, &read_value);
+    bool read_accepted = kinetis_timing_read(&device->timing, address, size, &read_value);
     record_read(census, read_accepted, read_value);
-    record_write(census, k22_timing_write(&device->timing, address, size, value));
+    record_write(census, kinetis_timing_write(&device->timing, address, size, value));
     read_value = UINT32_MAX;
-    read_accepted = k22_io_read(&device->io, address, size, &read_value);
+    read_accepted = kinetis_io_read(&device->io, address, size, &read_value);
     record_read(census, read_accepted, read_value);
-    record_write(census, k22_io_write(&device->io, address, size, value));
+    record_write(census, kinetis_io_write(&device->io, address, size, value));
     read_value = UINT32_MAX;
-    read_accepted = k22_serial_read(&device->serial, address, size, &read_value);
+    read_accepted = kinetis_serial_read(&device->serial, address, size, &read_value);
     record_read(census, read_accepted, read_value);
-    record_write(census, k22_serial_write(&device->serial, address, size, value));
+    record_write(census, kinetis_serial_write(&device->serial, address, size, value));
     read_value = UINT32_MAX;
-    read_accepted = k22_data_read(device->data, address, size, &read_value);
+    read_accepted = kinetis_data_read(device->data, address, size, &read_value);
     record_read(census, read_accepted, read_value);
-    record_write(census, k22_data_write(device->data, address, size, value));
+    record_write(census, kinetis_data_write(device->data, address, size, value));
 }
 
 static Census census_peripherals(Kinetis* device) {
@@ -58,8 +58,8 @@ static Census census_peripherals(Kinetis* device) {
     Census census = {0u, 0u, UINT64_C(14695981039346656037)};
     for (size_t register_index = 0u; register_index < device->manifest->register_count;
          register_index++) {
-        const K22RegisterDescriptor* descriptor = &device->manifest->registers[register_index];
-        if (descriptor->address < K22_PERIPHERAL_BASE) {
+        const KinetisRegisterDescriptor* descriptor = &device->manifest->registers[register_index];
+        if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
             continue;
         }
         for (size_t size_index = 0u; size_index < sizeof(sizes) / sizeof(sizes[0]); size_index++) {

@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_SERIAL_H
-#define KINETIS_SIM_K22_SERIAL_H
+#ifndef KINETIS_SIM_SERIAL_H
+#define KINETIS_SIM_SERIAL_H
 
 #include "device/kinetis/variants/profile.h"
 
@@ -8,91 +8,76 @@
 #include <stdint.h>
 
 enum {
-    K22_SERIAL_ENDPOINT_COUNT = 13,
-    K22_SERIAL_FIFO_CAPACITY = 256,
-    K22_SERIAL_EVENT_CAPACITY = 64,
+    KINETIS_SERIAL_FIFO_CAPACITY = 256,
+    KINETIS_SERIAL_EVENT_CAPACITY = 64,
 };
 
-typedef enum {
-    K22_SERIAL_LPUART0,
-    K22_SERIAL_SPI0,
-    K22_SERIAL_SPI1,
-    K22_SERIAL_SPI2,
-    K22_SERIAL_I2C0,
-    K22_SERIAL_I2C1,
-    K22_SERIAL_I2C2,
-    K22_SERIAL_UART0,
-    K22_SERIAL_UART1,
-    K22_SERIAL_UART2,
-    K22_SERIAL_UART3,
-    K22_SERIAL_UART4,
-    K22_SERIAL_UART5,
-    K22_SERIAL_ENDPOINT_INVALID = K22_SERIAL_ENDPOINT_COUNT,
-} K22SerialEndpoint;
+static const KinetisSerialEndpoint KINETIS_SERIAL_ENDPOINT_INVALID =
+    (KinetisSerialEndpoint)KINETIS_SERIAL_ENDPOINT_COUNT;
 
 typedef enum {
-    K22_SERIAL_IRQ_LPUART0,
-    K22_SERIAL_IRQ_SPI0,
-    K22_SERIAL_IRQ_SPI1,
-    K22_SERIAL_IRQ_SPI2,
-    K22_SERIAL_IRQ_I2C0,
-    K22_SERIAL_IRQ_I2C1,
-    K22_SERIAL_IRQ_I2C2,
-    K22_SERIAL_IRQ_UART0,
-    K22_SERIAL_IRQ_UART0_ERROR,
-    K22_SERIAL_IRQ_UART1,
-    K22_SERIAL_IRQ_UART1_ERROR,
-    K22_SERIAL_IRQ_UART2,
-    K22_SERIAL_IRQ_UART2_ERROR,
-    K22_SERIAL_IRQ_UART3,
-    K22_SERIAL_IRQ_UART3_ERROR,
-    K22_SERIAL_IRQ_UART4,
-    K22_SERIAL_IRQ_UART4_ERROR,
-    K22_SERIAL_IRQ_UART5,
-    K22_SERIAL_IRQ_UART5_ERROR,
-    K22_SERIAL_IRQ_COUNT,
-} K22SerialIrq;
+    KINETIS_SERIAL_IRQ_LPUART0,
+    KINETIS_SERIAL_IRQ_SPI0,
+    KINETIS_SERIAL_IRQ_SPI1,
+    KINETIS_SERIAL_IRQ_SPI2,
+    KINETIS_SERIAL_IRQ_I2C0,
+    KINETIS_SERIAL_IRQ_I2C1,
+    KINETIS_SERIAL_IRQ_I2C2,
+    KINETIS_SERIAL_IRQ_UART0,
+    KINETIS_SERIAL_IRQ_UART0_ERROR,
+    KINETIS_SERIAL_IRQ_UART1,
+    KINETIS_SERIAL_IRQ_UART1_ERROR,
+    KINETIS_SERIAL_IRQ_UART2,
+    KINETIS_SERIAL_IRQ_UART2_ERROR,
+    KINETIS_SERIAL_IRQ_UART3,
+    KINETIS_SERIAL_IRQ_UART3_ERROR,
+    KINETIS_SERIAL_IRQ_UART4,
+    KINETIS_SERIAL_IRQ_UART4_ERROR,
+    KINETIS_SERIAL_IRQ_UART5,
+    KINETIS_SERIAL_IRQ_UART5_ERROR,
+    KINETIS_SERIAL_IRQ_COUNT,
+} KinetisSerialIrq;
 
 typedef enum {
-    K22_SERIAL_DMA_LPUART0_RECEIVE,
-    K22_SERIAL_DMA_LPUART0_TRANSMIT,
-    K22_SERIAL_DMA_SPI0_RECEIVE,
-    K22_SERIAL_DMA_SPI0_TRANSMIT,
-    K22_SERIAL_DMA_SPI1_RECEIVE,
-    K22_SERIAL_DMA_SPI1_TRANSMIT,
-    K22_SERIAL_DMA_SPI2_RECEIVE,
-    K22_SERIAL_DMA_SPI2_TRANSMIT,
-    K22_SERIAL_DMA_I2C0,
-    K22_SERIAL_DMA_I2C1,
-    K22_SERIAL_DMA_I2C2,
-    K22_SERIAL_DMA_UART0_RECEIVE,
-    K22_SERIAL_DMA_UART0_TRANSMIT,
-    K22_SERIAL_DMA_UART1_RECEIVE,
-    K22_SERIAL_DMA_UART1_TRANSMIT,
-    K22_SERIAL_DMA_UART2_RECEIVE,
-    K22_SERIAL_DMA_UART2_TRANSMIT,
-    K22_SERIAL_DMA_UART3_RECEIVE,
-    K22_SERIAL_DMA_UART3_TRANSMIT,
-    K22_SERIAL_DMA_UART4_RECEIVE,
-    K22_SERIAL_DMA_UART4_TRANSMIT,
-    K22_SERIAL_DMA_UART5_RECEIVE,
-    K22_SERIAL_DMA_UART5_TRANSMIT,
-    K22_SERIAL_DMA_COUNT,
-} K22SerialDmaRequest;
+    KINETIS_SERIAL_DMA_LPUART0_RECEIVE,
+    KINETIS_SERIAL_DMA_LPUART0_TRANSMIT,
+    KINETIS_SERIAL_DMA_SPI0_RECEIVE,
+    KINETIS_SERIAL_DMA_SPI0_TRANSMIT,
+    KINETIS_SERIAL_DMA_SPI1_RECEIVE,
+    KINETIS_SERIAL_DMA_SPI1_TRANSMIT,
+    KINETIS_SERIAL_DMA_SPI2_RECEIVE,
+    KINETIS_SERIAL_DMA_SPI2_TRANSMIT,
+    KINETIS_SERIAL_DMA_I2C0,
+    KINETIS_SERIAL_DMA_I2C1,
+    KINETIS_SERIAL_DMA_I2C2,
+    KINETIS_SERIAL_DMA_UART0_RECEIVE,
+    KINETIS_SERIAL_DMA_UART0_TRANSMIT,
+    KINETIS_SERIAL_DMA_UART1_RECEIVE,
+    KINETIS_SERIAL_DMA_UART1_TRANSMIT,
+    KINETIS_SERIAL_DMA_UART2_RECEIVE,
+    KINETIS_SERIAL_DMA_UART2_TRANSMIT,
+    KINETIS_SERIAL_DMA_UART3_RECEIVE,
+    KINETIS_SERIAL_DMA_UART3_TRANSMIT,
+    KINETIS_SERIAL_DMA_UART4_RECEIVE,
+    KINETIS_SERIAL_DMA_UART4_TRANSMIT,
+    KINETIS_SERIAL_DMA_UART5_RECEIVE,
+    KINETIS_SERIAL_DMA_UART5_TRANSMIT,
+    KINETIS_SERIAL_DMA_COUNT,
+} KinetisSerialDmaRequest;
 
 typedef enum {
-    K22_SERIAL_EVENT_I2C_START,
-    K22_SERIAL_EVENT_I2C_REPEATED_START,
-    K22_SERIAL_EVENT_I2C_STOP,
-    K22_SERIAL_EVENT_I2C_WRITE,
-    K22_SERIAL_EVENT_I2C_READ,
-} K22SerialEventType;
+    KINETIS_SERIAL_EVENT_I2C_START,
+    KINETIS_SERIAL_EVENT_I2C_REPEATED_START,
+    KINETIS_SERIAL_EVENT_I2C_STOP,
+    KINETIS_SERIAL_EVENT_I2C_WRITE,
+    KINETIS_SERIAL_EVENT_I2C_READ,
+} KinetisSerialEventType;
 
 typedef struct {
-    K22SerialEndpoint endpoint;
-    K22SerialEventType type;
+    KinetisSerialEndpoint endpoint;
+    KinetisSerialEventType type;
     uint16_t value;
-} K22SerialEvent;
+} KinetisSerialEvent;
 
 typedef struct {
     uint16_t data;
@@ -100,56 +85,56 @@ typedef struct {
     uint8_t clock_and_transfer_attributes;
     bool continuous_chip_select;
     bool end_of_queue;
-} K22SerialSpiTransfer;
+} KinetisSerialSpiTransfer;
 
 typedef struct {
-    uint16_t values[K22_SERIAL_FIFO_CAPACITY];
-    uint16_t metadata[K22_SERIAL_FIFO_CAPACITY];
+    uint16_t values[KINETIS_SERIAL_FIFO_CAPACITY];
+    uint16_t metadata[KINETIS_SERIAL_FIFO_CAPACITY];
     uint16_t read_index;
     uint16_t write_index;
     uint16_t count;
-} K22SerialFifo;
+} KinetisSerialFifo;
 
 typedef struct {
-    K22PeripheralId peripheral;
+    KinetisPeripheralId peripheral;
     uint32_t base;
     uint32_t block_size;
     uint8_t registers[0x40];
-    K22SerialFifo receive;
-    K22SerialFifo transmit;
-    K22SerialFifo wire_receive;
-    K22SerialFifo wire_transmit;
+    KinetisSerialFifo receive;
+    KinetisSerialFifo transmit;
+    KinetisSerialFifo wire_receive;
+    KinetisSerialFifo wire_transmit;
     uint32_t receive_cycles;
     uint32_t transmit_cycles;
     uint8_t fifo_depth;
     bool present;
     bool clock_enabled;
     bool status_read;
-} K22SerialUart;
+} KinetisSerialUart;
 
 typedef struct {
-    K22PeripheralId peripheral;
+    KinetisPeripheralId peripheral;
     uint32_t base;
     uint32_t block_size;
     uint32_t registers[0x8c / 4];
-    K22SerialFifo receive;
-    K22SerialFifo transmit;
-    K22SerialFifo wire_receive;
-    K22SerialFifo wire_transmit;
+    KinetisSerialFifo receive;
+    KinetisSerialFifo transmit;
+    KinetisSerialFifo wire_receive;
+    KinetisSerialFifo wire_transmit;
     uint32_t transfer_cycles;
     uint8_t fifo_depth;
     bool present;
     bool clock_enabled;
-} K22SerialSpi;
+} KinetisSerialSpi;
 
 typedef struct {
-    K22PeripheralId peripheral;
+    KinetisPeripheralId peripheral;
     uint32_t base;
     uint32_t block_size;
     uint8_t registers[0x0c];
-    K22SerialFifo receive;
-    K22SerialFifo slave_receive;
-    K22SerialFifo slave_transmit_fifo;
+    KinetisSerialFifo receive;
+    KinetisSerialFifo slave_receive;
+    KinetisSerialFifo slave_transmit_fifo;
     uint32_t transfer_cycles;
     uint8_t pending_value;
     bool present;
@@ -158,47 +143,50 @@ typedef struct {
     bool transfer_pending;
     bool read_pending;
     bool slave_transmit;
-} K22SerialI2c;
+} KinetisSerialI2c;
 
 typedef struct {
-    const K22Profile* profile;
+    const KinetisDeviceProfile* profile;
     uint32_t core_clock_hz;
     uint32_t bus_clock_hz;
-    K22SerialUart lpuart0;
-    K22SerialUart uart[6];
-    K22SerialSpi spi[3];
-    K22SerialI2c i2c[3];
-    K22SerialEvent events[K22_SERIAL_EVENT_CAPACITY];
+    KinetisSerialUart lpuart0;
+    KinetisSerialUart uart[6];
+    KinetisSerialSpi spi[3];
+    KinetisSerialI2c i2c[3];
+    KinetisSerialEvent events[KINETIS_SERIAL_EVENT_CAPACITY];
     uint8_t event_read_index;
     uint8_t event_write_index;
     uint8_t event_count;
-} K22Serial;
+} KinetisSerial;
 
-bool k22_serial_init(K22Serial* serial, const K22Profile* profile);
-void k22_serial_reset(K22Serial* serial);
-bool k22_serial_copy(K22Serial* destination, const K22Serial* source);
-void k22_serial_set_clocks(K22Serial* serial, uint32_t core_clock_hz, uint32_t bus_clock_hz);
-bool k22_serial_set_clock_gate(K22Serial* serial, K22PeripheralId peripheral, bool enabled);
-bool k22_serial_read(K22Serial* serial, uint32_t address, uint8_t byte_count,
-                     uint32_t* output_value);
-bool k22_serial_write(K22Serial* serial, uint32_t address, uint8_t byte_count,
-                      uint32_t write_value);
-void k22_serial_advance(K22Serial* serial, uint32_t bus_cycles);
-void k22_serial_advance_endpoint(K22Serial* serial, K22SerialEndpoint endpoint);
-bool k22_serial_push_receive(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t value,
-                             uint8_t errors);
-bool k22_serial_pop_transmit(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t* value);
-bool k22_serial_pop_spi_transfer(K22Serial* serial, K22SerialEndpoint endpoint,
-                                 K22SerialSpiTransfer* transfer);
-bool k22_serial_i2c_set_acknowledge(K22Serial* serial, K22SerialEndpoint endpoint,
-                                    bool acknowledge);
-bool k22_serial_i2c_detect_start(K22Serial* serial, K22SerialEndpoint endpoint);
-bool k22_serial_i2c_detect_stop(K22Serial* serial, K22SerialEndpoint endpoint);
-bool k22_serial_i2c_lose_arbitration(K22Serial* serial, K22SerialEndpoint endpoint);
-bool k22_serial_i2c_slave_address(K22Serial* serial, K22SerialEndpoint endpoint, uint16_t address,
-                                  bool read);
-bool k22_serial_pop_event(K22Serial* serial, K22SerialEvent* event);
-bool k22_serial_irq(const K22Serial* serial, K22SerialIrq irq);
-bool k22_serial_dma_request(const K22Serial* serial, K22SerialDmaRequest request);
+bool kinetis_serial_init(KinetisSerial* serial, const KinetisDeviceProfile* profile);
+void kinetis_serial_reset(KinetisSerial* serial);
+bool kinetis_serial_copy(KinetisSerial* destination, const KinetisSerial* source);
+void kinetis_serial_set_clocks(KinetisSerial* serial, uint32_t core_clock_hz,
+                               uint32_t bus_clock_hz);
+bool kinetis_serial_set_clock_gate(KinetisSerial* serial, KinetisPeripheralId peripheral,
+                                   bool enabled);
+bool kinetis_serial_read(KinetisSerial* serial, uint32_t address, uint8_t byte_count,
+                         uint32_t* output_value);
+bool kinetis_serial_write(KinetisSerial* serial, uint32_t address, uint8_t byte_count,
+                          uint32_t write_value);
+void kinetis_serial_advance(KinetisSerial* serial, uint32_t bus_cycles);
+void kinetis_serial_advance_endpoint(KinetisSerial* serial, KinetisSerialEndpoint endpoint);
+bool kinetis_serial_push_receive(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                 uint16_t value, uint8_t errors);
+bool kinetis_serial_pop_transmit(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                 uint16_t* value);
+bool kinetis_serial_pop_spi_transfer(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                     KinetisSerialSpiTransfer* transfer);
+bool kinetis_serial_i2c_set_acknowledge(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                        bool acknowledge);
+bool kinetis_serial_i2c_detect_start(KinetisSerial* serial, KinetisSerialEndpoint endpoint);
+bool kinetis_serial_i2c_detect_stop(KinetisSerial* serial, KinetisSerialEndpoint endpoint);
+bool kinetis_serial_i2c_lose_arbitration(KinetisSerial* serial, KinetisSerialEndpoint endpoint);
+bool kinetis_serial_i2c_slave_address(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                      uint16_t address, bool read);
+bool kinetis_serial_pop_event(KinetisSerial* serial, KinetisSerialEvent* event);
+bool kinetis_serial_irq(const KinetisSerial* serial, KinetisSerialIrq irq);
+bool kinetis_serial_dma_request(const KinetisSerial* serial, KinetisSerialDmaRequest request);
 
 #endif

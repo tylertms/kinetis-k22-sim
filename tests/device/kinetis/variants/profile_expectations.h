@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_PROFILE_EXPECTATIONS_H
-#define KINETIS_SIM_K22_PROFILE_EXPECTATIONS_H
+#ifndef KINETIS_SIM_PROFILE_EXPECTATIONS_H
+#define KINETIS_SIM_PROFILE_EXPECTATIONS_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -7,13 +7,13 @@
 #include "device/kinetis/variants/profile.h"
 
 typedef struct {
-    K22PeripheralId id;
+    KinetisPeripheralId id;
     uint32_t address;
     uint32_t size;
-} K22ExpectedBlock;
+} KinetisExpectedBlock;
 
 typedef struct {
-    K22ProfileId id;
+    KinetisProfile id;
     const char* name;
     uint32_t program_flash_size;
     uint32_t sram_lower_address;
@@ -28,13 +28,13 @@ typedef struct {
     uint32_t sim_sdid_mask;
     uint32_t maximum_core_clock_hz;
     uint16_t external_irq_count;
-    const K22ExpectedBlock* blocks;
+    const KinetisExpectedBlock* blocks;
     size_t block_count;
-} K22ExpectedProfile;
+} KinetisExpectedProfile;
 
-#define EXPECTED_BLOCK(peripheral, base, length) {K22_PERIPHERAL_##peripheral, base, length}
+#define EXPECTED_BLOCK(peripheral, base, length) {KINETIS_PERIPHERAL_##peripheral, base, length}
 
-static const K22ExpectedBlock expected_mkv30f12810_blocks[] = {
+static const KinetisExpectedBlock expected_mkv30f12810_blocks[] = {
     EXPECTED_BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), EXPECTED_BLOCK(DMA, 0x40008000u, 0x1080u),
     EXPECTED_BLOCK(FMC, 0x4001f000u, 0x300u),         EXPECTED_BLOCK(FTFA, 0x40020000u, 0x2cu),
     EXPECTED_BLOCK(DMAMUX, 0x40021000u, 0x04u),       EXPECTED_BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -58,7 +58,7 @@ static const K22ExpectedBlock expected_mkv30f12810_blocks[] = {
     EXPECTED_BLOCK(GPIOE, 0x400ff100u, 0x18u),        EXPECTED_BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22ExpectedBlock expected_mk22f12810_blocks[] = {
+static const KinetisExpectedBlock expected_mk22f12810_blocks[] = {
     EXPECTED_BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), EXPECTED_BLOCK(DMA, 0x40008000u, 0x1080u),
     EXPECTED_BLOCK(FMC, 0x4001f000u, 0x300u),         EXPECTED_BLOCK(FTFA, 0x40020000u, 0x2cu),
     EXPECTED_BLOCK(DMAMUX, 0x40021000u, 0x04u),       EXPECTED_BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -87,7 +87,7 @@ static const K22ExpectedBlock expected_mk22f12810_blocks[] = {
     EXPECTED_BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22ExpectedBlock expected_mk22f25612_blocks[] = {
+static const KinetisExpectedBlock expected_mk22f25612_blocks[] = {
     EXPECTED_BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), EXPECTED_BLOCK(DMA, 0x40008000u, 0x1200u),
     EXPECTED_BLOCK(FMC, 0x4001f000u, 0x300u),         EXPECTED_BLOCK(FTFA, 0x40020000u, 0x2cu),
     EXPECTED_BLOCK(DMAMUX, 0x40021000u, 0x10u),       EXPECTED_BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -116,7 +116,7 @@ static const K22ExpectedBlock expected_mk22f25612_blocks[] = {
     EXPECTED_BLOCK(GPIOE, 0x400ff100u, 0x18u),        EXPECTED_BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22ExpectedBlock expected_mk22f51212_blocks[] = {
+static const KinetisExpectedBlock expected_mk22f51212_blocks[] = {
     EXPECTED_BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), EXPECTED_BLOCK(DMA, 0x40008000u, 0x1200u),
     EXPECTED_BLOCK(FB, 0x4000c000u, 0x64u),           EXPECTED_BLOCK(FMC, 0x4001f000u, 0x300u),
     EXPECTED_BLOCK(FTFA, 0x40020000u, 0x2cu),         EXPECTED_BLOCK(DMAMUX, 0x40021000u, 0x10u),
@@ -147,7 +147,7 @@ static const K22ExpectedBlock expected_mk22f51212_blocks[] = {
     EXPECTED_BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22ExpectedBlock expected_mk22f12_blocks[] = {
+static const KinetisExpectedBlock expected_mk22f12_blocks[] = {
     EXPECTED_BLOCK(FLASH_CONFIG, 0x00000400u, 0x10u), EXPECTED_BLOCK(AIPS0, 0x40000000u, 0x70u),
     EXPECTED_BLOCK(AIPS1, 0x40080000u, 0x70u),        EXPECTED_BLOCK(AXBS, 0x40004000u, 0xc04u),
     EXPECTED_BLOCK(DMA, 0x40008000u, 0x1200u),        EXPECTED_BLOCK(FB, 0x4000c000u, 0x64u),
@@ -186,8 +186,8 @@ static const K22ExpectedBlock expected_mk22f12_blocks[] = {
 
 #define EXPECTED_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 
-static const K22ExpectedProfile expected_k22_profiles[] = {
-    {.id = K22_PROFILE_MK22F12810,
+static const KinetisExpectedProfile expected_profiles[] = {
+    {.id = KINETIS_PROFILE_MK22F12810,
      .name = "MK22F12810",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffe000u,
@@ -200,7 +200,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 86u,
      .blocks = expected_mk22f12810_blocks,
      .block_count = EXPECTED_COUNT(expected_mk22f12810_blocks)},
-    {.id = K22_PROFILE_MKV30F12810,
+    {.id = KINETIS_PROFILE_MKV30F12810,
      .name = "MKV30F12810",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffe000u,
@@ -213,7 +213,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 74u,
      .blocks = expected_mkv30f12810_blocks,
      .block_count = EXPECTED_COUNT(expected_mkv30f12810_blocks)},
-    {.id = K22_PROFILE_MK22FN12812,
+    {.id = KINETIS_PROFILE_MK22FN12812,
      .name = "MK22FN12812",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffc000u,
@@ -226,7 +226,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 86u,
      .blocks = expected_mk22f25612_blocks,
      .block_count = EXPECTED_COUNT(expected_mk22f25612_blocks)},
-    {.id = K22_PROFILE_MK22FN25612,
+    {.id = KINETIS_PROFILE_MK22FN25612,
      .name = "MK22FN25612",
      .program_flash_size = 0x40000u,
      .sram_lower_address = 0x1fffc000u,
@@ -239,7 +239,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 86u,
      .blocks = expected_mk22f25612_blocks,
      .block_count = EXPECTED_COUNT(expected_mk22f25612_blocks)},
-    {.id = K22_PROFILE_MK22FN51212,
+    {.id = KINETIS_PROFILE_MK22FN51212,
      .name = "MK22FN51212",
      .program_flash_size = 0x80000u,
      .sram_lower_address = 0x1fff0000u,
@@ -252,7 +252,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 86u,
      .blocks = expected_mk22f51212_blocks,
      .block_count = EXPECTED_COUNT(expected_mk22f51212_blocks)},
-    {.id = K22_PROFILE_MK22FN1M012,
+    {.id = KINETIS_PROFILE_MK22FN1M012,
      .name = "MK22FN1M012",
      .program_flash_size = 0x100000u,
      .sram_lower_address = 0x1fff0000u,
@@ -267,7 +267,7 @@ static const K22ExpectedProfile expected_k22_profiles[] = {
      .external_irq_count = 82u,
      .blocks = expected_mk22f12_blocks,
      .block_count = EXPECTED_COUNT(expected_mk22f12_blocks)},
-    {.id = K22_PROFILE_MK22FX51212,
+    {.id = KINETIS_PROFILE_MK22FX51212,
      .name = "MK22FX51212",
      .program_flash_size = 0x80000u,
      .sram_lower_address = 0x1fff0000u,

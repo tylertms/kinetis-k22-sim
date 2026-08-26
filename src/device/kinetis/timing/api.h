@@ -1,40 +1,40 @@
-#ifndef KINETIS_SIM_K22_TIMING_H
-#define KINETIS_SIM_K22_TIMING_H
+#ifndef KINETIS_SIM_TIMING_H
+#define KINETIS_SIM_TIMING_H
 
 #include "device/kinetis/variants/profile.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef void (*K22TimingIrqSignal)(void* context, uint8_t irq, bool asserted);
-typedef void (*K22TimingDmaSignal)(void* context, uint8_t source);
-typedef void (*K22TimingDmaTriggerSignal)(void* context, uint8_t channel);
-typedef void (*K22TimingResetSignal)(void* context, uint8_t srs0, uint8_t srs1);
+typedef void (*KinetisTimingIrqSignal)(void* context, uint8_t irq, bool asserted);
+typedef void (*KinetisTimingDmaSignal)(void* context, uint8_t source);
+typedef void (*KinetisTimingDmaTriggerSignal)(void* context, uint8_t channel);
+typedef void (*KinetisTimingResetSignal)(void* context, uint8_t srs0, uint8_t srs1);
 
 typedef enum {
-    K22_TIMING_TRIGGER_PDB_ADC,
-    K22_TIMING_TRIGGER_PDB_DAC,
-    K22_TIMING_TRIGGER_ADC_ALTERNATE,
-} K22TimingTrigger;
+    KINETIS_TIMING_TRIGGER_PDB_ADC,
+    KINETIS_TIMING_TRIGGER_PDB_DAC,
+    KINETIS_TIMING_TRIGGER_ADC_ALTERNATE,
+} KinetisTimingTrigger;
 
-typedef void (*K22TimingTriggerSignal)(void* context, K22TimingTrigger trigger, uint8_t instance,
-                                       uint8_t channel);
+typedef void (*KinetisTimingTriggerSignal)(void* context, KinetisTimingTrigger trigger,
+                                           uint8_t instance, uint8_t channel);
 
 typedef struct {
     void* context;
-    K22TimingIrqSignal irq;
-    K22TimingDmaSignal dma;
-    K22TimingResetSignal reset;
-    K22TimingTriggerSignal trigger;
-    K22TimingDmaTriggerSignal dma_trigger;
-} K22TimingSignals;
+    KinetisTimingIrqSignal irq;
+    KinetisTimingDmaSignal dma;
+    KinetisTimingResetSignal reset;
+    KinetisTimingTriggerSignal trigger;
+    KinetisTimingDmaTriggerSignal dma_trigger;
+} KinetisTimingSignals;
 
 typedef struct {
     uint32_t load;
     uint32_t current;
     uint32_t control;
     bool flag;
-} K22PitChannel;
+} KinetisPitChannel;
 
 typedef struct {
     uint32_t sc;
@@ -82,11 +82,11 @@ typedef struct {
     uint8_t overflow_count;
     uint64_t deadtime_remainder;
     uint64_t fault_remainder;
-} K22FtmState;
+} KinetisFtmState;
 
 typedef struct {
-    const K22Profile* profile;
-    K22TimingSignals signals;
+    const KinetisDeviceProfile* profile;
+    KinetisTimingSignals signals;
     uint32_t external_oscillator_hz;
     uint32_t rtc_oscillator_hz;
     uint32_t slow_irc_hz;
@@ -124,7 +124,7 @@ typedef struct {
     bool llwu_pin_level[16];
     uint8_t rcm[10];
     uint32_t pit_mcr;
-    K22PitChannel pit[4];
+    KinetisPitChannel pit[4];
     uint64_t pit_remainder;
     uint32_t lptmr_csr;
     uint32_t lptmr_psr;
@@ -154,7 +154,7 @@ typedef struct {
     uint16_t pdb_idly;
     uint32_t pdb_registers[104];
     uint64_t pdb_remainder;
-    K22FtmState ftm[4];
+    KinetisFtmState ftm[4];
     uint16_t wdog[12];
     uint16_t wdog_pending[12];
     uint32_t wdog_counter;
@@ -191,37 +191,39 @@ typedef struct {
     uint64_t ewm_service_remaining;
     bool ewm_service_paused;
     uint64_t reset_generation;
-} K22Timing;
+} KinetisTiming;
 
-bool k22_timing_init(K22Timing* timing, const K22Profile* profile, uint32_t external_oscillator_hz,
-                     uint32_t rtc_oscillator_hz, K22TimingSignals signals);
-bool k22_timing_read(K22Timing* timing, uint32_t address, uint8_t size, uint32_t* value);
-bool k22_timing_projected_watchdog_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                        uint32_t* value);
-bool k22_timing_write(K22Timing* timing, uint32_t address, uint8_t size, uint32_t value);
-bool k22_timing_set_reset_state(K22Timing* timing, uint8_t srs0, bool ackiso);
-void k22_timing_advance(K22Timing* timing, uint32_t core_cycles);
-void k22_timing_set_debug_halted(K22Timing* timing, bool halted);
-bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input_index, bool input_high);
-bool k22_timing_trigger_low_voltage_warning(K22Timing* timing);
-bool k22_timing_trigger_low_voltage_detect(K22Timing* timing);
-bool k22_timing_set_llwu_pin(K22Timing* timing, uint8_t pin, bool high);
-bool k22_timing_trigger_llwu_module(K22Timing* timing, uint8_t module);
-void k22_timing_set_cpu_sleeping(K22Timing* timing, bool sleeping, bool deep_sleep);
-bool k22_timing_set_ewm_input(K22Timing* timing, bool high);
-bool k22_timing_ewm_output(const K22Timing* timing);
-void k22_timing_watchdog_advance(K22Timing* timing, uint32_t elapsed_watchdog_ticks);
-bool k22_timing_set_ftm_input(K22Timing* timing, uint8_t instance, uint8_t channel,
-                              bool input_high);
-bool k22_timing_set_ftm_fault(K22Timing* timing, uint8_t instance, uint8_t input_index,
-                              bool input_high);
-bool k22_timing_trigger_ftm_hardware(K22Timing* timing, uint8_t instance, uint8_t trigger);
-bool k22_timing_get_ftm_output(const K22Timing* timing, uint8_t instance, uint8_t channel,
-                               bool* output_high);
-void k22_timing_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
-void k22_timing_warm_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1);
-bool k22_timing_copy(K22Timing* destination, const K22Timing* source, K22TimingSignals signals);
-uint32_t k22_timing_core_clock_hz(const K22Timing* timing);
-uint32_t k22_timing_bus_clock_hz(const K22Timing* timing);
+bool kinetis_timing_init(KinetisTiming* timing, const KinetisDeviceProfile* profile,
+                         uint32_t external_oscillator_hz, uint32_t rtc_oscillator_hz,
+                         KinetisTimingSignals signals);
+bool kinetis_timing_read(KinetisTiming* timing, uint32_t address, uint8_t size, uint32_t* value);
+bool kinetis_timing_projected_watchdog_read(const KinetisTiming* timing, uint32_t address,
+                                            uint8_t size, uint32_t* value);
+bool kinetis_timing_write(KinetisTiming* timing, uint32_t address, uint8_t size, uint32_t value);
+bool kinetis_timing_set_reset_state(KinetisTiming* timing, uint8_t srs0, bool ackiso);
+void kinetis_timing_advance(KinetisTiming* timing, uint32_t core_cycles);
+void kinetis_timing_set_debug_halted(KinetisTiming* timing, bool halted);
+bool kinetis_timing_set_lptmr_input(KinetisTiming* timing, uint8_t input_index, bool input_high);
+bool kinetis_timing_trigger_low_voltage_warning(KinetisTiming* timing);
+bool kinetis_timing_trigger_low_voltage_detect(KinetisTiming* timing);
+bool kinetis_timing_set_llwu_pin(KinetisTiming* timing, uint8_t pin, bool high);
+bool kinetis_timing_trigger_llwu_module(KinetisTiming* timing, uint8_t module);
+void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool deep_sleep);
+bool kinetis_timing_set_ewm_input(KinetisTiming* timing, bool high);
+bool kinetis_timing_ewm_output(const KinetisTiming* timing);
+void kinetis_timing_watchdog_advance(KinetisTiming* timing, uint32_t elapsed_watchdog_ticks);
+bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
+                                  bool input_high);
+bool kinetis_timing_set_ftm_fault(KinetisTiming* timing, uint8_t instance, uint8_t input_index,
+                                  bool input_high);
+bool kinetis_timing_trigger_ftm_hardware(KinetisTiming* timing, uint8_t instance, uint8_t trigger);
+bool kinetis_timing_get_ftm_output(const KinetisTiming* timing, uint8_t instance, uint8_t channel,
+                                   bool* output_high);
+void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1);
+void kinetis_timing_warm_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1);
+bool kinetis_timing_copy(KinetisTiming* destination, const KinetisTiming* source,
+                         KinetisTimingSignals signals);
+uint32_t kinetis_timing_core_clock_hz(const KinetisTiming* timing);
+uint32_t kinetis_timing_bus_clock_hz(const KinetisTiming* timing);
 
 #endif

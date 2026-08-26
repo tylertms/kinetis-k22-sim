@@ -23,7 +23,7 @@ enum {
     STATUS_ACTIVE = 1u << 22u,
 };
 
-static uint32_t* selected_register(K22UsbDcd* usbdcd, uint32_t register_offset) {
+static uint32_t* selected_register(KinetisUsbDcd* usbdcd, uint32_t register_offset) {
     switch (register_offset) {
     case USBDCD_CONTROL:
         return &usbdcd->control;
@@ -42,16 +42,16 @@ static uint32_t* selected_register(K22UsbDcd* usbdcd, uint32_t register_offset) 
     }
 }
 
-static void software_reset(K22UsbDcd* usbdcd) {
+static void software_reset(KinetisUsbDcd* usbdcd) {
     usbdcd->control &= CONTROL_IE | CONTROL_BC12 | CONTROL_START;
     usbdcd->status = 0u;
     usbdcd->timer0 &= 0x03ff0000u;
     usbdcd->clock_cycles = 0u;
     usbdcd->phase_elapsed = 0u;
-    usbdcd->phase = K22_USBDCD_IDLE;
+    usbdcd->phase = KINETIS_USBDCD_IDLE;
 }
 
-void k22_usbdcd_reset(K22UsbDcd* usbdcd) {
+void kinetis_usbdcd_reset(KinetisUsbDcd* usbdcd) {
     if (usbdcd == NULL)
         return;
     memset(usbdcd, 0, sizeof(*usbdcd));
@@ -63,15 +63,15 @@ void k22_usbdcd_reset(K22UsbDcd* usbdcd) {
     usbdcd->charger = KINETIS_USB_CHARGER_NONE;
 }
 
-bool k22_usbdcd_copy(K22UsbDcd* destination, const K22UsbDcd* source) {
+bool kinetis_usbdcd_copy(KinetisUsbDcd* destination, const KinetisUsbDcd* source) {
     if (destination == NULL || source == NULL)
         return false;
     *destination = *source;
     return true;
 }
 
-bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
-                     uint32_t* output_value) {
+bool kinetis_usbdcd_read(KinetisUsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                         uint32_t* output_value) {
     if (usbdcd == NULL || output_value == NULL || byte_count != 4u || address < USBDCD_BASE ||
         (address & 3u) != 0u)
         return false;
@@ -82,17 +82,17 @@ bool k22_usbdcd_read(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
     return true;
 }
 
-static void start(K22UsbDcd* usbdcd) {
+static void start(KinetisUsbDcd* usbdcd) {
     usbdcd->control |= CONTROL_START;
     usbdcd->status = STATUS_ACTIVE;
     usbdcd->timer0 = (usbdcd->timer0 & 0x03ff0000u) | (usbdcd->timer0 >> 16u);
     usbdcd->clock_cycles = 0u;
     usbdcd->phase_elapsed = 0u;
-    usbdcd->phase = K22_USBDCD_DATA_CONTACT;
+    usbdcd->phase = KINETIS_USBDCD_DATA_CONTACT;
 }
 
-bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
-                      uint32_t write_value) {
+bool kinetis_usbdcd_write(KinetisUsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
+                          uint32_t write_value) {
     if (usbdcd == NULL || byte_count != 4u || address < USBDCD_BASE || (address & 3u) != 0u)
         return false;
     const uint32_t register_offset = address - USBDCD_BASE;
@@ -130,30 +130,30 @@ bool k22_usbdcd_write(K22UsbDcd* usbdcd, uint32_t address, uint8_t byte_count,
     return false;
 }
 
-static uint32_t clock_cycles_per_millisecond(const K22UsbDcd* usbdcd) {
+static uint32_t clock_cycles_per_millisecond(const KinetisUsbDcd* usbdcd) {
     const uint32_t speed = (usbdcd->clock >> 2u) & 0x3ffu;
     if (speed == 0u)
         return 1u;
     return (usbdcd->clock & 1u) != 0u ? speed * 1000u : speed;
 }
 
-static void set_phase(K22UsbDcd* usbdcd, K22UsbDcdPhase phase) {
+static void set_phase(KinetisUsbDcd* usbdcd, KinetisUsbDcdPhase phase) {
     usbdcd->phase = phase;
     usbdcd->phase_elapsed = 0u;
 }
 
-static void signal_interrupt(K22UsbDcd* usbdcd) { usbdcd->control |= CONTROL_IF; }
+static void signal_interrupt(KinetisUsbDcd* usbdcd) { usbdcd->control |= CONTROL_IF; }
 
-static void finish(K22UsbDcd* usbdcd, uint8_t phase, uint8_t result, bool error) {
+static void finish(KinetisUsbDcd* usbdcd, uint8_t phase, uint8_t result, bool error) {
     const uint32_t timeout = usbdcd->status & STATUS_TIMEOUT;
     usbdcd->status = timeout | ((uint32_t)phase << STATUS_PHASE_SHIFT) |
                      ((uint32_t)result << STATUS_RESULT_SHIFT) |
                      (error || timeout != 0u ? STATUS_ERROR : 0u);
-    usbdcd->phase = K22_USBDCD_IDLE;
+    usbdcd->phase = KINETIS_USBDCD_IDLE;
     signal_interrupt(usbdcd);
 }
 
-static void primary_result(K22UsbDcd* usbdcd) {
+static void primary_result(KinetisUsbDcd* usbdcd) {
     if (usbdcd->charger == KINETIS_USB_CHARGER_STANDARD_HOST) {
         finish(usbdcd, 2u, 1u, false);
         return;
@@ -162,18 +162,18 @@ static void primary_result(K22UsbDcd* usbdcd) {
         finish(usbdcd, 2u, 0u, true);
         return;
     }
-    set_phase(usbdcd, K22_USBDCD_SECONDARY_DELAY);
+    set_phase(usbdcd, KINETIS_USBDCD_SECONDARY_DELAY);
 }
 
-static void charging_port_result(K22UsbDcd* usbdcd) {
+static void charging_port_result(KinetisUsbDcd* usbdcd) {
     usbdcd->status = (usbdcd->status & (STATUS_TIMEOUT | STATUS_ERROR)) | STATUS_ACTIVE |
                      (2u << STATUS_PHASE_SHIFT) | (2u << STATUS_RESULT_SHIFT);
     signal_interrupt(usbdcd);
-    set_phase(usbdcd, (usbdcd->control & CONTROL_BC12) != 0u ? K22_USBDCD_SECONDARY_DETECTION
-                                                             : K22_USBDCD_WAIT_PULLUP);
+    set_phase(usbdcd, (usbdcd->control & CONTROL_BC12) != 0u ? KINETIS_USBDCD_SECONDARY_DETECTION
+                                                             : KINETIS_USBDCD_WAIT_PULLUP);
 }
 
-static void advance_millisecond(K22UsbDcd* usbdcd) {
+static void advance_millisecond(KinetisUsbDcd* usbdcd) {
     uint16_t elapsed = (uint16_t)(usbdcd->timer0 & 0x0fffu);
     if (elapsed < 0x0fffu)
         elapsed++;
@@ -184,32 +184,32 @@ static void advance_millisecond(K22UsbDcd* usbdcd) {
     }
     usbdcd->phase_elapsed++;
     switch (usbdcd->phase) {
-    case K22_USBDCD_DATA_CONTACT:
+    case KINETIS_USBDCD_DATA_CONTACT:
         if (usbdcd->charger == KINETIS_USB_CHARGER_NONE) {
             usbdcd->phase_elapsed = 0u;
         } else if (usbdcd->phase_elapsed >= ((usbdcd->timer1 >> 16u) & 0x3ffu)) {
             usbdcd->status = (usbdcd->status & (STATUS_TIMEOUT | STATUS_ERROR)) | STATUS_ACTIVE |
                              (1u << STATUS_PHASE_SHIFT);
-            set_phase(usbdcd, K22_USBDCD_PRIMARY_DELAY);
+            set_phase(usbdcd, KINETIS_USBDCD_PRIMARY_DELAY);
         }
         break;
-    case K22_USBDCD_PRIMARY_DELAY:
+    case KINETIS_USBDCD_PRIMARY_DELAY:
         if (usbdcd->phase_elapsed >= 1u)
-            set_phase(usbdcd, K22_USBDCD_PRIMARY_DETECTION);
+            set_phase(usbdcd, KINETIS_USBDCD_PRIMARY_DETECTION);
         break;
-    case K22_USBDCD_PRIMARY_DETECTION:
+    case KINETIS_USBDCD_PRIMARY_DETECTION:
         if (usbdcd->phase_elapsed >= (usbdcd->timer1 & 0x3ffu))
             primary_result(usbdcd);
         break;
-    case K22_USBDCD_WAIT_PULLUP:
+    case KINETIS_USBDCD_WAIT_PULLUP:
         if (usbdcd->pullup)
-            set_phase(usbdcd, K22_USBDCD_SECONDARY_DETECTION);
+            set_phase(usbdcd, KINETIS_USBDCD_SECONDARY_DETECTION);
         break;
-    case K22_USBDCD_SECONDARY_DELAY:
+    case KINETIS_USBDCD_SECONDARY_DELAY:
         if (usbdcd->phase_elapsed >= ((usbdcd->timer2 >> 16u) & 0x3ffu))
             charging_port_result(usbdcd);
         break;
-    case K22_USBDCD_SECONDARY_DETECTION: {
+    case KINETIS_USBDCD_SECONDARY_DETECTION: {
         const uint16_t duration = (usbdcd->control & CONTROL_BC12) != 0u
                                       ? (uint16_t)(usbdcd->timer2 & 0x3ffu)
                                       : (uint16_t)(usbdcd->timer2 & 0x0fu);
@@ -217,12 +217,12 @@ static void advance_millisecond(K22UsbDcd* usbdcd) {
             finish(usbdcd, 3u, usbdcd->charger == KINETIS_USB_CHARGER_DEDICATED ? 3u : 2u, false);
         break;
     }
-    case K22_USBDCD_IDLE:
+    case KINETIS_USBDCD_IDLE:
         break;
     }
 }
 
-void k22_usbdcd_advance(K22UsbDcd* usbdcd, uint64_t cycles) {
+void kinetis_usbdcd_advance(KinetisUsbDcd* usbdcd, uint64_t cycles) {
     if (usbdcd == NULL || cycles == 0u || (usbdcd->status & STATUS_ACTIVE) == 0u)
         return;
     usbdcd->clock_cycles += cycles;
@@ -233,21 +233,21 @@ void k22_usbdcd_advance(K22UsbDcd* usbdcd, uint64_t cycles) {
     }
 }
 
-bool k22_usbdcd_set_charger(K22UsbDcd* usbdcd, KinetisUsbCharger charger) {
+bool kinetis_usbdcd_set_charger(KinetisUsbDcd* usbdcd, KinetisUsbCharger charger) {
     if (usbdcd == NULL || charger > KINETIS_USB_CHARGER_ERROR)
         return false;
     usbdcd->charger = charger;
     return true;
 }
 
-bool k22_usbdcd_set_pullup(K22UsbDcd* usbdcd, bool enabled) {
+bool kinetis_usbdcd_set_pullup(KinetisUsbDcd* usbdcd, bool enabled) {
     if (usbdcd == NULL)
         return false;
     usbdcd->pullup = enabled;
     return true;
 }
 
-bool k22_usbdcd_irq(const K22UsbDcd* usbdcd) {
+bool kinetis_usbdcd_irq(const KinetisUsbDcd* usbdcd) {
     if (usbdcd == NULL)
         return false;
     return (usbdcd->control & (CONTROL_IF | CONTROL_IE)) == (CONTROL_IF | CONTROL_IE);

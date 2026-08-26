@@ -20,19 +20,19 @@ enum {
     ACTIVE = 1u << 22u,
 };
 
-static uint32_t read_value(TestState* state, K22UsbDcd* usbdcd, uint32_t address) {
+static uint32_t read_value(TestState* state, KinetisUsbDcd* usbdcd, uint32_t address) {
     uint32_t value = UINT32_MAX;
-    expect(state, k22_usbdcd_read(usbdcd, address, 4u, &value),
-           "k22_usbdcd_read(usbdcd, address, 4u, &value)");
+    expect(state, kinetis_usbdcd_read(usbdcd, address, 4u, &value),
+           "kinetis_usbdcd_read(usbdcd, address, 4u, &value)");
     return value;
 }
 
-static void write_value(TestState* state, K22UsbDcd* usbdcd, uint32_t address, uint32_t value) {
-    expect(state, k22_usbdcd_write(usbdcd, address, 4u, value),
-           "k22_usbdcd_write(usbdcd, address, 4u, value)");
+static void write_value(TestState* state, KinetisUsbDcd* usbdcd, uint32_t address, uint32_t value) {
+    expect(state, kinetis_usbdcd_write(usbdcd, address, 4u, value),
+           "kinetis_usbdcd_write(usbdcd, address, 4u, value)");
 }
 
-static void configure_detection(TestState* state, K22UsbDcd* usbdcd, bool enable_bc12) {
+static void configure_detection(TestState* state, KinetisUsbDcd* usbdcd, bool enable_bc12) {
     write_value(state, usbdcd, CLOCK, 4u);
     write_value(state, usbdcd, TIMER0, 2u << 16u);
     write_value(state, usbdcd, TIMER1, (2u << 16u) | 3u);
@@ -41,8 +41,8 @@ static void configure_detection(TestState* state, K22UsbDcd* usbdcd, bool enable
 }
 
 static void test_reset_and_access(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     expect(state, read_value(state, &usbdcd, CONTROL) == IE,
            "read_value(state, &usbdcd, CONTROL) == IE");
     expect(state, read_value(state, &usbdcd, CLOCK) == 0xc1u,
@@ -56,169 +56,170 @@ static void test_reset_and_access(TestState* state) {
     expect(state, read_value(state, &usbdcd, TIMER2) == 0x00280001u,
            "read_value(state, &usbdcd, TIMER2) == 0x00280001u");
     uint32_t register_value = 0u;
-    expect(state, !k22_usbdcd_read(NULL, CONTROL, 4u, &register_value),
-           "!k22_usbdcd_read(NULL, CONTROL, 4u, &register_value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value),
-           "!k22_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value),
-           "!k22_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value)");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL + 0x0cu, 4u, &register_value),
+    expect(state, !kinetis_usbdcd_read(NULL, CONTROL, 4u, &register_value),
+           "!kinetis_usbdcd_read(NULL, CONTROL, 4u, &register_value)");
+    expect(state, !kinetis_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value),
+           "!kinetis_usbdcd_read(&usbdcd, CONTROL, 2u, &register_value)");
+    expect(state, !kinetis_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value),
+           "!kinetis_usbdcd_read(&usbdcd, CONTROL + 1u, 4u, &register_value)");
+    expect(state, !kinetis_usbdcd_read(&usbdcd, CONTROL + 0x0cu, 4u, &register_value),
            "unimplemented USB DCD register is rejected");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL - 4u, 4u, &register_value),
+    expect(state, !kinetis_usbdcd_read(&usbdcd, CONTROL - 4u, 4u, &register_value),
            "USB DCD rejects reads below its register block");
-    expect(state, !k22_usbdcd_read(&usbdcd, CONTROL, 4u, NULL),
-           "!k22_usbdcd_read(&usbdcd, CONTROL, 4u, NULL)");
-    expect(state, !k22_usbdcd_write(NULL, CONTROL, 4u, 0u),
-           "!k22_usbdcd_write(NULL, CONTROL, 4u, 0u)");
-    expect(state, !k22_usbdcd_write(&usbdcd, CONTROL, 2u, 0u), "USB DCD rejects narrow writes");
-    expect(state, !k22_usbdcd_write(&usbdcd, CONTROL - 4u, 4u, 0u),
+    expect(state, !kinetis_usbdcd_read(&usbdcd, CONTROL, 4u, NULL),
+           "!kinetis_usbdcd_read(&usbdcd, CONTROL, 4u, NULL)");
+    expect(state, !kinetis_usbdcd_write(NULL, CONTROL, 4u, 0u),
+           "!kinetis_usbdcd_write(NULL, CONTROL, 4u, 0u)");
+    expect(state, !kinetis_usbdcd_write(&usbdcd, CONTROL, 2u, 0u), "USB DCD rejects narrow writes");
+    expect(state, !kinetis_usbdcd_write(&usbdcd, CONTROL - 4u, 4u, 0u),
            "USB DCD rejects writes below its register block");
-    expect(state, !k22_usbdcd_write(&usbdcd, CONTROL + 1u, 4u, 0u),
+    expect(state, !kinetis_usbdcd_write(&usbdcd, CONTROL + 1u, 4u, 0u),
            "USB DCD rejects unaligned writes");
-    expect(state, !k22_usbdcd_write(&usbdcd, STATUS, 4u, 0u),
-           "!k22_usbdcd_write(&usbdcd, STATUS, 4u, 0u)");
-    expect(state, !k22_usbdcd_set_charger(NULL, KINETIS_USB_CHARGER_NONE),
-           "!k22_usbdcd_set_charger(NULL, KINETIS_USB_CHARGER_NONE)");
-    expect(state, !k22_usbdcd_set_charger(&usbdcd, (KinetisUsbCharger)UINT8_MAX),
-           "!k22_usbdcd_set_charger(&usbdcd, (KinetisUsbCharger)UINT8_MAX)");
-    expect(state, !k22_usbdcd_set_pullup(NULL, true), "!k22_usbdcd_set_pullup(NULL, true)");
-    expect(state, !k22_usbdcd_irq(NULL), "!k22_usbdcd_irq(NULL)");
-    k22_usbdcd_reset(NULL);
+    expect(state, !kinetis_usbdcd_write(&usbdcd, STATUS, 4u, 0u),
+           "!kinetis_usbdcd_write(&usbdcd, STATUS, 4u, 0u)");
+    expect(state, !kinetis_usbdcd_set_charger(NULL, KINETIS_USB_CHARGER_NONE),
+           "!kinetis_usbdcd_set_charger(NULL, KINETIS_USB_CHARGER_NONE)");
+    expect(state, !kinetis_usbdcd_set_charger(&usbdcd, (KinetisUsbCharger)UINT8_MAX),
+           "!kinetis_usbdcd_set_charger(&usbdcd, (KinetisUsbCharger)UINT8_MAX)");
+    expect(state, !kinetis_usbdcd_set_pullup(NULL, true), "!kinetis_usbdcd_set_pullup(NULL, true)");
+    expect(state, !kinetis_usbdcd_irq(NULL), "!kinetis_usbdcd_irq(NULL)");
+    kinetis_usbdcd_reset(NULL);
     write_value(state, &usbdcd, CLOCK, 0u);
     write_value(state, &usbdcd, CONTROL, IE | START);
-    k22_usbdcd_advance(&usbdcd, 1u);
-    k22_usbdcd_reset(&usbdcd);
-    k22_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_reset(&usbdcd);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
 }
 
 static void test_standard_host(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     configure_detection(state, &usbdcd, false);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
     write_value(state, &usbdcd, CONTROL, IE | START);
     expect(state, read_value(state, &usbdcd, STATUS) == ACTIVE,
            "read_value(state, &usbdcd, STATUS) == ACTIVE");
     expect(state, (read_value(state, &usbdcd, TIMER0) & 0xfffu) == 2u,
            "(read_value(state, &usbdcd, TIMER0) & 0xfffu) == 2u");
-    k22_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
     expect(state, read_value(state, &usbdcd, STATUS) == ACTIVE,
            "read_value(state, &usbdcd, STATUS) == ACTIVE");
-    k22_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u))");
-    k22_usbdcd_advance(&usbdcd, 4u);
+    kinetis_usbdcd_advance(&usbdcd, 4u);
     expect(state, read_value(state, &usbdcd, STATUS) == ((2u << 18u) | (1u << 16u)),
            "read_value(state, &usbdcd, STATUS) == ((2u << 18u) | (1u << 16u))");
-    expect(state, k22_usbdcd_irq(&usbdcd), "k22_usbdcd_irq(&usbdcd)");
+    expect(state, kinetis_usbdcd_irq(&usbdcd), "kinetis_usbdcd_irq(&usbdcd)");
     expect(state, (read_value(state, &usbdcd, CONTROL) & IF) != 0u,
            "(read_value(state, &usbdcd, CONTROL) & IF) != 0u");
     write_value(state, &usbdcd, CONTROL, IE | 1u);
-    expect(state, !k22_usbdcd_irq(&usbdcd), "!k22_usbdcd_irq(&usbdcd)");
+    expect(state, !kinetis_usbdcd_irq(&usbdcd), "!kinetis_usbdcd_irq(&usbdcd)");
     expect(state, (read_value(state, &usbdcd, CONTROL) & IF) == 0u,
            "(read_value(state, &usbdcd, CONTROL) & IF) == 0u");
 }
 
 static void test_bc12(TestState* state, KinetisUsbCharger charger, uint32_t expected_result) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     configure_detection(state, &usbdcd, true);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, charger),
-           "k22_usbdcd_set_charger(&usbdcd, charger)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, charger),
+           "kinetis_usbdcd_set_charger(&usbdcd, charger)");
     write_value(state, &usbdcd, CONTROL, IE | BC12 | START);
-    k22_usbdcd_advance(&usbdcd, 6u);
+    kinetis_usbdcd_advance(&usbdcd, 6u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u))");
-    expect(state, !k22_usbdcd_irq(&usbdcd), "!k22_usbdcd_irq(&usbdcd)");
-    k22_usbdcd_advance(&usbdcd, 2u);
+    expect(state, !kinetis_usbdcd_irq(&usbdcd), "!kinetis_usbdcd_irq(&usbdcd)");
+    kinetis_usbdcd_advance(&usbdcd, 2u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u))");
-    expect(state, k22_usbdcd_irq(&usbdcd), "k22_usbdcd_irq(&usbdcd)");
+    expect(state, kinetis_usbdcd_irq(&usbdcd), "kinetis_usbdcd_irq(&usbdcd)");
     write_value(state, &usbdcd, CONTROL, IE | BC12 | 1u);
-    k22_usbdcd_advance(&usbdcd, 2u);
+    kinetis_usbdcd_advance(&usbdcd, 2u);
     expect(state, read_value(state, &usbdcd, STATUS) == ((3u << 18u) | (expected_result << 16u)),
            "read_value(state, &usbdcd, STATUS) == ((3u << 18u) | (expected_result << 16u))");
-    expect(state, k22_usbdcd_irq(&usbdcd), "k22_usbdcd_irq(&usbdcd)");
+    expect(state, kinetis_usbdcd_irq(&usbdcd), "kinetis_usbdcd_irq(&usbdcd)");
 }
 
 static void test_bc11_pullup(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     configure_detection(state, &usbdcd, false);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_CHARGING_PORT),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_CHARGING_PORT)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_CHARGING_PORT),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_CHARGING_PORT)");
     write_value(state, &usbdcd, CONTROL, IE | START);
-    k22_usbdcd_advance(&usbdcd, 6u);
+    kinetis_usbdcd_advance(&usbdcd, 6u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u))");
-    expect(state, !k22_usbdcd_irq(&usbdcd), "!k22_usbdcd_irq(&usbdcd)");
-    k22_usbdcd_advance(&usbdcd, 2u);
+    expect(state, !kinetis_usbdcd_irq(&usbdcd), "!kinetis_usbdcd_irq(&usbdcd)");
+    kinetis_usbdcd_advance(&usbdcd, 2u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u))");
     write_value(state, &usbdcd, CONTROL, IE | 1u);
-    k22_usbdcd_advance(&usbdcd, 10u);
+    kinetis_usbdcd_advance(&usbdcd, 10u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (2u << 18u) | (2u << 16u))");
-    expect(state, k22_usbdcd_set_pullup(&usbdcd, true), "k22_usbdcd_set_pullup(&usbdcd, true)");
-    k22_usbdcd_advance(&usbdcd, 3u);
+    expect(state, kinetis_usbdcd_set_pullup(&usbdcd, true),
+           "kinetis_usbdcd_set_pullup(&usbdcd, true)");
+    kinetis_usbdcd_advance(&usbdcd, 3u);
     expect(state, read_value(state, &usbdcd, STATUS) == ((3u << 18u) | (2u << 16u)),
            "read_value(state, &usbdcd, STATUS) == ((3u << 18u) | (2u << 16u))");
 }
 
 static void test_data_contact_debounce(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     configure_detection(state, &usbdcd, false);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
     write_value(state, &usbdcd, CONTROL, IE | START);
-    k22_usbdcd_advance(&usbdcd, 1u);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE)");
-    k22_usbdcd_advance(&usbdcd, 5u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE)");
+    kinetis_usbdcd_advance(&usbdcd, 5u);
     expect(state, read_value(state, &usbdcd, STATUS) == ACTIVE,
            "read_value(state, &usbdcd, STATUS) == ACTIVE");
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
-    k22_usbdcd_advance(&usbdcd, 1u);
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
+    kinetis_usbdcd_advance(&usbdcd, 1u);
     expect(state, read_value(state, &usbdcd, STATUS) == ACTIVE,
            "read_value(state, &usbdcd, STATUS) == ACTIVE");
-    k22_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u))");
 }
 
 static void test_clock_unit_and_interrupt_mask(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     write_value(state, &usbdcd, CLOCK, (1u << 2u) | 1u);
     write_value(state, &usbdcd, TIMER0, 0u);
     write_value(state, &usbdcd, TIMER1, 0u);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
     write_value(state, &usbdcd, CONTROL, START);
-    k22_usbdcd_advance(&usbdcd, 2999u);
+    kinetis_usbdcd_advance(&usbdcd, 2999u);
     expect(state, read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u)),
            "read_value(state, &usbdcd, STATUS) == (ACTIVE | (1u << 18u))");
-    k22_usbdcd_advance(&usbdcd, 1u);
+    kinetis_usbdcd_advance(&usbdcd, 1u);
     expect(state, read_value(state, &usbdcd, STATUS) == ((2u << 18u) | (1u << 16u)),
            "read_value(state, &usbdcd, STATUS) == ((2u << 18u) | (1u << 16u))");
     expect(state, (read_value(state, &usbdcd, CONTROL) & IF) != 0u,
            "(read_value(state, &usbdcd, CONTROL) & IF) != 0u");
-    expect(state, !k22_usbdcd_irq(&usbdcd), "!k22_usbdcd_irq(&usbdcd)");
+    expect(state, !kinetis_usbdcd_irq(&usbdcd), "!kinetis_usbdcd_irq(&usbdcd)");
 }
 
 static void test_error_timeout_and_software_reset(TestState* state) {
-    K22UsbDcd usbdcd;
-    k22_usbdcd_reset(&usbdcd);
+    KinetisUsbDcd usbdcd;
+    kinetis_usbdcd_reset(&usbdcd);
     configure_detection(state, &usbdcd, false);
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_ERROR),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_ERROR)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_ERROR),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_ERROR)");
     write_value(state, &usbdcd, CONTROL, IE | START);
-    expect(state, !k22_usbdcd_write(&usbdcd, CLOCK, 4u, 8u),
-           "!k22_usbdcd_write(&usbdcd, CLOCK, 4u, 8u)");
-    k22_usbdcd_advance(&usbdcd, 6u);
+    expect(state, !kinetis_usbdcd_write(&usbdcd, CLOCK, 4u, 8u),
+           "!kinetis_usbdcd_write(&usbdcd, CLOCK, 4u, 8u)");
+    kinetis_usbdcd_advance(&usbdcd, 6u);
     expect(state, read_value(state, &usbdcd, STATUS) == ((1u << 20u) | (2u << 18u)),
            "read_value(state, &usbdcd, STATUS) == ((1u << 20u) | (2u << 18u))");
 
@@ -236,23 +237,23 @@ static void test_error_timeout_and_software_reset(TestState* state) {
     expect(state, read_value(state, &usbdcd, TIMER2) == ((2u << 16u) | 2u),
            "read_value(state, &usbdcd, TIMER2) == ((2u << 16u) | 2u)");
 
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE)");
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_NONE)");
     write_value(state, &usbdcd, TIMER0, 0u);
     write_value(state, &usbdcd, CONTROL, IE | START);
-    k22_usbdcd_advance(&usbdcd, 1000u);
+    kinetis_usbdcd_advance(&usbdcd, 1000u);
     expect(state,
            (read_value(state, &usbdcd, STATUS) & (ACTIVE | (1u << 21u) | (1u << 20u))) ==
                (ACTIVE | (1u << 21u) | (1u << 20u)),
            "(read_value(state, &usbdcd, STATUS) & (ACTIVE | (1u << 21u) | (1u << 20u))) == "
            "(ACTIVE | (1u << 21u) | (1u << 20u))");
-    expect(state, k22_usbdcd_irq(&usbdcd), "k22_usbdcd_irq(&usbdcd)");
-    k22_usbdcd_advance(&usbdcd, 5000u);
+    expect(state, kinetis_usbdcd_irq(&usbdcd), "kinetis_usbdcd_irq(&usbdcd)");
+    kinetis_usbdcd_advance(&usbdcd, 5000u);
     expect(state, (read_value(state, &usbdcd, TIMER0) & 0xfffu) == 0xfffu,
            "(read_value(state, &usbdcd, TIMER0) & 0xfffu) == 0xfffu");
-    expect(state, k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
-           "k22_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
-    k22_usbdcd_advance(&usbdcd, 6u);
+    expect(state, kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST),
+           "kinetis_usbdcd_set_charger(&usbdcd, KINETIS_USB_CHARGER_STANDARD_HOST)");
+    kinetis_usbdcd_advance(&usbdcd, 6u);
     expect(state,
            read_value(state, &usbdcd, STATUS) ==
                ((1u << 21u) | (1u << 20u) | (2u << 18u) | (1u << 16u)),
@@ -261,21 +262,23 @@ static void test_error_timeout_and_software_reset(TestState* state) {
 }
 
 static void test_copy(TestState* state) {
-    K22UsbDcd source;
-    K22UsbDcd destination;
-    k22_usbdcd_reset(&source);
+    KinetisUsbDcd source;
+    KinetisUsbDcd destination;
+    kinetis_usbdcd_reset(&source);
     configure_detection(state, &source, true);
-    expect(state, k22_usbdcd_set_charger(&source, KINETIS_USB_CHARGER_DEDICATED),
-           "k22_usbdcd_set_charger(&source, KINETIS_USB_CHARGER_DEDICATED)");
+    expect(state, kinetis_usbdcd_set_charger(&source, KINETIS_USB_CHARGER_DEDICATED),
+           "kinetis_usbdcd_set_charger(&source, KINETIS_USB_CHARGER_DEDICATED)");
     write_value(state, &source, CONTROL, IE | BC12 | START);
-    k22_usbdcd_advance(&source, 3u);
-    expect(state, k22_usbdcd_copy(&destination, &source), "k22_usbdcd_copy(&destination, &source)");
+    kinetis_usbdcd_advance(&source, 3u);
+    expect(state, kinetis_usbdcd_copy(&destination, &source),
+           "kinetis_usbdcd_copy(&destination, &source)");
     expect(state, memcmp(&destination, &source, sizeof(source)) == 0,
            "memcmp(&destination, &source, sizeof(source)) == 0");
-    expect(state, !k22_usbdcd_copy(NULL, &source), "!k22_usbdcd_copy(NULL, &source)");
-    expect(state, !k22_usbdcd_copy(&destination, NULL), "!k22_usbdcd_copy(&destination, NULL)");
-    k22_usbdcd_advance(NULL, 1u);
-    k22_usbdcd_advance(&destination, 0u);
+    expect(state, !kinetis_usbdcd_copy(NULL, &source), "!kinetis_usbdcd_copy(NULL, &source)");
+    expect(state, !kinetis_usbdcd_copy(&destination, NULL),
+           "!kinetis_usbdcd_copy(&destination, NULL)");
+    kinetis_usbdcd_advance(NULL, 1u);
+    kinetis_usbdcd_advance(&destination, 0u);
 }
 
 int main(void) {

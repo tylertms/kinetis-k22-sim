@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
         }
         if (strcmp(argv[argument_index], "--profile") == 0) {
             if (!kinetis_profile_from_name(argv[argument_index + 1], &profile)) {
-                fprintf(stderr, "unknown K22 profile: %s\n", argv[argument_index + 1]);
+                fprintf(stderr, "unknown Kinetis profile: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
             continue;
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 
         if (strcmp(argv[argument_index], "--package") == 0) {
             if (!kinetis_package_from_code(argv[argument_index + 1], &package)) {
-                fprintf(stderr, "unknown K22 package: %s\n", argv[argument_index + 1]);
+                fprintf(stderr, "unknown Kinetis package: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
             continue;

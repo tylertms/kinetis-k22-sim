@@ -48,7 +48,7 @@ static uint32_t address_for(uint32_t random) {
     return bases[region] + ((random >> 8u) % spans[region]);
 }
 
-static void randomize_state(K22Timing* timing, RegisterStateCensus* census, uint32_t random) {
+static void randomize_state(KinetisTiming* timing, RegisterStateCensus* census, uint32_t random) {
     const uint32_t second = next_random(census);
     timing->debug_halted = (random & 1u) != 0u;
     timing->sim_sopt1 = random;
@@ -116,10 +116,10 @@ static void randomize_state(K22Timing* timing, RegisterStateCensus* census, uint
 int main(void) {
     TestState state = {0u, 0u, 0u};
     RegisterStateCensus census = {UINT32_C(0x9e3779b9), 0u, 0u, UINT64_C(14695981039346656037)};
-    K22Timing timing;
+    KinetisTiming timing;
     expect(&state,
-           k22_timing_init(&timing, k22_profile_get(K22_PROFILE_MK22FN1M012), 16000000u, 32768u,
-                           (K22TimingSignals){0}),
+           kinetis_timing_init(&timing, kinetis_profile_get(KINETIS_PROFILE_MK22FN1M012), 16000000u,
+                               32768u, (KinetisTimingSignals){0}),
            "initialize timing register state census");
     for (uint32_t iteration = 0u; iteration < 100000u; iteration++) {
         const uint32_t random = next_random(&census);
@@ -127,10 +127,10 @@ int main(void) {
         const uint32_t address = address_for(random);
         const uint8_t size = (uint8_t)(random % 6u);
         uint32_t value = UINT32_MAX;
-        const bool read = k22_timing_read(&timing, address, size, &value);
+        const bool read = kinetis_timing_read(&timing, address, size, &value);
         const bool written =
-            k22_timing_write(&timing, address, size, random ^ UINT32_C(0xa5a55a5a));
-        k22_timing_advance(&timing, (random & 31u) + 1u);
+            kinetis_timing_write(&timing, address, size, random ^ UINT32_C(0xa5a55a5a));
+        kinetis_timing_advance(&timing, (random & 31u) + 1u);
         census.reads += read;
         census.writes += written;
         mix(&census, address);

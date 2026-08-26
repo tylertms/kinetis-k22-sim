@@ -31,7 +31,7 @@ static Kinetis* make_device(TestState* state) {
     configuration.package = KINETIS_PACKAGE_LQ_144_LQFP;
     Kinetis* device = kinetis_create(configuration);
     expect(state, device != NULL, "device != NULL");
-    expect(state, k22_test_disable_watchdog(device), "k22_test_disable_watchdog(device)");
+    expect(state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
     const uint32_t gate = 1u << 2u;
     expect(state, kinetis_write(device, SIM_SCGC4, &gate, sizeof(gate)),
            "kinetis_write(device, SIM_SCGC4, &gate, sizeof(gate))");
@@ -40,7 +40,7 @@ static Kinetis* make_device(TestState* state) {
 
 static void reset_device(TestState* state, Kinetis* device) {
     kinetis_warm_reset(device, 0u, 4u);
-    expect(state, k22_test_disable_watchdog(device), "k22_test_disable_watchdog(device)");
+    expect(state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
     const uint32_t gate = 1u << 2u;
     expect(state, kinetis_write(device, SIM_SCGC4, &gate, sizeof(gate)),
            "kinetis_write(device, SIM_SCGC4, &gate, sizeof(gate))");
@@ -83,7 +83,7 @@ static void configure_dma(TestState* state, Kinetis* device) {
 }
 
 static void advance_bus(Kinetis* device, uint32_t bus_cycles) {
-    kinetis_advance(device, k22_test_core_cycles_for_bus_cycles(device, bus_cycles));
+    kinetis_advance(device, kinetis_test_core_cycles_for_bus_cycles(device, bus_cycles));
 }
 
 static void configure_time(TestState* state, Kinetis* device) {

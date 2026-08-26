@@ -125,34 +125,40 @@ typedef struct {
     uint8_t last_trigger_channel;
 } Observations;
 
-uint64_t k22_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles, uint32_t source_hz,
-                                         uint32_t core_hz);
+uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
+                                             uint32_t source_hz, uint32_t core_hz);
 
-K22TimingSignals k22_timing_test_signals(Observations* observations);
-uint32_t k22_timing_test_cycles_for_ticks(const K22Timing* timing, uint32_t ticks,
-                                          uint32_t clock_hz);
-void k22_timing_test_disable_watchdog_fixture(K22Timing* timing);
-void k22_timing_test_expect_read(TestState* state, K22Timing* timing, uint32_t address,
-                                 uint8_t size, uint32_t expected);
-void k22_timing_test_expect_write(TestState* state, K22Timing* timing, uint32_t address,
-                                  uint8_t size, uint32_t value);
-void k22_timing_test_test_clock_tree_and_power(TestState* state, K22Timing* timing);
-void k22_timing_test_test_ftm_input_capture(TestState* state, const K22Profile* profile);
-void k22_timing_test_test_ftm_output(TestState* state, const K22Profile* profile);
-void k22_timing_test_test_ftm(TestState* state, K22Timing* timing, Observations* observations);
-void k22_timing_test_test_ftm_census(TestState* state, K22Timing* timing);
-void k22_timing_test_test_state_census(TestState* state, K22Timing* timing);
-void k22_timing_test_test_low_leakage_wakeup(TestState* state, K22Timing* timing,
-                                             Observations* observations);
-void k22_timing_test_test_api_boundaries(TestState* state, K22Timing* timing);
-void k22_timing_test_test_low_voltage_control(TestState* state, K22Timing* timing,
-                                              Observations* observations);
-void k22_timing_test_test_lptmr(TestState* state, K22Timing* timing, Observations* observations);
-void k22_timing_test_test_pdb(TestState* state, K22Timing* timing, Observations* observations);
-void k22_timing_test_test_pit(TestState* state, K22Timing* timing, Observations* observations);
-void k22_timing_test_test_profiles_and_reset(TestState* state);
-void k22_timing_test_test_rtc_protection_and_compensation(TestState* state,
-                                                          const K22Profile* profile);
-void k22_timing_test_test_rtc(TestState* state, K22Timing* timing, Observations* observations);
+KinetisTimingSignals kinetis_timing_test_signals(Observations* observations);
+uint32_t kinetis_timing_test_cycles_for_ticks(const KinetisTiming* timing, uint32_t ticks,
+                                              uint32_t clock_hz);
+void kinetis_timing_test_disable_watchdog_fixture(KinetisTiming* timing);
+void kinetis_timing_test_expect_read(TestState* state, KinetisTiming* timing, uint32_t address,
+                                     uint8_t size, uint32_t expected);
+void kinetis_timing_test_expect_write(TestState* state, KinetisTiming* timing, uint32_t address,
+                                      uint8_t size, uint32_t value);
+void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTiming* timing);
+void kinetis_timing_test_test_ftm_input_capture(TestState* state,
+                                                const KinetisDeviceProfile* profile);
+void kinetis_timing_test_test_ftm_output(TestState* state, const KinetisDeviceProfile* profile);
+void kinetis_timing_test_test_ftm(TestState* state, KinetisTiming* timing,
+                                  Observations* observations);
+void kinetis_timing_test_test_ftm_census(TestState* state, KinetisTiming* timing);
+void kinetis_timing_test_test_state_census(TestState* state, KinetisTiming* timing);
+void kinetis_timing_test_test_low_leakage_wakeup(TestState* state, KinetisTiming* timing,
+                                                 Observations* observations);
+void kinetis_timing_test_test_api_boundaries(TestState* state, KinetisTiming* timing);
+void kinetis_timing_test_test_low_voltage_control(TestState* state, KinetisTiming* timing,
+                                                  Observations* observations);
+void kinetis_timing_test_test_lptmr(TestState* state, KinetisTiming* timing,
+                                    Observations* observations);
+void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
+                                  Observations* observations);
+void kinetis_timing_test_test_pit(TestState* state, KinetisTiming* timing,
+                                  Observations* observations);
+void kinetis_timing_test_test_profiles_and_reset(TestState* state);
+void kinetis_timing_test_test_rtc_protection_and_compensation(TestState* state,
+                                                              const KinetisDeviceProfile* profile);
+void kinetis_timing_test_test_rtc(TestState* state, KinetisTiming* timing,
+                                  Observations* observations);
 
 #endif

@@ -16,30 +16,30 @@
 #include <string.h>
 
 enum {
-    K22_FLASH_BASE = 0x00000000u,
-    K22_SRAM_CENTER = 0x20000000u,
-    K22_PERIPHERAL_BASE = 0x40000000u,
-    K22_PERIPHERAL_SIZE = 0x00100000u,
-    K22_BIT_BAND_BASE = 0x42000000u,
-    K22_BIT_BAND_SIZE = 0x02000000u,
-    K22_EVENT_CAPACITY = 64,
-    K22_SIM_SCGC1 = 0x40048028u,
-    K22_SIM_SCGC2 = 0x4004802cu,
-    K22_AIPS0 = 0x40000000u,
-    K22_AIPS1 = 0x40080000u,
-    K22_AXBS = 0x40004000u,
-    K22_FMC = 0x4001f000u,
-    K22_USBDCD = 0x40035000u,
-    K22_CMT = 0x40062000u,
-    K22_FMC_WAY_COUNT = 4,
-    K22_FMC_MAX_SET_COUNT = 8,
+    KINETIS_FLASH_BASE = 0x00000000u,
+    KINETIS_SRAM_CENTER = 0x20000000u,
+    KINETIS_PERIPHERAL_BASE = 0x40000000u,
+    KINETIS_PERIPHERAL_SIZE = 0x00100000u,
+    KINETIS_BIT_BAND_BASE = 0x42000000u,
+    KINETIS_BIT_BAND_SIZE = 0x02000000u,
+    KINETIS_EVENT_CAPACITY = 64,
+    KINETIS_SIM_SCGC1 = 0x40048028u,
+    KINETIS_SIM_SCGC2 = 0x4004802cu,
+    KINETIS_AIPS0 = 0x40000000u,
+    KINETIS_AIPS1 = 0x40080000u,
+    KINETIS_AXBS = 0x40004000u,
+    KINETIS_FMC = 0x4001f000u,
+    KINETIS_USBDCD = 0x40035000u,
+    KINETIS_CMT = 0x40062000u,
+    KINETIS_FMC_WAY_COUNT = 4,
+    KINETIS_FMC_MAX_SET_COUNT = 8,
 };
 
 struct Kinetis {
     KinetisConfiguration configuration;
-    const K22Profile* profile;
-    const K22PackageSelection* package;
-    const K22RegisterManifest* manifest;
+    const KinetisDeviceProfile* profile;
+    const KinetisPackageSelection* package;
+    const KinetisRegisterManifest* manifest;
     CortexM4* cpu;
     uint8_t* flash;
     uint8_t* sram;
@@ -67,17 +67,17 @@ struct Kinetis {
     bool cmt_fsk_secondary;
     bool cmt_extended_space;
     bool cmt_dma_pending;
-    uint8_t fmc_bank[K22_FMC_WAY_COUNT][K22_FMC_MAX_SET_COUNT];
-    uint64_t fmc_age[K22_FMC_WAY_COUNT][K22_FMC_MAX_SET_COUNT];
+    uint8_t fmc_bank[KINETIS_FMC_WAY_COUNT][KINETIS_FMC_MAX_SET_COUNT];
+    uint64_t fmc_age[KINETIS_FMC_WAY_COUNT][KINETIS_FMC_MAX_SET_COUNT];
     uint64_t fmc_access_count;
-    K22UsbDcd usbdcd;
-    K22Data* data;
-    K22Io io;
-    K22Sdhc sdhc;
-    K22Serial serial;
-    K22Timing timing;
+    KinetisUsbDcd usbdcd;
+    KinetisData* data;
+    KinetisIo io;
+    KinetisSdhc sdhc;
+    KinetisSerial serial;
+    KinetisTiming timing;
     bool comparator_output[3];
-    KinetisEvent events[K22_EVENT_CAPACITY];
+    KinetisEvent events[KINETIS_EVENT_CAPACITY];
     uint8_t event_read_index;
     uint8_t event_write_index;
     uint8_t event_count;
@@ -102,29 +102,29 @@ void kinetis_peripheral_reset(Kinetis* device);
 void kinetis_warm_reset(Kinetis* device, uint8_t reset_cause_0, uint8_t reset_cause_1);
 void kinetis_refresh_signals(Kinetis* device);
 void kinetis_sync_clock_gates(Kinetis* device);
-K22DataBus kinetis_data_bus(Kinetis* device);
-K22SdhcBus kinetis_sdhc_bus(Kinetis* device);
-K22TimingSignals kinetis_timing_signals(Kinetis* device);
-K22IoConfiguration kinetis_io_configuration(Kinetis* device);
+KinetisDataBus kinetis_data_bus(Kinetis* device);
+KinetisSdhcBus kinetis_sdhc_bus(Kinetis* device);
+KinetisTimingSignals kinetis_timing_signals(Kinetis* device);
+KinetisIoConfiguration kinetis_io_configuration(Kinetis* device);
 
 bool kinetis_internal_aips_access_allowed(const Kinetis* device, uint32_t address,
                                           CortexM4Access access, bool write_access);
 bool kinetis_internal_axbs_write_allowed(const Kinetis* device, uint32_t address);
-bool kinetis_internal_enable_debug_clock(Kinetis* device, K22PeripheralId id);
-bool kinetis_internal_manifest_extension(K22PeripheralId id);
-bool kinetis_internal_peripheral_clock_enabled(const Kinetis* device, K22PeripheralId id);
-bool kinetis_internal_pop_serial_event(K22Serial* serial, K22SerialEndpoint endpoint,
-                                       K22SerialEvent* event);
-bool kinetis_internal_semantic_read(Kinetis* device, K22PeripheralId id, uint32_t address,
+bool kinetis_internal_enable_debug_clock(Kinetis* device, KinetisPeripheralId id);
+bool kinetis_internal_manifest_extension(KinetisPeripheralId id);
+bool kinetis_internal_peripheral_clock_enabled(const Kinetis* device, KinetisPeripheralId id);
+bool kinetis_internal_pop_serial_event(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
+                                       KinetisSerialEvent* event);
+bool kinetis_internal_semantic_read(Kinetis* device, KinetisPeripheralId id, uint32_t address,
                                     uint8_t byte_count, uint32_t* output_value);
-bool kinetis_internal_semantic_write(Kinetis* device, K22PeripheralId id, uint32_t address,
+bool kinetis_internal_semantic_write(Kinetis* device, KinetisPeripheralId id, uint32_t address,
                                      uint8_t byte_count, uint32_t write_value);
 bool kinetis_internal_serial_endpoint_available(const Kinetis* device,
                                                 KinetisSerialEndpoint endpoint);
-const K22RegisterDescriptor* kinetis_internal_manifest_descriptor_for_access(const Kinetis* device,
-                                                                             uint32_t address,
-                                                                             uint8_t byte_count);
-K22PeripheralId kinetis_internal_serial_endpoint_peripheral(KinetisSerialEndpoint endpoint);
+const KinetisRegisterDescriptor*
+kinetis_internal_manifest_descriptor_for_access(const Kinetis* device, uint32_t address,
+                                                uint8_t byte_count);
+KinetisPeripheralId kinetis_internal_serial_endpoint_peripheral(KinetisSerialEndpoint endpoint);
 bool kinetis_internal_data_bus_read(void* context, uint32_t address, uint8_t byte_count,
                                     uint32_t* output_value);
 bool kinetis_internal_data_bus_write(void* context, uint32_t address, uint8_t byte_count,
@@ -132,15 +132,15 @@ bool kinetis_internal_data_bus_write(void* context, uint32_t address, uint8_t by
 bool kinetis_internal_flash_bus_write(void* context, uint32_t address, uint8_t byte_count,
                                       uint32_t write_value);
 void kinetis_internal_data_dma_complete(void* context, uint8_t request_source);
-void kinetis_internal_data_interrupt(void* context, K22DataInterrupt interrupt, bool asserted);
-void kinetis_internal_io_event(void* context, const K22IoEvent* event);
+void kinetis_internal_data_interrupt(void* context, KinetisDataInterrupt interrupt, bool asserted);
+void kinetis_internal_io_event(void* context, const KinetisIoEvent* event);
 void kinetis_internal_timing_dma_trigger(void* context, uint8_t channel);
 void kinetis_internal_timing_dma(void* context, uint8_t request_source);
 void kinetis_internal_timing_irq(void* context, uint8_t irq, bool asserted);
 void kinetis_internal_timing_reset(void* context, uint8_t reset_cause_0, uint8_t reset_cause_1);
-void kinetis_internal_timing_trigger(void* context, K22TimingTrigger type, uint8_t instance,
+void kinetis_internal_timing_trigger(void* context, KinetisTimingTrigger type, uint8_t instance,
                                      uint8_t channel);
-uint32_t kinetis_internal_manifest_access_mask(const K22RegisterDescriptor* descriptor,
+uint32_t kinetis_internal_manifest_access_mask(const KinetisRegisterDescriptor* descriptor,
                                                uint32_t address, uint32_t mask);
 uint32_t kinetis_internal_raw_load(const Kinetis* device, uint32_t address, uint8_t byte_count);
 uint32_t kinetis_internal_width_mask(uint8_t byte_count);

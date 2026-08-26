@@ -2,9 +2,9 @@
 
 #include <string.h>
 
-#define BLOCK(peripheral, base, length) {K22_PERIPHERAL_##peripheral, base, length}
+#define BLOCK(peripheral, base, length) {KINETIS_PERIPHERAL_##peripheral, base, length}
 
-static const K22PeripheralBlock mkv30f12810_blocks[] = {
+static const KinetisPeripheralBlock mkv30f12810_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1080u),
     BLOCK(FMC, 0x4001f000u, 0x300u),         BLOCK(FTFA, 0x40020000u, 0x2cu),
     BLOCK(DMAMUX, 0x40021000u, 0x04u),       BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -28,7 +28,7 @@ static const K22PeripheralBlock mkv30f12810_blocks[] = {
     BLOCK(GPIOE, 0x400ff100u, 0x18u),        BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22PeripheralBlock mk22f12810_blocks[] = {
+static const KinetisPeripheralBlock mk22f12810_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1080u),
     BLOCK(FMC, 0x4001f000u, 0x300u),         BLOCK(FTFA, 0x40020000u, 0x2cu),
     BLOCK(DMAMUX, 0x40021000u, 0x04u),       BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -57,7 +57,7 @@ static const K22PeripheralBlock mk22f12810_blocks[] = {
     BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22PeripheralBlock mk22f25612_blocks[] = {
+static const KinetisPeripheralBlock mk22f25612_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1200u),
     BLOCK(FMC, 0x4001f000u, 0x300u),         BLOCK(FTFA, 0x40020000u, 0x2cu),
     BLOCK(DMAMUX, 0x40021000u, 0x10u),       BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -86,7 +86,7 @@ static const K22PeripheralBlock mk22f25612_blocks[] = {
     BLOCK(GPIOE, 0x400ff100u, 0x18u),        BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22PeripheralBlock mk22f51212_blocks[] = {
+static const KinetisPeripheralBlock mk22f51212_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1200u),
     BLOCK(FB, 0x4000c000u, 0x64u),           BLOCK(FMC, 0x4001f000u, 0x300u),
     BLOCK(FTFA, 0x40020000u, 0x2cu),         BLOCK(DMAMUX, 0x40021000u, 0x10u),
@@ -117,7 +117,7 @@ static const K22PeripheralBlock mk22f51212_blocks[] = {
     BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const K22PeripheralBlock mk22f12_blocks[] = {
+static const KinetisPeripheralBlock mk22f12_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x10u), BLOCK(AIPS0, 0x40000000u, 0x70u),
     BLOCK(AIPS1, 0x40080000u, 0x70u),        BLOCK(AXBS, 0x40004000u, 0xc04u),
     BLOCK(DMA, 0x40008000u, 0x1200u),        BLOCK(FB, 0x4000c000u, 0x64u),
@@ -156,7 +156,7 @@ static const K22PeripheralBlock mk22f12_blocks[] = {
 
 #define COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #define CPU(clock, irqs)                                                                           \
-    {.architecture = K22_CPU_ARCHITECTURE_ARMV7E_M,                                                \
+    {.architecture = KINETIS_CPU_ARCHITECTURE_ARMV7E_M,                                            \
      .core_revision_major = 0,                                                                     \
      .core_revision_minor = 1,                                                                     \
      .nvic_priority_bits = 4,                                                                      \
@@ -168,8 +168,8 @@ static const K22PeripheralBlock mk22f12_blocks[] = {
      .has_systick = true,                                                                          \
      .maximum_core_clock_hz = clock}
 
-static const K22Profile profiles[K22_PROFILE_COUNT] = {
-    {.id = K22_PROFILE_MK22F12810,
+static const KinetisDeviceProfile profiles[KINETIS_PROFILE_COUNT] = {
+    {.id = KINETIS_PROFILE_MK22F12810,
      .name = "MK22F12810",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffe000u,
@@ -183,7 +183,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(100000000u, 86u),
      .peripheral_blocks = mk22f12810_blocks,
      .peripheral_block_count = COUNT(mk22f12810_blocks)},
-    {.id = K22_PROFILE_MKV30F12810,
+    {.id = KINETIS_PROFILE_MKV30F12810,
      .name = "MKV30F12810",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffe000u,
@@ -197,7 +197,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(100000000u, 74u),
      .peripheral_blocks = mkv30f12810_blocks,
      .peripheral_block_count = COUNT(mkv30f12810_blocks)},
-    {.id = K22_PROFILE_MK22FN12812,
+    {.id = KINETIS_PROFILE_MK22FN12812,
      .name = "MK22FN12812",
      .program_flash_size = 0x20000u,
      .sram_lower_address = 0x1fffc000u,
@@ -211,7 +211,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(120000000u, 86u),
      .peripheral_blocks = mk22f25612_blocks,
      .peripheral_block_count = COUNT(mk22f25612_blocks)},
-    {.id = K22_PROFILE_MK22FN25612,
+    {.id = KINETIS_PROFILE_MK22FN25612,
      .name = "MK22FN25612",
      .program_flash_size = 0x40000u,
      .sram_lower_address = 0x1fffc000u,
@@ -225,7 +225,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(120000000u, 86u),
      .peripheral_blocks = mk22f25612_blocks,
      .peripheral_block_count = COUNT(mk22f25612_blocks)},
-    {.id = K22_PROFILE_MK22FN51212,
+    {.id = KINETIS_PROFILE_MK22FN51212,
      .name = "MK22FN51212",
      .program_flash_size = 0x80000u,
      .sram_lower_address = 0x1fff0000u,
@@ -239,7 +239,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(120000000u, 86u),
      .peripheral_blocks = mk22f51212_blocks,
      .peripheral_block_count = COUNT(mk22f51212_blocks)},
-    {.id = K22_PROFILE_MK22FN1M012,
+    {.id = KINETIS_PROFILE_MK22FN1M012,
      .name = "MK22FN1M012",
      .program_flash_size = 0x100000u,
      .sram_lower_address = 0x1fff0000u,
@@ -255,7 +255,7 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .cpu = CPU(120000000u, 82u),
      .peripheral_blocks = mk22f12_blocks,
      .peripheral_block_count = COUNT(mk22f12_blocks)},
-    {.id = K22_PROFILE_MK22FX51212,
+    {.id = KINETIS_PROFILE_MK22FX51212,
      .name = "MK22FX51212",
      .program_flash_size = 0x80000u,
      .sram_lower_address = 0x1fff0000u,
@@ -275,13 +275,13 @@ static const K22Profile profiles[K22_PROFILE_COUNT] = {
      .peripheral_block_count = COUNT(mk22f12_blocks)},
 };
 
-const K22Profile* k22_profile_get(K22ProfileId id) {
-    if ((unsigned)id >= K22_PROFILE_COUNT)
+const KinetisDeviceProfile* kinetis_profile_get(KinetisProfile id) {
+    if ((unsigned)id >= KINETIS_PROFILE_COUNT)
         return NULL;
     return &profiles[id];
 }
 
-const K22Profile* k22_profile_find(const char* profile_name) {
+const KinetisDeviceProfile* kinetis_profile_find(const char* profile_name) {
     if (profile_name == NULL)
         return NULL;
     for (size_t index = 0; index < COUNT(profiles); index++) {
@@ -291,9 +291,9 @@ const K22Profile* k22_profile_find(const char* profile_name) {
     return NULL;
 }
 
-bool k22_profile_peripheral_block(const K22Profile* profile, K22PeripheralId id,
-                                  K22PeripheralBlock* block_out) {
-    if (profile == NULL || (unsigned)id >= K22_PERIPHERAL_COUNT)
+bool kinetis_profile_peripheral_block(const KinetisDeviceProfile* profile, KinetisPeripheralId id,
+                                      KinetisPeripheralBlock* block_out) {
+    if (profile == NULL || (unsigned)id >= KINETIS_PERIPHERAL_COUNT)
         return false;
     for (size_t index = 0; index < profile->peripheral_block_count; index++) {
         if (profile->peripheral_blocks[index].id == id) {
@@ -305,16 +305,16 @@ bool k22_profile_peripheral_block(const K22Profile* profile, K22PeripheralId id,
     return false;
 }
 
-bool k22_profile_has_peripheral(const K22Profile* profile, K22PeripheralId id) {
-    return k22_profile_peripheral_block(profile, id, NULL);
+bool kinetis_profile_has_peripheral(const KinetisDeviceProfile* profile, KinetisPeripheralId id) {
+    return kinetis_profile_peripheral_block(profile, id, NULL);
 }
 
-bool k22_profile_resolve_peripheral(const K22Profile* profile, uint32_t address,
-                                    uint8_t access_size, K22PeripheralLocation* location) {
+bool kinetis_profile_resolve_peripheral(const KinetisDeviceProfile* profile, uint32_t address,
+                                        uint8_t access_size, KinetisPeripheralLocation* location) {
     if (profile == NULL || (access_size != 1 && access_size != 2 && access_size != 4))
         return false;
     for (size_t index = 0; index < profile->peripheral_block_count; index++) {
-        const K22PeripheralBlock* block = &profile->peripheral_blocks[index];
+        const KinetisPeripheralBlock* block = &profile->peripheral_blocks[index];
         if (address < block->address)
             continue;
         const uint32_t peripheral_offset = address - block->address;

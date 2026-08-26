@@ -7,29 +7,30 @@ static uint8_t flash_fccob_offset(uint8_t fccob_index) {
     return offsets[fccob_index];
 }
 
-static uint8_t flash_fccob(const K22Data* data, uint8_t fccob_index) {
+static uint8_t flash_fccob(const KinetisData* data, uint8_t fccob_index) {
     return data->flash[flash_fccob_offset(fccob_index)];
 }
 
-static void flash_set_fccob(K22Data* data, uint8_t fccob_index, uint8_t byte_value) {
+static void flash_set_fccob(KinetisData* data, uint8_t fccob_index, uint8_t byte_value) {
     data->flash[flash_fccob_offset(fccob_index)] = byte_value;
 }
 
-static uint32_t flash_address(const K22Data* data) {
+static uint32_t flash_address(const KinetisData* data) {
     return ((uint32_t)flash_fccob(data, 1u) << 16u) | ((uint32_t)flash_fccob(data, 2u) << 8u) |
            flash_fccob(data, 3u);
 }
 
-uint32_t k22_data_program_flash_address(const K22Data* data, uint32_t address) {
+uint32_t kinetis_data_program_flash_address(const KinetisData* data, uint32_t address) {
     if (data == NULL || data->flash_swap_current_block == 0u ||
         address >= data->profile->program_flash_size)
         return address;
     return address ^ (data->profile->program_flash_size / 2u);
 }
 
-static bool flash_store(K22Data* data, uint32_t address, uint8_t byte_count, uint32_t write_value) {
+static bool flash_store(KinetisData* data, uint32_t address, uint8_t byte_count,
+                        uint32_t write_value) {
     bool write_succeeded = false;
-    const uint32_t physical_address = k22_data_program_flash_address(data, address);
+    const uint32_t physical_address = kinetis_data_program_flash_address(data, address);
     if (data->bus.program != NULL)
         write_succeeded =
             data->bus.program(data->bus.context, physical_address, byte_count, write_value);
@@ -49,11 +50,11 @@ static bool flash_store(K22Data* data, uint32_t address, uint8_t byte_count, uin
     return true;
 }
 
-static bool flash_load(K22Data* data, uint32_t address, uint8_t byte_count,
+static bool flash_load(KinetisData* data, uint32_t address, uint8_t byte_count,
                        uint32_t* output_value) {
     if (address >= 0x400u && address <= 0x410u - byte_count) {
         *output_value =
-            k22_data_internal_load_bytes(data->flash_config, address - 0x400u, byte_count);
+            kinetis_data_internal_load_bytes(data->flash_config, address - 0x400u, byte_count);
         return true;
     }
     if (data->bus.read == NULL)
@@ -61,7 +62,7 @@ static bool flash_load(K22Data* data, uint32_t address, uint8_t byte_count,
     return data->bus.read(data->bus.context, address, byte_count, output_value);
 }
 
-static uint32_t flash_data_size(const K22Data* data) {
+static uint32_t flash_data_size(const KinetisData* data) {
     if (!data->flash_partitioned)
         return data->profile->flexnvm_size;
     switch (data->flash_data_ifr[0x3fcu]) {
@@ -84,7 +85,7 @@ static uint32_t flash_data_size(const K22Data* data) {
     }
 }
 
-static bool flash_memory_range(const K22Data* data, uint32_t address, uint32_t range_size,
+static bool flash_memory_range(const KinetisData* data, uint32_t address, uint32_t range_size,
                                bool* data_flash_access, uint32_t* flash_offset) {
     *data_flash_access = (address & 0x800000u) != 0u;
     *flash_offset = address & 0x7fffffu;
@@ -93,27 +94,28 @@ static bool flash_memory_range(const K22Data* data, uint32_t address, uint32_t r
     return range_size <= available_size && *flash_offset <= available_size - range_size;
 }
 
-static bool flash_memory_load(K22Data* data, uint32_t address, uint8_t byte_count,
+static bool flash_memory_load(KinetisData* data, uint32_t address, uint8_t byte_count,
                               uint32_t* output_value) {
     const bool data_flash_access = (address & 0x800000u) != 0u;
     const uint32_t flash_offset = address & 0x7fffffu;
     if (!data_flash_access)
         return flash_load(data, flash_offset, byte_count, output_value);
-    *output_value = k22_data_internal_load_bytes(data->flexnvm, flash_offset, byte_count);
+    *output_value = kinetis_data_internal_load_bytes(data->flexnvm, flash_offset, byte_count);
     return true;
 }
 
-static bool flash_memory_store(K22Data* data, uint32_t address, uint8_t byte_count,
+static bool flash_memory_store(KinetisData* data, uint32_t address, uint8_t byte_count,
                                uint32_t write_value) {
     const bool data_flash_access = (address & 0x800000u) != 0u;
     const uint32_t flash_offset = address & 0x7fffffu;
     if (!data_flash_access)
         return flash_store(data, flash_offset, byte_count, write_value);
-    k22_data_internal_store_bytes(data->flexnvm, flash_offset, byte_count, write_value);
+    kinetis_data_internal_store_bytes(data->flexnvm, flash_offset, byte_count, write_value);
     return true;
 }
 
-static bool flash_memory_range_protected(const K22Data* data, uint32_t address, uint32_t length) {
+static bool flash_memory_range_protected(const KinetisData* data, uint32_t address,
+                                         uint32_t length) {
     const bool data_flash = (address & 0x800000u) != 0u;
     const uint32_t offset = address & 0x7fffffu;
     const uint32_t region_count = data_flash ? 8u : 32u;
@@ -129,7 +131,7 @@ static bool flash_memory_range_protected(const K22Data* data, uint32_t address, 
     return false;
 }
 
-static bool flash_program_words(K22Data* data, uint32_t address, uint8_t words,
+static bool flash_program_words(KinetisData* data, uint32_t address, uint8_t words,
                                 bool* verify_failure) {
     for (uint8_t word_index = 0; word_index < words; word_index++) {
         const uint8_t offset = (uint8_t)(4u + word_index * 4u);
@@ -150,7 +152,7 @@ static bool flash_program_words(K22Data* data, uint32_t address, uint8_t words,
     return true;
 }
 
-static bool flash_program_buffer(K22Data* data, uint32_t address, uint32_t length,
+static bool flash_program_buffer(KinetisData* data, uint32_t address, uint32_t length,
                                  bool* verify_failure) {
     for (uint32_t offset = 0; offset < length; offset += 4u) {
         uint32_t existing_word = 0;
@@ -160,14 +162,14 @@ static bool flash_program_buffer(K22Data* data, uint32_t address, uint32_t lengt
             *verify_failure = true;
             return true;
         }
-        const uint32_t program_word = k22_data_internal_load_bytes(data->flexram, offset, 4u);
+        const uint32_t program_word = kinetis_data_internal_load_bytes(data->flexram, offset, 4u);
         if (!flash_memory_store(data, address + offset, 4u, program_word))
             return false;
     }
     return true;
 }
 
-static bool flash_erase(K22Data* data, uint32_t start, uint32_t length) {
+static bool flash_erase(KinetisData* data, uint32_t start, uint32_t length) {
     for (uint32_t offset = 0; offset < length; offset += 4u) {
         if (!flash_memory_store(data, start + offset, 4u, UINT32_MAX))
             return false;
@@ -175,7 +177,7 @@ static bool flash_erase(K22Data* data, uint32_t start, uint32_t length) {
     return true;
 }
 
-static bool flash_range_erased(K22Data* data, uint32_t start, uint32_t length) {
+static bool flash_range_erased(KinetisData* data, uint32_t start, uint32_t length) {
     for (uint32_t offset = 0; offset < length; offset += 4u) {
         uint32_t stored_word = 0;
         if (!flash_memory_load(data, start + offset, 4u, &stored_word) || stored_word != UINT32_MAX)
@@ -184,13 +186,13 @@ static bool flash_range_erased(K22Data* data, uint32_t start, uint32_t length) {
     return true;
 }
 
-static uint32_t flash_block_size(const K22Data* data) {
+static uint32_t flash_block_size(const KinetisData* data) {
     if (data->profile->program_flash_size >= 0x80000u)
         return data->profile->program_flash_size == 0x100000u ? 0x80000u : 0x40000u;
     return data->profile->program_flash_size;
 }
 
-static bool flash_block_range(const K22Data* data, uint32_t address, uint32_t* start,
+static bool flash_block_range(const KinetisData* data, uint32_t address, uint32_t* start,
                               uint32_t* length, bool* data_flash) {
     uint32_t offset = 0u;
     if (!flash_memory_range(data, address, 1u, data_flash, &offset))
@@ -200,8 +202,8 @@ static bool flash_block_range(const K22Data* data, uint32_t address, uint32_t* s
     return true;
 }
 
-static bool flash_read_resource(K22Data* data) {
-    const bool ftfe = k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE);
+static bool flash_read_resource(KinetisData* data) {
+    const bool ftfe = kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE);
     const uint32_t address = flash_address(data);
     const uint8_t option = flash_fccob(data, ftfe ? 4u : 8u);
     const uint8_t resource_size = ftfe ? 8u : 4u;
@@ -230,9 +232,9 @@ static bool flash_read_resource(K22Data* data) {
     return true;
 }
 
-static bool flash_once_record(const K22Data* data, uint8_t record_index, uint32_t* record_offset,
-                              uint8_t* record_size) {
-    if (k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE)) {
+static bool flash_once_record(const KinetisData* data, uint8_t record_index,
+                              uint32_t* record_offset, uint8_t* record_size) {
+    if (kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE)) {
         if (record_index > 7u)
             return false;
         *record_offset = 0x3c0u + (uint32_t)record_index * 8u;
@@ -252,7 +254,7 @@ static bool flash_once_record(const K22Data* data, uint8_t record_index, uint32_
     return false;
 }
 
-static bool flash_read_once(K22Data* data) {
+static bool flash_read_once(KinetisData* data) {
     uint32_t record_offset = 0u;
     uint8_t record_size = 0u;
     if (!flash_once_record(data, flash_fccob(data, 1u), &record_offset, &record_size))
@@ -263,7 +265,7 @@ static bool flash_read_once(K22Data* data) {
     return true;
 }
 
-static bool flash_program_once(K22Data* data, bool* verify_failure) {
+static bool flash_program_once(KinetisData* data, bool* verify_failure) {
     uint32_t record_offset = 0u;
     uint8_t record_size = 0u;
     if (!flash_once_record(data, flash_fccob(data, 1u), &record_offset, &record_size))
@@ -281,7 +283,7 @@ static bool flash_program_once(K22Data* data, bool* verify_failure) {
     return true;
 }
 
-static bool flash_verify_key(K22Data* data) {
+static bool flash_verify_key(KinetisData* data) {
     if (data->flash_key_blocked || (data->flash[2] & 0xc0u) != 0x80u)
         return false;
     uint8_t aggregate_and = 0xffu;
@@ -302,7 +304,7 @@ static bool flash_verify_key(K22Data* data) {
     return matches;
 }
 
-static bool flash_program_partition(K22Data* data) {
+static bool flash_program_partition(KinetisData* data) {
     static const uint8_t valid_partition_codes[] = {0x00u, 0x03u, 0x04u, 0x05u, 0x08u,
                                                     0x0bu, 0x0cu, 0x0du, 0x0fu};
     if (data->profile->flexnvm_size == 0u || data->flash_partitioned)
@@ -330,7 +332,7 @@ static bool flash_program_partition(K22Data* data) {
     return true;
 }
 
-static bool flash_set_flexram(K22Data* data) {
+static bool flash_set_flexram(KinetisData* data) {
     if (data->flexram == NULL)
         return false;
     const uint8_t control = flash_fccob(data, 1u);
@@ -344,13 +346,13 @@ static bool flash_set_flexram(K22Data* data) {
     return true;
 }
 
-static bool flash_swap_address_valid(const K22Data* data, uint32_t address) {
+static bool flash_swap_address_valid(const KinetisData* data, uint32_t address) {
     const uint32_t swap_block_size = data->profile->program_flash_size / 2u;
     return (address & 0x0fu) == 0u && address < swap_block_size &&
            (address < 0x400u || address >= 0x410u);
 }
 
-static bool flash_swap_program_indicator(K22Data* data, uint8_t block_index,
+static bool flash_swap_program_indicator(KinetisData* data, uint8_t block_index,
                                          uint16_t indicator_value) {
     const uint32_t logical_flash_address =
         data->flash_swap_address + ((uint32_t)(block_index ^ data->flash_swap_current_block) *
@@ -358,7 +360,7 @@ static bool flash_swap_program_indicator(K22Data* data, uint8_t block_index,
     return flash_memory_store(data, logical_flash_address, 2u, indicator_value);
 }
 
-static bool flash_swap_control(K22Data* data, uint32_t address, bool* verify_failure) {
+static bool flash_swap_control(KinetisData* data, uint32_t address, bool* verify_failure) {
     const uint8_t control = flash_fccob(data, 4u);
     if (!flash_swap_address_valid(data, address))
         return false;
@@ -407,7 +409,7 @@ static bool flash_swap_control(K22Data* data, uint32_t address, bool* verify_fai
     return false;
 }
 
-static void flash_swap_erased(K22Data* data, uint32_t range_start, uint32_t range_size) {
+static void flash_swap_erased(KinetisData* data, uint32_t range_start, uint32_t range_size) {
     if (data->flash_swap_mode != 2u)
         return;
     const uint32_t swap_block_size = data->profile->program_flash_size / 2u;
@@ -416,7 +418,7 @@ static void flash_swap_erased(K22Data* data, uint32_t range_start, uint32_t rang
         data->flash_swap_mode = 3u;
 }
 
-static bool flash_swap_range_protected(const K22Data* data, uint32_t range_start,
+static bool flash_swap_range_protected(const KinetisData* data, uint32_t range_start,
                                        uint32_t range_size, bool erase_operation) {
     if (data->flash_swap_mode == 0u || range_size == 0u)
         return false;
@@ -458,18 +460,20 @@ static uint8_t flash_busy_banks(uint8_t command, uint32_t address) {
     }
 }
 
-void k22_data_internal_flash_update_interrupts(K22Data* data) {
-    k22_data_internal_interrupt(data, K22_DATA_INTERRUPT_FTFA,
-                                (data->flash[1] & 0x80u) != 0u && (data->flash[0] & 0x80u) != 0u);
-    k22_data_internal_interrupt(data, K22_DATA_INTERRUPT_FLASH_COLLISION,
-                                (data->flash[1] & 0x40u) != 0u && (data->flash[0] & 0x40u) != 0u);
+void kinetis_data_internal_flash_update_interrupts(KinetisData* data) {
+    kinetis_data_internal_interrupt(data, KINETIS_DATA_INTERRUPT_FTFA,
+                                    (data->flash[1] & 0x80u) != 0u &&
+                                        (data->flash[0] & 0x80u) != 0u);
+    kinetis_data_internal_interrupt(data, KINETIS_DATA_INTERRUPT_FLASH_COLLISION,
+                                    (data->flash[1] & 0x40u) != 0u &&
+                                        (data->flash[0] & 0x40u) != 0u);
 }
 
-static void flash_execute(K22Data* data) {
+static void flash_execute(KinetisData* data) {
     data->flash[0] &= 0x70u;
     const uint8_t command = flash_fccob(data, 0u);
     const uint32_t address = flash_address(data);
-    const bool ftfe = k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE);
+    const bool ftfe = kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE);
     const uint32_t sector_size = ftfe ? 4096u : 2048u;
     const uint8_t program_command = ftfe ? 0x07u : 0x06u;
     const uint8_t program_words = ftfe ? 2u : 1u;
@@ -628,15 +632,15 @@ static void flash_execute(K22Data* data) {
     } else if (data->flash_busy_banks == 3u) {
         data->flash_busy_length = UINT32_MAX;
     }
-    k22_data_internal_flash_update_interrupts(data);
+    kinetis_data_internal_flash_update_interrupts(data);
 }
 
-bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                  uint32_t* output_value) {
+bool kinetis_data_internal_flash_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                      uint32_t* output_value) {
     const uint32_t register_offset = address - FLASH_BASE;
-    if (!k22_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
+    if (!kinetis_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
         return false;
-    const bool ftfe = k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE);
+    const bool ftfe = kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE);
     for (uint8_t byte_index = 0u; byte_index < byte_count; byte_index++) {
         const uint32_t register_address = register_offset + byte_index;
         const bool common_register = register_address <= 0x13u;
@@ -647,31 +651,32 @@ bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_
         if (!common_register && !extension_register)
             return false;
     }
-    *output_value = k22_data_internal_load_bytes(data->flash, register_offset, byte_count);
+    *output_value = kinetis_data_internal_load_bytes(data->flash, register_offset, byte_count);
     return true;
 }
 
-bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                   uint32_t write_value) {
+bool kinetis_data_internal_flash_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                       uint32_t write_value) {
     const uint32_t register_offset = address - FLASH_BASE;
-    if (!k22_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
+    if (!kinetis_data_internal_valid_access(register_offset, byte_count, sizeof(data->flash)))
         return false;
     if (register_offset == 0u && byte_count == 1u) {
         data->flash[0] &= (uint8_t)~(write_value & 0x70u);
         if ((write_value & 0x80u) != 0u && (data->flash[0] & 0xb0u) == 0x80u)
             flash_execute(data);
         else
-            k22_data_internal_flash_update_interrupts(data);
+            kinetis_data_internal_flash_update_interrupts(data);
         return true;
     }
     if (register_offset == 1u && byte_count == 1u) {
         data->flash[1] = (uint8_t)((data->flash[1] & 0x2fu) | (write_value & 0xd0u));
-        k22_data_internal_flash_update_interrupts(data);
+        kinetis_data_internal_flash_update_interrupts(data);
         return true;
     }
     if (register_offset >= 4u && register_offset <= 0x10u - byte_count) {
         if ((data->flash[0] & 0x80u) != 0u)
-            k22_data_internal_store_bytes(data->flash, register_offset, byte_count, write_value);
+            kinetis_data_internal_store_bytes(data->flash, register_offset, byte_count,
+                                              write_value);
         return true;
     }
     if (register_offset >= 0x10u && register_offset <= 0x14u - byte_count) {
@@ -682,7 +687,7 @@ bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte
                 (uint8_t)(write_value >> (byte_index * 8u));
         return true;
     }
-    if (k22_profile_has_peripheral(data->profile, K22_PERIPHERAL_FTFE) &&
+    if (kinetis_profile_has_peripheral(data->profile, KINETIS_PERIPHERAL_FTFE) &&
         (register_offset == 0x16u || register_offset == 0x17u) && byte_count == 1u) {
         if ((data->flash[0] & 0x80u) != 0u)
             data->flash[register_offset] &= (uint8_t)write_value;

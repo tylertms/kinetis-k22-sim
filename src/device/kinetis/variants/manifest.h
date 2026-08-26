@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_REGISTER_MANIFEST_H
-#define KINETIS_SIM_K22_REGISTER_MANIFEST_H
+#ifndef KINETIS_SIM_REGISTER_MANIFEST_H
+#define KINETIS_SIM_REGISTER_MANIFEST_H
 
 #include "device/kinetis/variants/profile.h"
 
@@ -8,11 +8,11 @@
 #include <stdint.h>
 
 typedef enum {
-    K22_REGISTER_ACCESS_NONE = 0,
-    K22_REGISTER_ACCESS_READ = 1,
-    K22_REGISTER_ACCESS_WRITE = 2,
-    K22_REGISTER_ACCESS_READ_WRITE = 3,
-} K22RegisterAccess;
+    KINETIS_REGISTER_ACCESS_NONE = 0,
+    KINETIS_REGISTER_ACCESS_READ = 1,
+    KINETIS_REGISTER_ACCESS_WRITE = 2,
+    KINETIS_REGISTER_ACCESS_READ_WRITE = 3,
+} KinetisRegisterAccess;
 
 typedef struct {
     uint32_t address;
@@ -24,26 +24,26 @@ typedef struct {
     uint32_t w1c_mask;
     uint16_t peripheral_index;
     uint8_t width;
-    K22RegisterAccess access;
-} K22RegisterDescriptor;
+    KinetisRegisterAccess access;
+} KinetisRegisterDescriptor;
 
 typedef struct {
-    K22ProfileId profile;
-    const K22RegisterDescriptor* registers;
+    KinetisProfile profile;
+    const KinetisRegisterDescriptor* registers;
     size_t register_count;
     const char* const* peripheral_names;
     size_t peripheral_count;
     uint64_t register_digest;
     uint64_t peripheral_digest;
-} K22RegisterManifest;
+} KinetisRegisterManifest;
 
-const K22RegisterManifest* k22_register_manifest_get(K22ProfileId profile);
-const K22RegisterDescriptor* k22_register_manifest_lookup(K22ProfileId profile, uint32_t address,
-                                                          uint8_t width);
-bool k22_register_manifest_reset(K22ProfileId profile, uint32_t address, uint8_t width,
-                                 uint32_t* reset_value, uint32_t* reset_mask);
-bool k22_register_manifest_has_peripheral(K22ProfileId profile, const char* name);
-const char* k22_register_manifest_peripheral_name(const K22RegisterManifest* manifest,
-                                                  uint16_t index);
+const KinetisRegisterManifest* kinetis_register_manifest_get(KinetisProfile profile);
+const KinetisRegisterDescriptor* kinetis_register_manifest_lookup(KinetisProfile profile,
+                                                                  uint32_t address, uint8_t width);
+bool kinetis_register_manifest_reset(KinetisProfile profile, uint32_t address, uint8_t width,
+                                     uint32_t* reset_value, uint32_t* reset_mask);
+bool kinetis_register_manifest_has_peripheral(KinetisProfile profile, const char* name);
+const char* kinetis_register_manifest_peripheral_name(const KinetisRegisterManifest* manifest,
+                                                      uint16_t index);
 
 #endif

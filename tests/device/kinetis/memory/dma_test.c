@@ -41,7 +41,7 @@ int main(void) {
     TestState state = {0};
     Kinetis* device = kinetis_create(kinetis_default_configuration());
     expect(&state, device != NULL, "device != NULL");
-    expect(&state, k22_test_disable_watchdog(device), "k22_test_disable_watchdog(device)");
+    expect(&state, kinetis_test_disable_watchdog(device), "kinetis_test_disable_watchdog(device)");
     const uint32_t scgc7 = read32(&state, device, SIM_SCGC7) | (1u << 1);
     const uint32_t scgc6 = read32(&state, device, SIM_SCGC6) | (1u << 1);
     const uint32_t scgc4 = read32(&state, device, SIM_SCGC4) | (1u << 11);

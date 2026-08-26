@@ -31,27 +31,28 @@ static void record_irq(void* context, uint8_t irq, bool asserted) {
     }
 }
 
-static void write_register(TestState* state, K22Timing* timing, uint32_t address, uint32_t value) {
-    expect(state, k22_timing_write(timing, address, 4u, value),
-           "k22_timing_write(timing, address, 4u, value)");
+static void write_register(TestState* state, KinetisTiming* timing, uint32_t address,
+                           uint32_t value) {
+    expect(state, kinetis_timing_write(timing, address, 4u, value),
+           "kinetis_timing_write(timing, address, 4u, value)");
 }
 
-static uint32_t read_register(TestState* state, K22Timing* timing, uint32_t address) {
+static uint32_t read_register(TestState* state, KinetisTiming* timing, uint32_t address) {
     uint32_t value = 0u;
-    expect(state, k22_timing_read(timing, address, 4u, &value),
-           "k22_timing_read(timing, address, 4u, &value)");
+    expect(state, kinetis_timing_read(timing, address, 4u, &value),
+           "kinetis_timing_read(timing, address, 4u, &value)");
     return value;
 }
 
-static void initialize(TestState* state, K22Timing* timing, IrqRecorder* recorder, uint8_t instance,
-                       uint16_t initial, uint16_t modulo, uint32_t qdctrl) {
-    const K22Profile* profile = k22_profile_get(K22_PROFILE_MK22FN51212);
-    const K22TimingSignals signals = {
+static void initialize(TestState* state, KinetisTiming* timing, IrqRecorder* recorder,
+                       uint8_t instance, uint16_t initial, uint16_t modulo, uint32_t qdctrl) {
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
+    const KinetisTimingSignals signals = {
         .context = recorder,
         .irq = record_irq,
     };
-    expect(state, k22_timing_init(timing, profile, 8000000u, 32768u, signals),
-           "k22_timing_init(timing, profile, 8000000u, 32768u, signals)");
+    expect(state, kinetis_timing_init(timing, profile, 8000000u, 32768u, signals),
+           "kinetis_timing_init(timing, profile, 8000000u, 32768u, signals)");
     write_register(state, timing, SIM_SCGC6, timing->sim_scgc6 | (1u << (24u + instance)));
     const uint32_t base = FTM0_BASE + (uint32_t)instance * 0x1000u;
     write_register(state, timing, base + FTM_MODE, 5u);
@@ -62,32 +63,32 @@ static void initialize(TestState* state, K22Timing* timing, IrqRecorder* recorde
     write_register(state, timing, base + FTM_SC, 0x48u);
 }
 
-static void set_phase(TestState* state, K22Timing* timing, uint8_t instance, uint8_t phase,
+static void set_phase(TestState* state, KinetisTiming* timing, uint8_t instance, uint8_t phase,
                       bool high, uint32_t cycles) {
-    expect(state, k22_timing_set_ftm_input(timing, instance, phase, high),
-           "k22_timing_set_ftm_input(timing, instance, phase, high)");
-    k22_timing_advance(timing, cycles);
+    expect(state, kinetis_timing_set_ftm_input(timing, instance, phase, high),
+           "kinetis_timing_set_ftm_input(timing, instance, phase, high)");
+    kinetis_timing_advance(timing, cycles);
 }
 
-static uint32_t counter(TestState* state, K22Timing* timing, uint32_t base) {
+static uint32_t counter(TestState* state, KinetisTiming* timing, uint32_t base) {
     return read_register(state, timing, base + FTM_CNT);
 }
 
-static bool output(TestState* state, K22Timing* timing, uint8_t instance) {
+static bool output(TestState* state, KinetisTiming* timing, uint8_t instance) {
     bool high = true;
-    expect(state, k22_timing_get_ftm_output(timing, instance, 0u, &high),
-           "k22_timing_get_ftm_output(timing, instance, 0u, &high)");
+    expect(state, kinetis_timing_get_ftm_output(timing, instance, 0u, &high),
+           "kinetis_timing_get_ftm_output(timing, instance, 0u, &high)");
     return high;
 }
 
-static void clear_overflow(TestState* state, K22Timing* timing, uint32_t base) {
+static void clear_overflow(TestState* state, KinetisTiming* timing, uint32_t base) {
     expect(state, (read_register(state, timing, base + FTM_SC) & 0x80u) != 0u,
            "(read_register(state, timing, base + FTM_SC) & 0x80u) != 0u");
     write_register(state, timing, base + FTM_SC, 0x48u);
 }
 
 static void test_phase_encoding(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 0u, 3u, 1u);
     set_phase(state, &timing, 1u, 0u, true, 3u);
@@ -120,7 +121,7 @@ static void test_phase_encoding(TestState* state) {
 }
 
 static void test_count_and_direction(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 0u, 7u, 9u);
     set_phase(state, &timing, 1u, 1u, true, 3u);
@@ -141,7 +142,7 @@ static void test_count_and_direction(TestState* state) {
 }
 
 static void test_modulo_boundaries(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 2u, 4u, 9u);
     set_phase(state, &timing, 1u, 1u, true, 3u);
@@ -163,7 +164,7 @@ static void test_modulo_boundaries(TestState* state) {
 }
 
 static void test_filters(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 0u, 7u, 0x89u);
     write_register(state, &timing, FTM1_BASE + FTM_FILTER, 1u);
@@ -171,7 +172,7 @@ static void test_filters(TestState* state) {
     set_phase(state, &timing, 1u, 0u, true, 7u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
-    k22_timing_advance(&timing, 1u);
+    kinetis_timing_advance(&timing, 1u);
     expect(state, counter(state, &timing, FTM1_BASE) == 1u,
            "counter(state, &timing, FTM1_BASE) == 1u");
 
@@ -181,7 +182,7 @@ static void test_filters(TestState* state) {
     set_phase(state, &timing, 1u, 0u, true, 2u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
-    k22_timing_advance(&timing, 1u);
+    kinetis_timing_advance(&timing, 1u);
     expect(state, counter(state, &timing, FTM1_BASE) == 1u,
            "counter(state, &timing, FTM1_BASE) == 1u");
 
@@ -190,7 +191,7 @@ static void test_filters(TestState* state) {
     set_phase(state, &timing, 1u, 0u, true, 2u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
-    k22_timing_advance(&timing, 1u);
+    kinetis_timing_advance(&timing, 1u);
     expect(state, counter(state, &timing, FTM1_BASE) == 1u,
            "counter(state, &timing, FTM1_BASE) == 1u");
 
@@ -199,7 +200,7 @@ static void test_filters(TestState* state) {
     set_phase(state, &timing, 1u, 1u, true, 7u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
-    k22_timing_advance(&timing, 1u);
+    kinetis_timing_advance(&timing, 1u);
     expect(state, counter(state, &timing, FTM1_BASE) == 7u,
            "counter(state, &timing, FTM1_BASE) == 7u");
 
@@ -216,7 +217,7 @@ static void test_filters(TestState* state) {
 }
 
 static void test_polarity(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 0u, 7u, 0u);
     write_register(state, &timing, FTM1_BASE + FTM_SC, 0u);
@@ -241,7 +242,7 @@ static void test_polarity(TestState* state) {
 }
 
 static void test_clock_and_mode_priority(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 1u, 0u, 7u, 9u);
     write_register(state, &timing, FTM1_BASE + FTM_SC, 0u);
@@ -250,7 +251,7 @@ static void test_clock_and_mode_priority(TestState* state) {
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
     write_register(state, &timing, FTM1_BASE + FTM_SC, 0x4fu);
-    k22_timing_advance(&timing, 100u);
+    kinetis_timing_advance(&timing, 100u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
     set_phase(state, &timing, 1u, 0u, false, 3u);
@@ -266,11 +267,11 @@ static void test_clock_and_mode_priority(TestState* state) {
 
     initialize(state, &timing, &recorder, 1u, 0u, 7u, 9u);
     set_phase(state, &timing, 1u, 1u, true, 3u);
-    k22_timing_set_debug_halted(&timing, true);
+    kinetis_timing_set_debug_halted(&timing, true);
     set_phase(state, &timing, 1u, 0u, true, 3u);
     expect(state, counter(state, &timing, FTM1_BASE) == 0u,
            "counter(state, &timing, FTM1_BASE) == 0u");
-    k22_timing_set_debug_halted(&timing, false);
+    kinetis_timing_set_debug_halted(&timing, false);
     set_phase(state, &timing, 1u, 0u, false, 3u);
     set_phase(state, &timing, 1u, 0u, true, 3u);
     expect(state, counter(state, &timing, FTM1_BASE) == 1u,
@@ -278,7 +279,7 @@ static void test_clock_and_mode_priority(TestState* state) {
 }
 
 static void test_capable_instances_and_status_bits(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     IrqRecorder recorder = {0};
     initialize(state, &timing, &recorder, 2u, 0u, 7u, 9u);
     set_phase(state, &timing, 2u, 1u, true, 3u);
@@ -290,14 +291,14 @@ static void test_capable_instances_and_status_bits(TestState* state) {
            "(read_register(state, &timing, FTM2_BASE + FTM_QDCTRL) & 0x0fu) == 0x0du");
 
     initialize(state, &timing, &recorder, 0u, 0u, 7u, 1u);
-    k22_timing_advance(&timing, 3u);
+    kinetis_timing_advance(&timing, 3u);
     expect(state, counter(state, &timing, FTM0_BASE) == 3u,
            "counter(state, &timing, FTM0_BASE) == 3u");
     expect(state, !timing.ftm[0].quadrature_capable, "!timing.ftm[0].quadrature_capable");
     expect(state, timing.ftm[1].quadrature_capable, "timing.ftm[1].quadrature_capable");
     expect(state, timing.ftm[2].quadrature_capable, "timing.ftm[2].quadrature_capable");
     expect(state, !timing.ftm[3].quadrature_capable, "!timing.ftm[3].quadrature_capable");
-    k22_timing_reset(&timing, 0x82u, 0u);
+    kinetis_timing_reset(&timing, 0x82u, 0u);
     expect(state, timing.ftm[1].quadrature_capable, "timing.ftm[1].quadrature_capable");
     expect(state, timing.ftm[2].quadrature_capable, "timing.ftm[2].quadrature_capable");
 }

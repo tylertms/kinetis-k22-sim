@@ -1,5 +1,5 @@
-#ifndef KINETIS_SIM_K22_DATA_INTERNAL_H
-#define KINETIS_SIM_K22_DATA_INTERNAL_H
+#ifndef KINETIS_SIM_DATA_INTERNAL_H
+#define KINETIS_SIM_DATA_INTERNAL_H
 
 #include "device/kinetis/memory/api.h"
 
@@ -32,21 +32,21 @@ typedef struct {
     uint32_t remaining_cycles;
     uint8_t active_slot;
     bool converting;
-} K22Adc;
+} KinetisAdc;
 
 typedef struct {
     uint8_t registers[DAC_REGISTER_SIZE];
     uint16_t output;
-} K22Dac;
+} KinetisDac;
 
 typedef struct {
     uint8_t registers[CMP_REGISTER_SIZE];
     uint8_t inputs[8];
-} K22Cmp;
+} KinetisCmp;
 
-struct K22Data {
-    const K22Profile* profile;
-    K22DataBus bus;
+struct KinetisData {
+    const KinetisDeviceProfile* profile;
+    KinetisDataBus bus;
     uint8_t dma[DMA_REGISTER_SIZE];
     uint16_t dma_requests;
     uint16_t dma_hardware_requests;
@@ -59,13 +59,13 @@ struct K22Data {
     bool debug_halted;
     uint8_t dmamux[DMA_CHANNEL_COUNT];
     uint8_t dmamux_count;
-    K22Adc adc[2];
+    KinetisAdc adc[2];
     uint8_t adc_count;
     uint32_t adc_base[2];
-    K22Dac dac[2];
+    KinetisDac dac[2];
     uint8_t dac_count;
     uint32_t dac_base[2];
-    K22Cmp cmp[3];
+    KinetisCmp cmp[3];
     uint8_t cmp_count;
     uint8_t vref[2];
     uint32_t vref_cycles;
@@ -97,64 +97,66 @@ struct K22Data {
     uint8_t* flexram;
 };
 
-bool k22_data_internal_adc_read(K22Data* data, uint8_t instance, uint32_t address,
-                                uint8_t byte_count, uint32_t* output_value);
-bool k22_data_internal_adc_write(K22Data* data, uint8_t instance, uint32_t address,
-                                 uint8_t byte_count, uint32_t write_value);
-bool k22_data_internal_cmp_read(K22Data* data, uint8_t instance, uint32_t address,
-                                uint8_t byte_count, uint32_t* output_value);
-bool k22_data_internal_cmp_write(K22Data* data, uint8_t instance, uint32_t address,
-                                 uint8_t byte_count, uint32_t write_value);
-bool k22_data_internal_crc_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                uint32_t* output_value);
-bool k22_data_internal_crc_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                 uint32_t write_value);
-bool k22_data_internal_dac_read(K22Data* data, uint8_t instance, uint32_t address,
-                                uint8_t byte_count, uint32_t* output_value);
-bool k22_data_internal_dac_write(K22Data* data, uint8_t instance, uint32_t address,
-                                 uint8_t byte_count, uint32_t write_value);
-bool k22_data_internal_dma_priorities_valid(const K22Data* data);
-bool k22_data_internal_dma_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                uint32_t* output_value);
-bool k22_data_internal_dma_service_channel(K22Data* data, uint8_t channel);
-bool k22_data_internal_dma_source_always_enabled(const K22Data* data, uint8_t request_source);
-bool k22_data_internal_dma_source_valid(const K22Data* data, uint8_t request_source);
-bool k22_data_internal_dma_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                 uint32_t write_value);
-bool k22_data_internal_dmamux_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                   uint32_t* output_value);
-bool k22_data_internal_dmamux_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                    uint32_t write_value);
-bool k22_data_internal_flash_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                  uint32_t* output_value);
-bool k22_data_internal_flash_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                   uint32_t write_value);
-bool k22_data_internal_profile_block(const K22Data* data, K22PeripheralId id,
-                                     uint32_t* block_address, uint32_t* block_size);
-bool k22_data_internal_rng_read(K22Data* data, uint32_t address, uint8_t byte_count,
-                                uint32_t* output_value);
-bool k22_data_internal_rng_write(K22Data* data, uint32_t address, uint8_t byte_count,
-                                 uint32_t write_value);
-bool k22_data_internal_valid_access(uint32_t byte_offset, uint8_t byte_count,
-                                    uint32_t buffer_length);
-uint32_t k22_data_internal_dma_priority_offset(uint8_t channel);
-uint32_t k22_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t byte_offset,
-                                      uint8_t byte_count);
-uint32_t k22_data_internal_rng_next(uint32_t seed_value);
-uint8_t k22_data_internal_dma_select_channel(const K22Data* data);
-void k22_data_internal_adc_complete(K22Data* data, uint8_t instance);
-void k22_data_internal_adc_reset_registers(K22Adc* adc);
-void k22_data_internal_adc_start(K22Adc* adc, uint8_t slot);
-void k22_data_internal_cmp_evaluate(K22Data* data, uint8_t instance);
-void k22_data_internal_dac_flags(K22Data* data, uint8_t instance, uint8_t event_flags);
-void k22_data_internal_dac_update_output(K22Data* data, uint8_t instance);
-void k22_data_internal_dma_error(K22Data* data, uint8_t channel, uint32_t error_reason);
-void k22_data_internal_dma_queue_always_enabled(K22Data* data, uint8_t channel);
-void k22_data_internal_dma_queue_hardware_channel(K22Data* data, uint8_t channel, uint8_t source);
-void k22_data_internal_dma_update_interrupts(K22Data* data);
-void k22_data_internal_flash_update_interrupts(K22Data* data);
-void k22_data_internal_interrupt(K22Data* data, K22DataInterrupt line, bool asserted);
-void k22_data_internal_store_bytes(uint8_t* output_bytes, uint32_t byte_offset, uint8_t byte_count,
-                                   uint32_t write_value);
+bool kinetis_data_internal_adc_read(KinetisData* data, uint8_t instance, uint32_t address,
+                                    uint8_t byte_count, uint32_t* output_value);
+bool kinetis_data_internal_adc_write(KinetisData* data, uint8_t instance, uint32_t address,
+                                     uint8_t byte_count, uint32_t write_value);
+bool kinetis_data_internal_cmp_read(KinetisData* data, uint8_t instance, uint32_t address,
+                                    uint8_t byte_count, uint32_t* output_value);
+bool kinetis_data_internal_cmp_write(KinetisData* data, uint8_t instance, uint32_t address,
+                                     uint8_t byte_count, uint32_t write_value);
+bool kinetis_data_internal_crc_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                    uint32_t* output_value);
+bool kinetis_data_internal_crc_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                     uint32_t write_value);
+bool kinetis_data_internal_dac_read(KinetisData* data, uint8_t instance, uint32_t address,
+                                    uint8_t byte_count, uint32_t* output_value);
+bool kinetis_data_internal_dac_write(KinetisData* data, uint8_t instance, uint32_t address,
+                                     uint8_t byte_count, uint32_t write_value);
+bool kinetis_data_internal_dma_priorities_valid(const KinetisData* data);
+bool kinetis_data_internal_dma_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                    uint32_t* output_value);
+bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channel);
+bool kinetis_data_internal_dma_source_always_enabled(const KinetisData* data,
+                                                     uint8_t request_source);
+bool kinetis_data_internal_dma_source_valid(const KinetisData* data, uint8_t request_source);
+bool kinetis_data_internal_dma_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                     uint32_t write_value);
+bool kinetis_data_internal_dmamux_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                       uint32_t* output_value);
+bool kinetis_data_internal_dmamux_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                        uint32_t write_value);
+bool kinetis_data_internal_flash_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                      uint32_t* output_value);
+bool kinetis_data_internal_flash_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                       uint32_t write_value);
+bool kinetis_data_internal_profile_block(const KinetisData* data, KinetisPeripheralId id,
+                                         uint32_t* block_address, uint32_t* block_size);
+bool kinetis_data_internal_rng_read(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                    uint32_t* output_value);
+bool kinetis_data_internal_rng_write(KinetisData* data, uint32_t address, uint8_t byte_count,
+                                     uint32_t write_value);
+bool kinetis_data_internal_valid_access(uint32_t byte_offset, uint8_t byte_count,
+                                        uint32_t buffer_length);
+uint32_t kinetis_data_internal_dma_priority_offset(uint8_t channel);
+uint32_t kinetis_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t byte_offset,
+                                          uint8_t byte_count);
+uint32_t kinetis_data_internal_rng_next(uint32_t seed_value);
+uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data);
+void kinetis_data_internal_adc_complete(KinetisData* data, uint8_t instance);
+void kinetis_data_internal_adc_reset_registers(KinetisAdc* adc);
+void kinetis_data_internal_adc_start(KinetisAdc* adc, uint8_t slot);
+void kinetis_data_internal_cmp_evaluate(KinetisData* data, uint8_t instance);
+void kinetis_data_internal_dac_flags(KinetisData* data, uint8_t instance, uint8_t event_flags);
+void kinetis_data_internal_dac_update_output(KinetisData* data, uint8_t instance);
+void kinetis_data_internal_dma_error(KinetisData* data, uint8_t channel, uint32_t error_reason);
+void kinetis_data_internal_dma_queue_always_enabled(KinetisData* data, uint8_t channel);
+void kinetis_data_internal_dma_queue_hardware_channel(KinetisData* data, uint8_t channel,
+                                                      uint8_t source);
+void kinetis_data_internal_dma_update_interrupts(KinetisData* data);
+void kinetis_data_internal_flash_update_interrupts(KinetisData* data);
+void kinetis_data_internal_interrupt(KinetisData* data, KinetisDataInterrupt line, bool asserted);
+void kinetis_data_internal_store_bytes(uint8_t* output_bytes, uint32_t byte_offset,
+                                       uint8_t byte_count, uint32_t write_value);
 
 #endif

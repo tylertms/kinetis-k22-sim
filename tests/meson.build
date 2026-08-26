@@ -472,7 +472,7 @@ foreach definition : test_definitions
   link_args = []
   if definition.get('allocation_failure', false)
     sources += ['support/allocation_failure.c']
-    c_args += ['-DK22_TEST_ALLOCATION_FAILURE=1']
+    c_args += ['-DKINETIS_TEST_ALLOCATION_FAILURE=1']
     link_args += [
       '-Wl,--wrap=malloc',
       '-Wl,--wrap=calloc',

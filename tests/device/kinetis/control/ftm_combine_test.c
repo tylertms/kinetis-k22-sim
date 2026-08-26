@@ -28,39 +28,40 @@ static void record_dma(void* context, uint8_t source) {
     recorder->requests[source]++;
 }
 
-static void write_register(TestState* state, K22Timing* timing, uint32_t address, uint32_t value) {
-    expect(state, k22_timing_write(timing, address, 4u, value),
-           "k22_timing_write(timing, address, 4u, value)");
+static void write_register(TestState* state, KinetisTiming* timing, uint32_t address,
+                           uint32_t value) {
+    expect(state, kinetis_timing_write(timing, address, 4u, value),
+           "kinetis_timing_write(timing, address, 4u, value)");
 }
 
-static uint32_t read_register(TestState* state, K22Timing* timing, uint32_t address) {
+static uint32_t read_register(TestState* state, KinetisTiming* timing, uint32_t address) {
     uint32_t value = 0u;
-    expect(state, k22_timing_read(timing, address, 4u, &value),
-           "k22_timing_read(timing, address, 4u, &value)");
+    expect(state, kinetis_timing_read(timing, address, 4u, &value),
+           "kinetis_timing_read(timing, address, 4u, &value)");
     return value;
 }
 
-static bool output(TestState* state, K22Timing* timing, uint8_t channel) {
+static bool output(TestState* state, KinetisTiming* timing, uint8_t channel) {
     bool high = false;
-    expect(state, k22_timing_get_ftm_output(timing, 0u, channel, &high),
-           "k22_timing_get_ftm_output(timing, 0u, channel, &high)");
+    expect(state, kinetis_timing_get_ftm_output(timing, 0u, channel, &high),
+           "kinetis_timing_get_ftm_output(timing, 0u, channel, &high)");
     return high;
 }
 
-static void initialize(TestState* state, K22Timing* timing, DmaRecorder* recorder) {
-    const K22Profile* profile = k22_profile_get(K22_PROFILE_MK22FN51212);
-    const K22TimingSignals signals = {
+static void initialize(TestState* state, KinetisTiming* timing, DmaRecorder* recorder) {
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
+    const KinetisTimingSignals signals = {
         .context = recorder,
         .dma = record_dma,
     };
-    expect(state, k22_timing_init(timing, profile, 8000000u, 32768u, signals),
-           "k22_timing_init(timing, profile, 8000000u, 32768u, signals)");
+    expect(state, kinetis_timing_init(timing, profile, 8000000u, 32768u, signals),
+           "kinetis_timing_init(timing, profile, 8000000u, 32768u, signals)");
     write_register(state, timing, SIM_SCGC6, timing->sim_scgc6 | (1u << 24u));
 }
 
-static void configure(TestState* state, K22Timing* timing, DmaRecorder* recorder, uint32_t first_sc,
-                      uint32_t second_sc, uint16_t first_compare, uint16_t second_compare,
-                      uint16_t modulo, uint32_t combine) {
+static void configure(TestState* state, KinetisTiming* timing, DmaRecorder* recorder,
+                      uint32_t first_sc, uint32_t second_sc, uint16_t first_compare,
+                      uint16_t second_compare, uint16_t modulo, uint32_t combine) {
     initialize(state, timing, recorder);
     write_register(state, timing, FTM0_MODE, 5u);
     write_register(state, timing, FTM0_CNTIN, 0u);
@@ -74,19 +75,19 @@ static void configure(TestState* state, K22Timing* timing, DmaRecorder* recorder
     write_register(state, timing, FTM0_SC, 8u);
 }
 
-static void expect_outputs(TestState* state, K22Timing* timing, bool first, bool second) {
+static void expect_outputs(TestState* state, KinetisTiming* timing, bool first, bool second) {
     expect(state, output(state, timing, 0u) == first, "output(state, timing, 0u) == first");
     expect(state, output(state, timing, 1u) == second, "output(state, timing, 1u) == second");
 }
 
-static void advance_and_expect(TestState* state, K22Timing* timing, uint32_t cycles, bool first,
+static void advance_and_expect(TestState* state, KinetisTiming* timing, uint32_t cycles, bool first,
                                bool second) {
-    k22_timing_advance(timing, cycles);
+    kinetis_timing_advance(timing, cycles);
     expect_outputs(state, timing, first, second);
 }
 
 static void test_combined_waveforms(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x28u, 0x08u, 2u, 5u, 7u, 3u);
     advance_and_expect(state, &timing, 1u, false, true);
@@ -106,7 +107,7 @@ static void test_combined_waveforms(TestState* state) {
 }
 
 static void test_complementary_control(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x28u, 0x08u, 2u, 5u, 7u, 3u);
     advance_and_expect(state, &timing, 2u, true, false);
@@ -129,7 +130,7 @@ static void test_complementary_control(TestState* state) {
 
 static void expect_active_at(TestState* state, uint16_t first_compare, uint16_t second_compare,
                              uint16_t modulo, uint32_t counter, bool expected) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x28u, 0x08u, first_compare, second_compare, modulo, 1u);
     advance_and_expect(state, &timing, counter, expected, expected);
@@ -147,7 +148,7 @@ static void test_compare_boundaries(TestState* state) {
 }
 
 static void test_mode_selection(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x28u, 0x08u, 2u, 5u, 7u, 5u);
     advance_and_expect(state, &timing, 2u, false, false);
@@ -162,7 +163,7 @@ static void test_mode_selection(TestState* state) {
 }
 
 static void test_buffered_values(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x28u, 0x08u, 2u, 5u, 7u, 1u);
     write_register(state, &timing, FTM0_MODE, 4u);
@@ -172,7 +173,7 @@ static void test_buffered_values(TestState* state) {
            "read_register(state, &timing, FTM0_C0V) == 2u");
     expect(state, read_register(state, &timing, FTM0_C1V) == 5u,
            "read_register(state, &timing, FTM0_C1V) == 5u");
-    k22_timing_advance(&timing, 8u);
+    kinetis_timing_advance(&timing, 8u);
     expect(state, read_register(state, &timing, FTM0_C0V) == 3u,
            "read_register(state, &timing, FTM0_C0V) == 3u");
     expect(state, read_register(state, &timing, FTM0_C1V) == 6u,
@@ -181,19 +182,19 @@ static void test_buffered_values(TestState* state) {
 }
 
 static void test_channel_events(TestState* state) {
-    K22Timing timing;
+    KinetisTiming timing;
     DmaRecorder recorder = {0};
     configure(state, &timing, &recorder, 0x69u, 0x49u, 2u, 5u, 7u, 1u);
-    k22_timing_advance(&timing, 2u);
+    kinetis_timing_advance(&timing, 2u);
     expect(state, (read_register(state, &timing, FTM0_STATUS) & 1u) != 0u,
            "(read_register(state, &timing, FTM0_STATUS) & 1u) != 0u");
     expect(state, recorder.requests[20u] == 1u, "recorder.requests[20u] == 1u");
     expect(state, recorder.requests[21u] == 0u, "recorder.requests[21u] == 0u");
-    k22_timing_advance(&timing, 3u);
+    kinetis_timing_advance(&timing, 3u);
     expect(state, (read_register(state, &timing, FTM0_STATUS) & 3u) == 3u,
            "(read_register(state, &timing, FTM0_STATUS) & 3u) == 3u");
     expect(state, recorder.requests[21u] == 1u, "recorder.requests[21u] == 1u");
-    k22_timing_advance(&timing, 8u);
+    kinetis_timing_advance(&timing, 8u);
     expect(state, recorder.requests[20u] == 2u, "recorder.requests[20u] == 2u");
     expect(state, recorder.requests[21u] == 2u, "recorder.requests[21u] == 2u");
 }

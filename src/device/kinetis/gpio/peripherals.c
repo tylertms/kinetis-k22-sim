@@ -13,7 +13,7 @@ static bool usb_offset_valid(uint32_t offset) {
            offset == 0x15cu;
 }
 
-static bool read_usb(K22Io* io, K22PeripheralLocation location, uint8_t size,
+static bool read_usb(KinetisIo* io, KinetisPeripheralLocation location, uint8_t size,
                      uint32_t* output_value) {
     if (size != 1 || !usb_offset_valid(location.offset))
         return false;
@@ -21,13 +21,14 @@ static bool read_usb(K22Io* io, K22PeripheralLocation location, uint8_t size,
     return true;
 }
 
-static bool write_usb(K22Io* io, K22PeripheralLocation location, uint8_t size,
+static bool write_usb(KinetisIo* io, KinetisPeripheralLocation location, uint8_t size,
                       uint32_t write_value) {
     if (size != 1 || !usb_offset_valid(location.offset) || location.offset <= 0x0cu ||
-        location.offset == K22_USB_STAT || location.offset == K22_USB_FRMNUML ||
-        location.offset == K22_USB_FRMNUMH)
+        location.offset == KINETIS_USB_STAT || location.offset == KINETIS_USB_FRMNUML ||
+        location.offset == KINETIS_USB_FRMNUMH)
         return false;
-    if (location.offset == 0x10u || location.offset == K22_USB_ISTAT || location.offset == 0x88u)
+    if (location.offset == 0x10u || location.offset == KINETIS_USB_ISTAT ||
+        location.offset == 0x88u)
         io->usb[location.offset] &= (uint8_t)~write_value;
     else if (location.offset == 0xd0u && (write_value & 0x80u) != 0) {
         const uint8_t ids[4] = {io->usb[0], io->usb[4], io->usb[8], io->usb[0x0c]};
@@ -74,85 +75,86 @@ static bool can_offset_valid(uint32_t offset) {
     }
 }
 
-static bool write_can(K22Io* io, uint32_t offset, uint8_t size, uint32_t write_value) {
+static bool write_can(KinetisIo* io, uint32_t offset, uint8_t size, uint32_t write_value) {
     if (size != 4 || (offset & 3u) != 0 || !can_offset_valid(offset))
         return false;
-    if (offset == K22_CAN_TIMER || offset == 0x1cu || offset == 0x38u || offset == 0x44u ||
+    if (offset == KINETIS_CAN_TIMER || offset == 0x1cu || offset == 0x38u || offset == 0x44u ||
         offset == 0x4cu)
         return false;
-    if (offset == K22_CAN_IFLAG1) {
+    if (offset == KINETIS_CAN_IFLAG1) {
         io->can[offset / 4u] &= ~write_value;
         return true;
     }
-    if (offset == K22_CAN_MCR && (write_value & (1u << 25)) != 0) {
-        const bool clock = io->clock_enabled[K22_PERIPHERAL_CAN0];
+    if (offset == KINETIS_CAN_MCR && (write_value & (1u << 25)) != 0) {
+        const bool clock = io->clock_enabled[KINETIS_PERIPHERAL_CAN0];
         memset(io->can, 0, sizeof(io->can));
-        io->can[K22_CAN_MCR / 4] = 0xd890000fu;
-        io->can[K22_CAN_RXMGMASK / 4] = UINT32_MAX;
-        io->can[K22_CAN_RX14MASK / 4] = UINT32_MAX;
-        io->can[K22_CAN_RX15MASK / 4] = UINT32_MAX;
-        io->clock_enabled[K22_PERIPHERAL_CAN0] = clock;
+        io->can[KINETIS_CAN_MCR / 4] = 0xd890000fu;
+        io->can[KINETIS_CAN_RXMGMASK / 4] = UINT32_MAX;
+        io->can[KINETIS_CAN_RX14MASK / 4] = UINT32_MAX;
+        io->can[KINETIS_CAN_RX15MASK / 4] = UINT32_MAX;
+        io->clock_enabled[KINETIS_PERIPHERAL_CAN0] = clock;
         return true;
     }
     io->can[offset / 4u] = write_value;
-    if (offset >= K22_CAN_MB_BASE && offset < K22_CAN_MB_BASE + 16u * 16u && (offset & 15u) == 0) {
-        const uint8_t mailbox_index = (uint8_t)((offset - K22_CAN_MB_BASE) / 16u);
+    if (offset >= KINETIS_CAN_MB_BASE && offset < KINETIS_CAN_MB_BASE + 16u * 16u &&
+        (offset & 15u) == 0) {
+        const uint8_t mailbox_index = (uint8_t)((offset - KINETIS_CAN_MB_BASE) / 16u);
         const uint8_t mailbox_code = (uint8_t)(write_value >> 24) & 15u;
         if (mailbox_code >= 0xcu && mailbox_code <= 0xfu) {
             const uint32_t identifier = io->can[(offset + 4u) / 4u];
-            k22_io_internal_emit_can(io, mailbox_index, identifier, write_value,
-                                     io->can[(offset + 8u) / 4u], io->can[(offset + 12u) / 4u]);
+            kinetis_io_internal_emit_can(io, mailbox_index, identifier, write_value,
+                                         io->can[(offset + 8u) / 4u], io->can[(offset + 12u) / 4u]);
             io->can[offset / 4u] = (write_value & ~(15u << 24)) | (8u << 24);
-            io->can[K22_CAN_IFLAG1 / 4] |= 1u << mailbox_index;
-            if ((io->can[K22_CAN_IMASK1 / 4] & (1u << mailbox_index)) != 0)
-                k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 75u, 1u << mailbox_index, 0);
+            io->can[KINETIS_CAN_IFLAG1 / 4] |= 1u << mailbox_index;
+            if ((io->can[KINETIS_CAN_IMASK1 / 4] & (1u << mailbox_index)) != 0)
+                kinetis_io_internal_emit(io, KINETIS_IO_EVENT_IRQ, 75u, 1u << mailbox_index, 0);
         }
     }
     return true;
 }
 
-bool k22_io_internal_fifo_push(uint32_t* fifo, uint8_t* write_index, uint8_t* entry_count,
-                               uint32_t entry_value) {
-    if (*entry_count == K22_IO_FIFO_CAPACITY)
+bool kinetis_io_internal_fifo_push(uint32_t* fifo, uint8_t* write_index, uint8_t* entry_count,
+                                   uint32_t entry_value) {
+    if (*entry_count == KINETIS_IO_FIFO_CAPACITY)
         return false;
     fifo[*write_index] = entry_value;
-    *write_index = (uint8_t)((*write_index + 1u) % K22_IO_FIFO_CAPACITY);
+    *write_index = (uint8_t)((*write_index + 1u) % KINETIS_IO_FIFO_CAPACITY);
     (*entry_count)++;
     return true;
 }
 
-bool k22_io_internal_fifo_pop(uint32_t* fifo, uint8_t* read_index, uint8_t* entry_count,
-                              uint32_t* output_value) {
+bool kinetis_io_internal_fifo_pop(uint32_t* fifo, uint8_t* read_index, uint8_t* entry_count,
+                                  uint32_t* output_value) {
     if (*entry_count == 0)
         return false;
     *output_value = fifo[*read_index];
-    *read_index = (uint8_t)((*read_index + 1u) % K22_IO_FIFO_CAPACITY);
+    *read_index = (uint8_t)((*read_index + 1u) % KINETIS_IO_FIFO_CAPACITY);
     (*entry_count)--;
     return true;
 }
 
-void k22_io_internal_update_i2s_requests(K22Io* io) {
-    uint32_t* transmit = &io->i2s[K22_I2S_TCSR / 4];
-    uint32_t* receive = &io->i2s[K22_I2S_RCSR / 4];
-    if (io->i2s_transmit_count < K22_IO_FIFO_CAPACITY)
-        *transmit |= K22_I2S_REQUEST_FLAG;
+void kinetis_io_internal_update_i2s_requests(KinetisIo* io) {
+    uint32_t* transmit = &io->i2s[KINETIS_I2S_TCSR / 4];
+    uint32_t* receive = &io->i2s[KINETIS_I2S_RCSR / 4];
+    if (io->i2s_transmit_count < KINETIS_IO_FIFO_CAPACITY)
+        *transmit |= KINETIS_I2S_REQUEST_FLAG;
     else
-        *transmit &= ~K22_I2S_REQUEST_FLAG;
+        *transmit &= ~KINETIS_I2S_REQUEST_FLAG;
     if (io->i2s_receive_count != 0)
-        *receive |= K22_I2S_REQUEST_FLAG;
+        *receive |= KINETIS_I2S_REQUEST_FLAG;
     else
-        *receive &= ~K22_I2S_REQUEST_FLAG;
-    if ((*transmit & K22_I2S_REQUEST_FLAG) != 0) {
+        *receive &= ~KINETIS_I2S_REQUEST_FLAG;
+    if ((*transmit & KINETIS_I2S_REQUEST_FLAG) != 0) {
         if ((*transmit & 1u) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_DMA, 0, io->i2s_transmit_count, 0);
+            kinetis_io_internal_emit(io, KINETIS_IO_EVENT_DMA, 0, io->i2s_transmit_count, 0);
         if ((*transmit & (1u << 8)) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 28u, K22_I2S_REQUEST_FLAG, 0);
+            kinetis_io_internal_emit(io, KINETIS_IO_EVENT_IRQ, 28u, KINETIS_I2S_REQUEST_FLAG, 0);
     }
-    if ((*receive & K22_I2S_REQUEST_FLAG) != 0) {
+    if ((*receive & KINETIS_I2S_REQUEST_FLAG) != 0) {
         if ((*receive & 1u) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_DMA, 1, io->i2s_receive_count, 0);
+            kinetis_io_internal_emit(io, KINETIS_IO_EVENT_DMA, 1, io->i2s_receive_count, 0);
         if ((*receive & (1u << 8)) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_IRQ, 29u, K22_I2S_REQUEST_FLAG, 0);
+            kinetis_io_internal_emit(io, KINETIS_IO_EVENT_IRQ, 29u, KINETIS_I2S_REQUEST_FLAG, 0);
     }
 }
 
@@ -163,62 +165,63 @@ static bool i2s_offset_valid(uint32_t offset) {
            offset == 0xe0u || offset == 0x100u || offset == 0x104u;
 }
 
-static bool read_i2s(K22Io* io, uint32_t offset, uint8_t size, uint32_t* output_value) {
+static bool read_i2s(KinetisIo* io, uint32_t offset, uint8_t size, uint32_t* output_value) {
     if (size != 4 || (offset & 3u) != 0 || !i2s_offset_valid(offset))
         return false;
-    if (offset >= K22_I2S_RDR0 && offset < K22_I2S_RDR0 + 8u) {
-        if (!k22_io_internal_fifo_pop(io->i2s_receive_fifo, &io->i2s_receive_read,
-                                      &io->i2s_receive_count, output_value)) {
-            io->i2s[K22_I2S_RCSR / 4] |= K22_I2S_FIFO_ERROR;
+    if (offset >= KINETIS_I2S_RDR0 && offset < KINETIS_I2S_RDR0 + 8u) {
+        if (!kinetis_io_internal_fifo_pop(io->i2s_receive_fifo, &io->i2s_receive_read,
+                                          &io->i2s_receive_count, output_value)) {
+            io->i2s[KINETIS_I2S_RCSR / 4] |= KINETIS_I2S_FIFO_ERROR;
             *output_value = 0;
         }
-        k22_io_internal_update_i2s_requests(io);
+        kinetis_io_internal_update_i2s_requests(io);
         return true;
     }
     *output_value = io->i2s[offset / 4u];
     return true;
 }
 
-static bool write_i2s(K22Io* io, uint32_t offset, uint8_t size, uint32_t write_value) {
+static bool write_i2s(KinetisIo* io, uint32_t offset, uint8_t size, uint32_t write_value) {
     if (size != 4 || (offset & 3u) != 0 || !i2s_offset_valid(offset) || offset == 0x40u ||
         offset == 0x44u || offset == 0xc0u || offset == 0xc4u)
         return false;
-    if (offset >= K22_I2S_TDR0 && offset < K22_I2S_TDR0 + 8u) {
-        if (!k22_io_internal_fifo_push(io->i2s_transmit_fifo, &io->i2s_transmit_write,
-                                       &io->i2s_transmit_count, write_value)) {
-            io->i2s[K22_I2S_TCSR / 4] |= K22_I2S_FIFO_ERROR;
+    if (offset >= KINETIS_I2S_TDR0 && offset < KINETIS_I2S_TDR0 + 8u) {
+        if (!kinetis_io_internal_fifo_push(io->i2s_transmit_fifo, &io->i2s_transmit_write,
+                                           &io->i2s_transmit_count, write_value)) {
+            io->i2s[KINETIS_I2S_TCSR / 4] |= KINETIS_I2S_FIFO_ERROR;
             return true;
         }
-        k22_io_internal_emit(io, K22_IO_EVENT_I2S_TRANSMIT, (offset - K22_I2S_TDR0) / 4u,
-                             write_value, io->i2s_transmit_count);
-        k22_io_internal_update_i2s_requests(io);
+        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_I2S_TRANSMIT,
+                                 (offset - KINETIS_I2S_TDR0) / 4u, write_value,
+                                 io->i2s_transmit_count);
+        kinetis_io_internal_update_i2s_requests(io);
         return true;
     }
-    if (offset == K22_I2S_TCSR || offset == K22_I2S_RCSR) {
-        const uint32_t flags =
-            K22_I2S_REQUEST_FLAG | K22_I2S_FIFO_ERROR | (1u << 17) | (1u << 19) | (1u << 20);
+    if (offset == KINETIS_I2S_TCSR || offset == KINETIS_I2S_RCSR) {
+        const uint32_t flags = KINETIS_I2S_REQUEST_FLAG | KINETIS_I2S_FIFO_ERROR | (1u << 17) |
+                               (1u << 19) | (1u << 20);
         uint32_t previous_status = io->i2s[offset / 4u];
         previous_status &= ~(write_value & flags);
         io->i2s[offset / 4u] = (write_value & ~flags) | (previous_status & flags);
-        if ((write_value & K22_I2S_ENABLE) == 0) {
-            if (offset == K22_I2S_TCSR)
+        if ((write_value & KINETIS_I2S_ENABLE) == 0) {
+            if (offset == KINETIS_I2S_TCSR)
                 io->i2s_transmit_count = io->i2s_transmit_read = io->i2s_transmit_write = 0;
             else
                 io->i2s_receive_count = io->i2s_receive_read = io->i2s_receive_write = 0;
         }
-        k22_io_internal_update_i2s_requests(io);
+        kinetis_io_internal_update_i2s_requests(io);
         return true;
     }
     io->i2s[offset / 4u] = write_value;
     return true;
 }
 
-static bool read_flash_configuration(K22Io* io, K22PeripheralLocation location, uint8_t size,
-                                     uint32_t* output_value) {
+static bool read_flash_configuration(KinetisIo* io, KinetisPeripheralLocation location,
+                                     uint8_t size, uint32_t* output_value) {
     if (location.offset + size > sizeof(io->configuration.flash_configuration))
         return false;
-    *output_value =
-        k22_io_internal_load_bytes(io->configuration.flash_configuration + location.offset, size);
+    *output_value = kinetis_io_internal_load_bytes(
+        io->configuration.flash_configuration + location.offset, size);
     return true;
 }
 
@@ -226,9 +229,9 @@ static bool flexbus_offset_valid(uint32_t offset) {
     return (offset < 0x48u && (offset % 12u) <= 8u) || offset == 0x60u;
 }
 
-bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t access_size, bool is_write_access,
-                             uint32_t write_value) {
-    if (io == NULL || !k22_io_clock_enabled(io, K22_PERIPHERAL_FB) ||
+bool kinetis_io_flexbus_transfer(KinetisIo* io, uint32_t address, uint8_t access_size,
+                                 bool is_write_access, uint32_t write_value) {
+    if (io == NULL || !kinetis_io_clock_enabled(io, KINETIS_PERIPHERAL_FB) ||
         (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
     for (uint8_t chip_select = 0u; chip_select < 6u; chip_select++) {
@@ -239,17 +242,17 @@ bool k22_io_flexbus_transfer(K22Io* io, uint32_t address, uint8_t access_size, b
         const uint32_t comparison = ~(block & 0xffff0000u) & 0xffff0000u;
         if ((address & comparison) != (base & comparison))
             continue;
-        k22_io_internal_emit(io, K22_IO_EVENT_FLEXBUS_TRANSFER, chip_select, write_value,
-                             (uint32_t)access_size | (is_write_access ? 0x100u : 0u));
+        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_FLEXBUS_TRANSFER, chip_select, write_value,
+                                 (uint32_t)access_size | (is_write_access ? 0x100u : 0u));
         return true;
     }
     return false;
 }
-static bool mcm_offset_valid(const K22Io* io, uint32_t offset) {
+static bool mcm_offset_valid(const KinetisIo* io, uint32_t offset) {
     if (offset == 0 || offset == 2u || offset == 4u || offset == 8u)
         return true;
-    const bool large_profile = io->configuration.profile->id == K22_PROFILE_MK22FN1M012 ||
-                               io->configuration.profile->id == K22_PROFILE_MK22FX51212;
+    const bool large_profile = io->configuration.profile->id == KINETIS_PROFILE_MK22FN1M012 ||
+                               io->configuration.profile->id == KINETIS_PROFILE_MK22FX51212;
     if (large_profile)
         return offset == 0x0cu || offset == 0x10u || offset == 0x14u || offset == 0x28u;
     return offset == 0x38u;
@@ -263,32 +266,32 @@ static bool sysmpu_offset_valid(uint32_t offset) {
     return (offset >= 0x400u && offset < 0x4c0u) || (offset >= 0x800u && offset < 0x830u);
 }
 
-bool k22_io_internal_read_direct(K22Io* io, uint32_t address, uint8_t size,
-                                 uint32_t* output_value) {
-    K22PeripheralLocation location;
-    if (!k22_profile_resolve_peripheral(io->configuration.profile, address, size, &location))
+bool kinetis_io_internal_read_direct(KinetisIo* io, uint32_t address, uint8_t size,
+                                     uint32_t* output_value) {
+    KinetisPeripheralLocation location;
+    if (!kinetis_profile_resolve_peripheral(io->configuration.profile, address, size, &location))
         return false;
-    if (!k22_io_internal_module_clocked(io, location.id)) {
-        k22_io_internal_emit(io, K22_IO_EVENT_ACCESS_ERROR, address, size, 0);
+    if (!kinetis_io_internal_module_clocked(io, location.id)) {
+        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_ACCESS_ERROR, address, size, 0);
         return false;
     }
-    if (location.id == K22_PERIPHERAL_FLASH_CONFIG)
+    if (location.id == KINETIS_PERIPHERAL_FLASH_CONFIG)
         return read_flash_configuration(io, location, size, output_value);
-    if (k22_io_internal_is_port(location.id))
-        return k22_io_internal_read_port(io, location, size, output_value);
-    if (k22_io_internal_is_gpio(location.id))
-        return k22_io_internal_read_gpio(io, location, size, output_value);
-    if (location.id == K22_PERIPHERAL_USB0)
+    if (kinetis_io_internal_is_port(location.id))
+        return kinetis_io_internal_read_port(io, location, size, output_value);
+    if (kinetis_io_internal_is_gpio(location.id))
+        return kinetis_io_internal_read_gpio(io, location, size, output_value);
+    if (location.id == KINETIS_PERIPHERAL_USB0)
         return read_usb(io, location, size, output_value);
-    if (location.id == K22_PERIPHERAL_CAN0)
+    if (location.id == KINETIS_PERIPHERAL_CAN0)
         return can_offset_valid(location.offset) &&
                read_words(io->can, sizeof(io->can), location.offset, size, output_value);
-    if (location.id == K22_PERIPHERAL_I2S0)
+    if (location.id == KINETIS_PERIPHERAL_I2S0)
         return read_i2s(io, location.offset, size, output_value);
-    if (location.id == K22_PERIPHERAL_FB)
+    if (location.id == KINETIS_PERIPHERAL_FB)
         return flexbus_offset_valid(location.offset) &&
                read_words(io->flexbus, sizeof(io->flexbus), location.offset, size, output_value);
-    if (location.id == K22_PERIPHERAL_MCM) {
+    if (location.id == KINETIS_PERIPHERAL_MCM) {
         if (!mcm_offset_valid(io, location.offset))
             return false;
         if (location.offset == 0 && size == 4) {
@@ -303,7 +306,7 @@ bool k22_io_internal_read_direct(K22Io* io, uint32_t address, uint8_t size,
         }
         return read_words(io->mcm, sizeof(io->mcm), location.offset, size, output_value);
     }
-    if (location.id == K22_PERIPHERAL_SYSMPU) {
+    if (location.id == KINETIS_PERIPHERAL_SYSMPU) {
         if (!sysmpu_offset_valid(location.offset))
             return false;
         if (size == 4 && location.offset >= 0x800u && location.offset < 0x830u) {
@@ -316,36 +319,37 @@ bool k22_io_internal_read_direct(K22Io* io, uint32_t address, uint8_t size,
     return false;
 }
 
-bool k22_io_internal_write_direct(K22Io* io, uint32_t address, uint8_t size, uint32_t write_value) {
-    K22PeripheralLocation location;
-    if (!k22_profile_resolve_peripheral(io->configuration.profile, address, size, &location))
+bool kinetis_io_internal_write_direct(KinetisIo* io, uint32_t address, uint8_t size,
+                                      uint32_t write_value) {
+    KinetisPeripheralLocation location;
+    if (!kinetis_profile_resolve_peripheral(io->configuration.profile, address, size, &location))
         return false;
-    if (!k22_io_internal_module_clocked(io, location.id)) {
-        k22_io_internal_emit(io, K22_IO_EVENT_ACCESS_ERROR, address, write_value, size);
+    if (!kinetis_io_internal_module_clocked(io, location.id)) {
+        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_ACCESS_ERROR, address, write_value, size);
         return false;
     }
-    if (location.id == K22_PERIPHERAL_FLASH_CONFIG)
+    if (location.id == KINETIS_PERIPHERAL_FLASH_CONFIG)
         return false;
-    if (k22_io_internal_is_port(location.id))
-        return k22_io_internal_write_port(io, location, size, write_value);
-    if (k22_io_internal_is_gpio(location.id))
-        return k22_io_internal_write_gpio(io, location, size, write_value);
-    if (location.id == K22_PERIPHERAL_USB0)
+    if (kinetis_io_internal_is_port(location.id))
+        return kinetis_io_internal_write_port(io, location, size, write_value);
+    if (kinetis_io_internal_is_gpio(location.id))
+        return kinetis_io_internal_write_gpio(io, location, size, write_value);
+    if (location.id == KINETIS_PERIPHERAL_USB0)
         return write_usb(io, location, size, write_value);
-    if (location.id == K22_PERIPHERAL_CAN0)
+    if (location.id == KINETIS_PERIPHERAL_CAN0)
         return write_can(io, location.offset, size, write_value);
-    if (location.id == K22_PERIPHERAL_I2S0)
+    if (location.id == KINETIS_PERIPHERAL_I2S0)
         return write_i2s(io, location.offset, size, write_value);
-    if (location.id == K22_PERIPHERAL_FB) {
+    if (location.id == KINETIS_PERIPHERAL_FB) {
         if (size != 4 || (location.offset & 3u) != 0 || !flexbus_offset_valid(location.offset))
             return false;
         io->flexbus[location.offset / 4u] = write_value;
         if (location.offset < 0x48u && (location.offset % 12u) == 4u && (write_value & 1u) != 0)
-            k22_io_internal_emit(io, K22_IO_EVENT_FLEXBUS_TRANSFER, location.offset / 12u,
-                                 write_value, 0);
+            kinetis_io_internal_emit(io, KINETIS_IO_EVENT_FLEXBUS_TRANSFER, location.offset / 12u,
+                                     write_value, 0);
         return true;
     }
-    if (location.id == K22_PERIPHERAL_MCM) {
+    if (location.id == KINETIS_PERIPHERAL_MCM) {
         if (size != 4 || (location.offset & 3u) != 0 || location.offset == 0 ||
             !mcm_offset_valid(io, location.offset) || location.offset == 0x14u)
             return false;
@@ -354,7 +358,7 @@ bool k22_io_internal_write_direct(K22Io* io, uint32_t address, uint8_t size, uin
         io->mcm[location.offset / 4u] = write_value;
         return true;
     }
-    if (location.id == K22_PERIPHERAL_SYSMPU) {
+    if (location.id == KINETIS_PERIPHERAL_SYSMPU) {
         if (size != 4 || (location.offset & 3u) != 0 || !sysmpu_offset_valid(location.offset))
             return false;
         if (location.offset >= 0x10u && location.offset < 0x70u)

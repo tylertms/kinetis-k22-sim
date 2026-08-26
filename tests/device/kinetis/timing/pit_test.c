@@ -63,7 +63,7 @@ int main(void) {
     expect(&state, read_u32(&state, device, PIT0_CVAL) == 2,
            "read_u32(&state, device, PIT0_CVAL) == 2");
 
-    expect(&state, k22_test_disable_watchdog(device), "watchdog disabled for maximum advance");
+    expect(&state, kinetis_test_disable_watchdog(device), "watchdog disabled for maximum advance");
     write_u32(&state, device, SIM_CLKDIV1, 0xf0000000u);
     expect(&state, kinetis_bus_clock_hz(device) > kinetis_core_clock_hz(device),
            "bus clock exceeds the divided core clock");

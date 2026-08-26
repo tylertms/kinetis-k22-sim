@@ -1,33 +1,33 @@
 #include "internal.h"
 
-static uint32_t watchdog_timeout_value(const K22Timing* timing) {
+static uint32_t watchdog_timeout_value(const KinetisTiming* timing) {
     return ((uint32_t)timing->wdog[2] << 16u) | timing->wdog[3];
 }
 
-void k22_timing_internal_signal_reset(K22Timing* timing, uint8_t srs0, uint8_t srs1) {
+void kinetis_timing_internal_signal_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     const uint64_t generation = timing->reset_generation;
     if (timing->signals.reset != NULL) {
         timing->signals.reset(timing->signals.context, srs0, srs1);
     }
     if (timing->reset_generation == generation)
-        k22_timing_warm_reset(timing, srs0, srs1);
+        kinetis_timing_warm_reset(timing, srs0, srs1);
 }
 
-static void update_watchdog_interrupt(const K22Timing* timing) {
+static void update_watchdog_interrupt(const KinetisTiming* timing) {
     const bool watchdog_interrupt_enabled = (timing->wdog[1] & 0x8000u) != 0u;
     const bool external_monitor_asserted = timing->ewm_output && (timing->ewm_ctrl & 8u) != 0u;
-    k22_timing_internal_set_irq(timing, IRQ_WDOG_EWM,
-                                watchdog_interrupt_enabled || external_monitor_asserted);
+    kinetis_timing_internal_set_irq(timing, IRQ_WDOG_EWM,
+                                    watchdog_interrupt_enabled || external_monitor_asserted);
 }
 
-static bool handle_watchdog_expiration(K22Timing* timing) {
+static bool handle_watchdog_expiration(KinetisTiming* timing) {
     timing->wdog_counter = 0u;
     if ((timing->wdog[0] & 4u) == 0u) {
-        k22_timing_internal_signal_reset(timing, 0x20u, 0u);
+        kinetis_timing_internal_signal_reset(timing, 0x20u, 0u);
         return true;
     }
     if (timing->wdog_reset_pending) {
-        k22_timing_internal_signal_reset(timing, 0x20u, 0u);
+        kinetis_timing_internal_signal_reset(timing, 0x20u, 0u);
         return true;
     }
     timing->wdog[1] |= 0x8000u;
@@ -37,7 +37,7 @@ static bool handle_watchdog_expiration(K22Timing* timing) {
     return false;
 }
 
-static void apply_watchdog_update(K22Timing* timing) {
+static void apply_watchdog_update(KinetisTiming* timing) {
     const uint16_t immediate_control_mask = 0x00e4u;
     const uint16_t test_mode_bits = timing->wdog[0] & 0x4000u;
     for (uint8_t byte_index = 0u; byte_index < 24u; byte_index++) {
@@ -59,9 +59,9 @@ static void apply_watchdog_update(K22Timing* timing) {
     timing->wdog_remainder = 0u;
 }
 
-static bool process_watchdog_bus_time(K22Timing* timing) {
+static bool process_watchdog_bus_time(KinetisTiming* timing) {
     if (timing->wdog_reset_pending && timing->wdog_bus_cycles >= timing->wdog_reset_deadline) {
-        k22_timing_internal_signal_reset(timing, 0x20u, 0u);
+        kinetis_timing_internal_signal_reset(timing, 0x20u, 0u);
         return true;
     }
     if (timing->wdog_unlock_stage == 1u &&
@@ -89,12 +89,12 @@ static bool process_watchdog_bus_time(K22Timing* timing) {
     return false;
 }
 
-static bool advance_watchdog_bus_time(K22Timing* timing, uint64_t elapsed_bus_ticks) {
+static bool advance_watchdog_bus_time(KinetisTiming* timing, uint64_t elapsed_bus_ticks) {
     timing->wdog_bus_cycles += elapsed_bus_ticks;
     return process_watchdog_bus_time(timing);
 }
 
-static bool is_watchdog_running(const K22Timing* timing) {
+static bool is_watchdog_running(const KinetisTiming* timing) {
     if ((timing->wdog[0] & 1u) == 0u)
         return false;
     if (timing->debug_halted && (timing->wdog[0] & 0x20u) == 0u)
@@ -106,7 +106,7 @@ static bool is_watchdog_running(const K22Timing* timing) {
     return (timing->wdog[0] & 0x80u) != 0u;
 }
 
-static uint32_t effective_watchdog_timeout(const K22Timing* timing) {
+static uint32_t effective_watchdog_timeout(const KinetisTiming* timing) {
     const uint32_t configured_timeout = watchdog_timeout_value(timing);
     if ((timing->wdog[0] & 0x4c00u) != 0x0c00u)
         return configured_timeout;
@@ -114,9 +114,10 @@ static uint32_t effective_watchdog_timeout(const K22Timing* timing) {
     return (configured_timeout >> (timeout_byte_index * 8u)) & 0xffu;
 }
 
-void k22_timing_watchdog_advance(K22Timing* timing, uint32_t elapsed_watchdog_ticks) {
+void kinetis_timing_watchdog_advance(KinetisTiming* timing, uint32_t elapsed_watchdog_ticks) {
     if (timing == NULL || timing->profile == NULL || elapsed_watchdog_ticks == 0u ||
-        !k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG) || !is_watchdog_running(timing))
+        !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_WDOG) ||
+        !is_watchdog_running(timing))
         return;
 
     const uint32_t timeout_ticks = effective_watchdog_timeout(timing);
@@ -128,11 +129,11 @@ void k22_timing_watchdog_advance(K22Timing* timing, uint32_t elapsed_watchdog_ti
     }
 }
 
-void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles) {
-    if (!k22_timing_internal_has(timing, K22_PERIPHERAL_WDOG))
+void kinetis_timing_internal_advance_wdog(KinetisTiming* timing, uint32_t cycles) {
+    if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_WDOG))
         return;
     const bool update_was_open = timing->wdog_update_open;
-    const uint64_t elapsed_bus_ticks = k22_timing_internal_clock_ticks(
+    const uint64_t elapsed_bus_ticks = kinetis_timing_internal_clock_ticks(
         &timing->wdog_bus_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
     if (advance_watchdog_bus_time(timing, elapsed_bus_ticks) ||
         (update_was_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
@@ -142,25 +143,25 @@ void k22_timing_internal_advance_wdog(K22Timing* timing, uint32_t cycles) {
                                    ? timing->bus_clock_hz
                                    : timing->lpo_hz;
     const uint32_t divider = ((timing->wdog[11] & 0x700u) >> 8u) + 1u;
-    const uint64_t elapsed_watchdog_ticks = k22_timing_internal_clock_ticks(
+    const uint64_t elapsed_watchdog_ticks = kinetis_timing_internal_clock_ticks(
         &timing->wdog_remainder, cycles, source_hz / divider, timing->core_clock_hz);
-    k22_timing_watchdog_advance(timing, elapsed_watchdog_ticks > UINT32_MAX
-                                            ? UINT32_MAX
-                                            : (uint32_t)elapsed_watchdog_ticks);
+    kinetis_timing_watchdog_advance(timing, elapsed_watchdog_ticks > UINT32_MAX
+                                                ? UINT32_MAX
+                                                : (uint32_t)elapsed_watchdog_ticks);
 }
 
-static void trigger_ewm_output(K22Timing* timing) {
+static void trigger_ewm_output(KinetisTiming* timing) {
     timing->ewm_output = true;
     update_watchdog_interrupt(timing);
 }
 
-void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles) {
-    if (!k22_timing_internal_has(timing, K22_PERIPHERAL_EWM) || (timing->ewm_ctrl & 1u) == 0u ||
-        timing->ewm_output || timing->cpu_sleeping)
+void kinetis_timing_internal_advance_ewm(KinetisTiming* timing, uint32_t cycles) {
+    if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_EWM) ||
+        (timing->ewm_ctrl & 1u) == 0u || timing->ewm_output || timing->cpu_sleeping)
         return;
     const uint32_t source_hz = timing->lpo_hz / ((uint32_t)timing->ewm_prescaler + 1u);
-    const uint64_t ticks = k22_timing_internal_clock_ticks(&timing->ewm_remainder, cycles,
-                                                           source_hz, timing->core_clock_hz);
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&timing->ewm_remainder, cycles,
+                                                               source_hz, timing->core_clock_hz);
     const uint32_t increment = ticks > UINT32_MAX ? UINT32_MAX : (uint32_t)ticks;
     timing->ewm_counter = increment >= UINT32_MAX - timing->ewm_counter
                               ? UINT32_MAX
@@ -169,8 +170,8 @@ void k22_timing_internal_advance_ewm(K22Timing* timing, uint32_t cycles) {
         trigger_ewm_output(timing);
 }
 
-bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t* output_value) {
+bool kinetis_timing_internal_read_wdog(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t* output_value) {
     if ((size != 1u && size != 2u) || address < WDOG_BASE || address + size > WDOG_BASE + 0x18u ||
         (size == 2u && (address & 1u) != 0u)) {
         return false;
@@ -189,17 +190,17 @@ bool k22_timing_internal_read_wdog(const K22Timing* timing, uint32_t address, ui
     return true;
 }
 
-bool k22_timing_projected_watchdog_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                        uint32_t* output_value) {
+bool kinetis_timing_projected_watchdog_read(const KinetisTiming* timing, uint32_t address,
+                                            uint8_t size, uint32_t* output_value) {
     if (timing == NULL || output_value == NULL) {
         return false;
     }
     if (!timing->wdog_update_open || !timing->wdog_update_written) {
-        return k22_timing_internal_read_wdog(timing, address, size, output_value);
+        return kinetis_timing_internal_read_wdog(timing, address, size, output_value);
     }
-    K22Timing projected = *timing;
+    KinetisTiming projected = *timing;
     apply_watchdog_update(&projected);
-    return k22_timing_internal_read_wdog(&projected, address, size, output_value);
+    return kinetis_timing_internal_read_wdog(&projected, address, size, output_value);
 }
 
 static bool is_valid_sequence_byte(uint8_t lane, uint8_t byte_value, uint16_t first,
@@ -217,7 +218,7 @@ static uint16_t merge_watchdog_write(uint16_t previous_value, uint32_t address, 
     return (previous_value & (uint16_t)~byte_mask) | (uint16_t)(((uint8_t)write_value) << shift);
 }
 
-static void accept_wdog_unlock(K22Timing* timing, uint16_t sequence_value) {
+static void accept_wdog_unlock(KinetisTiming* timing, uint16_t sequence_value) {
     if (sequence_value == 0xc520u) {
         timing->wdog_unlock_stage = 1u;
         timing->wdog_sequence_deadline = timing->wdog_bus_cycles + 20u;
@@ -239,7 +240,7 @@ static void accept_wdog_unlock(K22Timing* timing, uint16_t sequence_value) {
     (void)handle_watchdog_expiration(timing);
 }
 
-static void accept_wdog_refresh(K22Timing* timing, uint16_t sequence_value) {
+static void accept_wdog_refresh(KinetisTiming* timing, uint16_t sequence_value) {
     if (sequence_value == 0xa602u) {
         timing->wdog_refresh_stage = 1u;
         timing->wdog_sequence_deadline = timing->wdog_bus_cycles + 20u;
@@ -259,8 +260,8 @@ static void accept_wdog_refresh(K22Timing* timing, uint16_t sequence_value) {
     (void)handle_watchdog_expiration(timing);
 }
 
-bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t size,
-                                    uint32_t write_value) {
+bool kinetis_timing_internal_write_wdog(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                        uint32_t write_value) {
     if ((size != 1u && size != 2u) || address < WDOG_BASE || address + size > WDOG_BASE + 0x18u ||
         (size == 2u && (address & 1u) != 0u)) {
         return false;
@@ -335,8 +336,8 @@ bool k22_timing_internal_write_wdog(K22Timing* timing, uint32_t address, uint8_t
     return true;
 }
 
-bool k22_timing_internal_read_ewm(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value) {
+bool kinetis_timing_internal_read_ewm(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value) {
     if (size != 1 || address < EWM_BASE || address > EWM_BASE + 5u || address == EWM_BASE + 4u) {
         return false;
     }
@@ -361,8 +362,8 @@ bool k22_timing_internal_read_ewm(const K22Timing* timing, uint32_t address, uin
     }
 }
 
-bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value) {
+bool kinetis_timing_internal_write_ewm(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value) {
     if (size != 1) {
         return false;
     }
@@ -427,12 +428,12 @@ bool k22_timing_internal_write_ewm(K22Timing* timing, uint32_t address, uint8_t 
     }
 }
 
-bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t offset,
-                                  uint8_t size, uint32_t* output_value) {
+bool kinetis_timing_internal_ftm_read(KinetisTiming* timing, uint8_t instance, uint32_t offset,
+                                      uint8_t size, uint32_t* output_value) {
     if (size != 4 || (offset & 3u) != 0) {
         return false;
     }
-    K22FtmState* ftm = &timing->ftm[instance];
+    KinetisFtmState* ftm = &timing->ftm[instance];
     if (offset == 0) {
         *output_value = ftm->sc;
         if ((*output_value & 0x80u) != 0u)
@@ -443,7 +444,7 @@ bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t 
         *output_value = ftm->modulo;
     else if (offset >= 0x0cu && offset < 0x4cu) {
         const uint8_t channel = (uint8_t)((offset - 0x0cu) / 8u);
-        if (channel >= k22_timing_internal_ftm_channel_count(timing, instance))
+        if (channel >= kinetis_timing_internal_ftm_channel_count(timing, instance))
             return false;
         if (((offset - 0x0cu) & 4u) == 0u) {
             *output_value = ftm->channel_sc[channel];
@@ -456,7 +457,7 @@ bool k22_timing_internal_ftm_read(K22Timing* timing, uint8_t instance, uint32_t 
         *output_value = ftm->initial;
     else if (offset == 0x50u) {
         uint32_t status = 0;
-        const uint8_t channels = k22_timing_internal_ftm_channel_count(timing, instance);
+        const uint8_t channels = kinetis_timing_internal_ftm_channel_count(timing, instance);
         for (uint8_t channel = 0; channel < channels; channel++) {
             status |= ((ftm->channel_sc[channel] >> 7u) & 1u) << channel;
         }

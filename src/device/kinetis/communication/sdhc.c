@@ -38,19 +38,19 @@ enum {
     SDHC_IRQ_DATA_CRC = 1u << 21,
 };
 
-static uint32_t* register_pointer(K22Sdhc* sdhc, uint32_t register_offset) {
+static uint32_t* register_pointer(KinetisSdhc* sdhc, uint32_t register_offset) {
     return &sdhc->registers[register_offset / 4u];
 }
 
-static const uint32_t* const_register_pointer(const K22Sdhc* sdhc, uint32_t register_offset) {
+static const uint32_t* const_register_pointer(const KinetisSdhc* sdhc, uint32_t register_offset) {
     return &sdhc->registers[register_offset / 4u];
 }
 
-static void set_interrupt_status(K22Sdhc* sdhc, uint32_t status_flags) {
+static void set_interrupt_status(KinetisSdhc* sdhc, uint32_t status_flags) {
     *register_pointer(sdhc, SDHC_IRQSTAT) |= status_flags & *register_pointer(sdhc, SDHC_IRQSTATEN);
 }
 
-static void refresh_present_state(K22Sdhc* sdhc) {
+static void refresh_present_state(KinetisSdhc* sdhc) {
     uint32_t present_state = 1u << 3;
     if (sdhc->present)
         present_state |= (1u << 16) | (1u << 23) | (0xffu << 24);
@@ -61,7 +61,7 @@ static void refresh_present_state(K22Sdhc* sdhc) {
     *register_pointer(sdhc, SDHC_PRSSTAT) = present_state;
 }
 
-static void reset_registers(K22Sdhc* sdhc) {
+static void reset_registers(KinetisSdhc* sdhc) {
     memset(sdhc->registers, 0, sizeof(sdhc->registers));
     *register_pointer(sdhc, SDHC_PRSSTAT) = 1u << 3;
     *register_pointer(sdhc, SDHC_HTCAPBLT) = 0x07f30000u;
@@ -69,7 +69,7 @@ static void reset_registers(K22Sdhc* sdhc) {
     *register_pointer(sdhc, SDHC_HOSTVER) = 0x00001201u;
 }
 
-bool k22_sdhc_init(K22Sdhc* sdhc, K22SdhcBus bus) {
+bool kinetis_sdhc_init(KinetisSdhc* sdhc, KinetisSdhcBus bus) {
     if (sdhc == NULL || bus.read == NULL || bus.write == NULL)
         return false;
     memset(sdhc, 0, sizeof(*sdhc));
@@ -80,7 +80,7 @@ bool k22_sdhc_init(K22Sdhc* sdhc, K22SdhcBus bus) {
     return true;
 }
 
-void k22_sdhc_destroy(K22Sdhc* sdhc) {
+void kinetis_sdhc_destroy(KinetisSdhc* sdhc) {
     if (sdhc == NULL)
         return;
     free(sdhc->card);
@@ -89,7 +89,7 @@ void k22_sdhc_destroy(K22Sdhc* sdhc) {
     sdhc->present = false;
 }
 
-void k22_sdhc_reset(K22Sdhc* sdhc) {
+void kinetis_sdhc_reset(KinetisSdhc* sdhc) {
     if (sdhc == NULL)
         return;
     const bool present = sdhc->present;
@@ -109,7 +109,7 @@ void k22_sdhc_reset(K22Sdhc* sdhc) {
     refresh_present_state(sdhc);
 }
 
-bool k22_sdhc_copy(K22Sdhc* destination, const K22Sdhc* source, K22SdhcBus bus) {
+bool kinetis_sdhc_copy(KinetisSdhc* destination, const KinetisSdhc* source, KinetisSdhcBus bus) {
     if (destination == NULL || source == NULL || bus.read == NULL || bus.write == NULL)
         return false;
     uint8_t* card_copy = NULL;
@@ -126,12 +126,13 @@ bool k22_sdhc_copy(K22Sdhc* destination, const K22Sdhc* source, K22SdhcBus bus) 
     return true;
 }
 
-void k22_sdhc_set_clock(K22Sdhc* sdhc, bool enabled) {
+void kinetis_sdhc_set_clock(KinetisSdhc* sdhc, bool enabled) {
     if (sdhc != NULL)
         sdhc->clock_enabled = enabled;
 }
 
-bool k22_sdhc_insert(K22Sdhc* sdhc, const void* card_data, size_t card_size, bool write_protected) {
+bool kinetis_sdhc_state_insert(KinetisSdhc* sdhc, const void* card_data, size_t card_size,
+                               bool write_protected) {
     if (sdhc == NULL || card_data == NULL || card_size == 0u || card_size % 512u != 0u)
         return false;
     uint8_t* card = malloc(card_size);
@@ -149,7 +150,7 @@ bool k22_sdhc_insert(K22Sdhc* sdhc, const void* card_data, size_t card_size, boo
     return true;
 }
 
-void k22_sdhc_eject(K22Sdhc* sdhc) {
+void kinetis_sdhc_state_eject(KinetisSdhc* sdhc) {
     if (sdhc == NULL)
         return;
     free(sdhc->card);
@@ -162,8 +163,8 @@ void k22_sdhc_eject(K22Sdhc* sdhc) {
     refresh_present_state(sdhc);
 }
 
-bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t card_offset, void* card_data,
-                        size_t byte_count) {
+bool kinetis_sdhc_state_read_card(const KinetisSdhc* sdhc, size_t card_offset, void* card_data,
+                                  size_t byte_count) {
     if (sdhc == NULL || card_data == NULL || !sdhc->present || card_offset > sdhc->card_size ||
         byte_count > sdhc->card_size - card_offset)
         return false;
@@ -171,27 +172,27 @@ bool k22_sdhc_read_card(const K22Sdhc* sdhc, size_t card_offset, void* card_data
     return true;
 }
 
-static uint32_t transfer_block_count(const K22Sdhc* sdhc) {
+static uint32_t transfer_block_count(const KinetisSdhc* sdhc) {
     const uint32_t block_count = *const_register_pointer(sdhc, SDHC_BLKATTR) >> 16;
     return block_count == 0u ? 1u : block_count;
 }
 
-static uint32_t transfer_block_size(const K22Sdhc* sdhc) {
+static uint32_t transfer_block_size(const KinetisSdhc* sdhc) {
     const uint32_t block_size = *const_register_pointer(sdhc, SDHC_BLKATTR) & 0x1fffu;
     return block_size == 0u ? sdhc->block_length : block_size;
 }
 
-static bool transfer_bounds(const K22Sdhc* sdhc, size_t card_offset, size_t byte_count) {
+static bool transfer_bounds(const KinetisSdhc* sdhc, size_t card_offset, size_t byte_count) {
     return card_offset <= sdhc->card_size && byte_count <= sdhc->card_size - card_offset;
 }
 
-static void complete_transfer(K22Sdhc* sdhc) {
+static void complete_transfer(KinetisSdhc* sdhc) {
     sdhc->transfer_remaining = 0u;
     set_interrupt_status(sdhc, SDHC_IRQ_TRANSFER_COMPLETE);
     refresh_present_state(sdhc);
 }
 
-static bool perform_dma_transfer(K22Sdhc* sdhc) {
+static bool perform_dma_transfer(KinetisSdhc* sdhc) {
     uint32_t bus_address = *register_pointer(sdhc, SDHC_DSADDR) & 0xfffffffcu;
     while (sdhc->transfer_remaining != 0u) {
         const uint8_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : 1u;
@@ -216,7 +217,7 @@ static bool perform_dma_transfer(K22Sdhc* sdhc) {
     return true;
 }
 
-static bool begin_transfer(K22Sdhc* sdhc, bool read_transfer, bool multiple_blocks) {
+static bool begin_transfer(KinetisSdhc* sdhc, bool read_transfer, bool multiple_blocks) {
     const size_t transfer_size = transfer_block_size(sdhc);
     const size_t block_count = multiple_blocks ? transfer_block_count(sdhc) : 1u;
     const size_t card_offset = (size_t)*register_pointer(sdhc, SDHC_CMDARG) * 512u;
@@ -247,7 +248,7 @@ static bool begin_transfer(K22Sdhc* sdhc, bool read_transfer, bool multiple_bloc
     return true;
 }
 
-static void issue_command(K22Sdhc* sdhc) {
+static void issue_command(KinetisSdhc* sdhc) {
     const uint8_t command_index = (uint8_t)(*register_pointer(sdhc, SDHC_XFERTYP) >> 24u) & 0x3fu;
     const uint32_t argument = *register_pointer(sdhc, SDHC_CMDARG);
     memset(register_pointer(sdhc, SDHC_CMDRSP0), 0, 4u * sizeof(uint32_t));
@@ -319,7 +320,7 @@ static void issue_command(K22Sdhc* sdhc) {
     set_interrupt_status(sdhc, SDHC_IRQ_COMMAND_COMPLETE);
 }
 
-static bool read_data(K22Sdhc* sdhc, uint32_t* read_value) {
+static bool read_data(KinetisSdhc* sdhc, uint32_t* read_value) {
     if (!sdhc->transfer_read || sdhc->transfer_remaining == 0u)
         return false;
     const size_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
@@ -332,7 +333,7 @@ static bool read_data(K22Sdhc* sdhc, uint32_t* read_value) {
     return true;
 }
 
-static bool write_data(K22Sdhc* sdhc, uint32_t write_value) {
+static bool write_data(KinetisSdhc* sdhc, uint32_t write_value) {
     if (sdhc->transfer_read || sdhc->transfer_remaining == 0u)
         return false;
     const size_t byte_count = sdhc->transfer_remaining >= 4u ? 4u : sdhc->transfer_remaining;
@@ -360,8 +361,8 @@ static bool writable(uint32_t register_offset) {
            register_offset == SDHC_VENDOR || register_offset == SDHC_MMCBOOT;
 }
 
-bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
-                   uint32_t* read_value) {
+bool kinetis_sdhc_read(KinetisSdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                       uint32_t* read_value) {
     if (sdhc == NULL || read_value == NULL || !sdhc->clock_enabled || access_size != 4u ||
         register_address < SDHC_BASE || register_address - SDHC_BASE > SDHC_HOSTVER ||
         ((register_address - SDHC_BASE) & 3u) != 0u)
@@ -376,8 +377,8 @@ bool k22_sdhc_read(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size
     return true;
 }
 
-bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_size,
-                    uint32_t write_value) {
+bool kinetis_sdhc_write(KinetisSdhc* sdhc, uint32_t register_address, uint8_t access_size,
+                        uint32_t write_value) {
     if (sdhc == NULL || !sdhc->clock_enabled || access_size != 4u || register_address < SDHC_BASE ||
         register_address - SDHC_BASE > SDHC_HOSTVER || ((register_address - SDHC_BASE) & 3u) != 0u)
         return false;
@@ -396,7 +397,7 @@ bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_siz
     }
     if (register_offset == SDHC_SYSCTL && (write_value & 0x07000000u) != 0u) {
         const bool clock_enabled = sdhc->clock_enabled;
-        k22_sdhc_reset(sdhc);
+        kinetis_sdhc_reset(sdhc);
         sdhc->clock_enabled = clock_enabled;
         *register_pointer(sdhc, register_offset) = write_value & 0x000fffffu;
         return true;
@@ -407,7 +408,7 @@ bool k22_sdhc_write(K22Sdhc* sdhc, uint32_t register_address, uint8_t access_siz
     return true;
 }
 
-bool k22_sdhc_irq(const K22Sdhc* sdhc) {
+bool kinetis_sdhc_irq(const KinetisSdhc* sdhc) {
     if (sdhc == NULL || !sdhc->clock_enabled)
         return false;
     return (*const_register_pointer(sdhc, SDHC_IRQSTAT) &

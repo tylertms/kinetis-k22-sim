@@ -11,18 +11,18 @@
 #include "test.h"
 
 typedef struct {
-    K22ProfileId profile;
-    K22PackageId package;
+    KinetisProfile profile;
+    KinetisPackage package;
 } ProfileFixture;
 
 static const ProfileFixture fixtures[] = {
-    {K22_PROFILE_MK22F12810, K22_PACKAGE_DC_121_XFBGA},
-    {K22_PROFILE_MKV30F12810, K22_PACKAGE_LH_64_LQFP},
-    {K22_PROFILE_MK22FN12812, K22_PACKAGE_AH_64_WLCSP},
-    {K22_PROFILE_MK22FN25612, K22_PACKAGE_DC_121_XFBGA},
-    {K22_PROFILE_MK22FN51212, K22_PACKAGE_DC_121_XFBGA},
-    {K22_PROFILE_MK22FN1M012, K22_PACKAGE_LQ_144_LQFP},
-    {K22_PROFILE_MK22FX51212, K22_PACKAGE_LQ_144_LQFP},
+    {KINETIS_PROFILE_MK22F12810, KINETIS_PACKAGE_DC_121_XFBGA},
+    {KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_LH_64_LQFP},
+    {KINETIS_PROFILE_MK22FN12812, KINETIS_PACKAGE_AH_64_WLCSP},
+    {KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_DC_121_XFBGA},
+    {KINETIS_PROFILE_MK22FN51212, KINETIS_PACKAGE_DC_121_XFBGA},
+    {KINETIS_PROFILE_MK22FN1M012, KINETIS_PACKAGE_LQ_144_LQFP},
+    {KINETIS_PROFILE_MK22FX51212, KINETIS_PACKAGE_LQ_144_LQFP},
 };
 
 static const uint8_t flash_configuration[16] = {
@@ -35,7 +35,7 @@ static uint32_t width_mask(uint8_t width) {
 }
 
 static Kinetis* create_device(TestState* state, const ProfileFixture* fixture) {
-    const K22Profile* profile = k22_profile_get(fixture->profile);
+    const KinetisDeviceProfile* profile = kinetis_profile_get(fixture->profile);
     expect(state, profile != NULL, "profile != NULL");
     KinetisConfiguration configuration = kinetis_default_configuration();
     configuration.profile = fixture->profile;
@@ -63,20 +63,20 @@ static Kinetis* create_device(TestState* state, const ProfileFixture* fixture) {
     return device;
 }
 
-static void report_mismatch(const K22RegisterDescriptor* descriptor, const char* field,
+static void report_mismatch(const KinetisRegisterDescriptor* descriptor, const char* field,
                             uint32_t actual, uint32_t expected) {
     fprintf(stderr, "register 0x%08lx width %u has %s 0x%08lx, expected 0x%08lx\n",
             (unsigned long)descriptor->address, descriptor->width, field, (unsigned long)actual,
             (unsigned long)expected);
 }
 
-static const K22RegisterDescriptor*
-widest_covering_descriptor(const K22RegisterManifest* manifest,
-                           const K22RegisterDescriptor* descriptor) {
-    const K22RegisterDescriptor* widest = descriptor;
+static const KinetisRegisterDescriptor*
+widest_covering_descriptor(const KinetisRegisterManifest* manifest,
+                           const KinetisRegisterDescriptor* descriptor) {
+    const KinetisRegisterDescriptor* widest = descriptor;
     const uint32_t end = descriptor->address + descriptor->width / 8u;
     for (size_t index = 0u; index < manifest->register_count; index++) {
-        const K22RegisterDescriptor* candidate = &manifest->registers[index];
+        const KinetisRegisterDescriptor* candidate = &manifest->registers[index];
         const uint32_t candidate_end = candidate->address + candidate->width / 8u;
         if (candidate->peripheral_index == descriptor->peripheral_index &&
             candidate->address <= descriptor->address && candidate_end >= end &&
@@ -86,11 +86,11 @@ widest_covering_descriptor(const K22RegisterManifest* manifest,
     return widest;
 }
 
-static uint32_t expected_reset_value(const K22RegisterManifest* manifest,
-                                     const K22RegisterDescriptor* descriptor) {
+static uint32_t expected_reset_value(const KinetisRegisterManifest* manifest,
+                                     const KinetisRegisterDescriptor* descriptor) {
     const uint32_t offset = descriptor->address - 0x40020000u;
-    if (offset == 1u && (manifest->profile == K22_PROFILE_MK22FN1M012 ||
-                         manifest->profile == K22_PROFILE_MK22FX51212))
+    if (offset == 1u && (manifest->profile == KINETIS_PROFILE_MK22FN1M012 ||
+                         manifest->profile == KINETIS_PROFILE_MK22FX51212))
         return 2u;
     if (offset == 2u)
         return flash_configuration[12];
@@ -102,20 +102,20 @@ static uint32_t expected_reset_value(const K22RegisterManifest* manifest,
         return flash_configuration[14];
     if (offset == 0x17u)
         return flash_configuration[15];
-    const K22RegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
+    const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
     return widest->reset_value >> ((descriptor->address - widest->address) * 8u);
 }
 
-static bool uses_flash_configuration(const K22RegisterDescriptor* descriptor) {
+static bool uses_flash_configuration(const KinetisRegisterDescriptor* descriptor) {
     const uint32_t offset = descriptor->address - 0x40020000u;
     return offset == 2u || offset == 3u || (offset >= 0x10u && offset <= 0x13u) ||
            offset == 0x16u || offset == 0x17u;
 }
 
 static void expect_reset_read(TestState* state, Kinetis* device,
-                              const K22RegisterManifest* manifest,
-                              const K22RegisterDescriptor* descriptor) {
-    if (descriptor->address < K22_PERIPHERAL_BASE) {
+                              const KinetisRegisterManifest* manifest,
+                              const KinetisRegisterDescriptor* descriptor) {
+    if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
         return;
     }
     expect(state, kinetis_reset(device), "kinetis_reset(device)");
@@ -127,7 +127,7 @@ static void expect_reset_read(TestState* state, Kinetis* device,
     const uint8_t size = (uint8_t)(descriptor->width / 8u);
     uint32_t actual = UINT32_MAX;
     const bool read = kinetis_read(device, descriptor->address, &actual, size);
-    const bool readable = (descriptor->access & K22_REGISTER_ACCESS_READ) != 0u;
+    const bool readable = (descriptor->access & KINETIS_REGISTER_ACCESS_READ) != 0u;
     if (read != readable) {
         report_mismatch(descriptor, "read access", read, readable);
     }
@@ -136,7 +136,7 @@ static void expect_reset_read(TestState* state, Kinetis* device,
         return;
     }
     actual &= width_mask(descriptor->width);
-    const K22RegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
+    const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
     const uint32_t reset_mask =
         uses_flash_configuration(descriptor)
             ? width_mask(descriptor->width)
@@ -150,8 +150,8 @@ static void expect_reset_read(TestState* state, Kinetis* device,
 }
 
 static void expect_declared_writes(TestState* state, Kinetis* device,
-                                   const K22RegisterDescriptor* descriptor) {
-    if (descriptor->address < K22_PERIPHERAL_BASE) {
+                                   const KinetisRegisterDescriptor* descriptor) {
+    if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
         return;
     }
     const uint8_t size = (uint8_t)(descriptor->width / 8u);
@@ -165,23 +165,23 @@ static void expect_declared_writes(TestState* state, Kinetis* device,
     }
 }
 
-static bool descriptor_covers(const K22RegisterDescriptor* descriptor, uint32_t address) {
+static bool descriptor_covers(const KinetisRegisterDescriptor* descriptor, uint32_t address) {
     const uint32_t size = descriptor->width / 8u;
     return address >= descriptor->address && address < descriptor->address + size;
 }
 
 static void expect_reserved_gaps(TestState* state, Kinetis* device,
-                                 const K22RegisterManifest* manifest) {
+                                 const KinetisRegisterManifest* manifest) {
     for (size_t index = 0u; index + 1u < manifest->register_count; index++) {
-        const K22RegisterDescriptor* current = &manifest->registers[index];
-        const K22RegisterDescriptor* next = &manifest->registers[index + 1u];
+        const KinetisRegisterDescriptor* current = &manifest->registers[index];
+        const KinetisRegisterDescriptor* next = &manifest->registers[index + 1u];
         const uint32_t address = current->address + current->width / 8u;
-        if (address >= next->address || address < K22_PERIPHERAL_BASE ||
+        if (address >= next->address || address < KINETIS_PERIPHERAL_BASE ||
             descriptor_covers(current, address)) {
             continue;
         }
-        K22PeripheralLocation location;
-        if (!k22_profile_resolve_peripheral(device->profile, address, 1u, &location)) {
+        KinetisPeripheralLocation location;
+        if (!kinetis_profile_resolve_peripheral(device->profile, address, 1u, &location)) {
             continue;
         }
         uint8_t value = 0u;
@@ -197,7 +197,7 @@ static void expect_profile(TestState* state, const ProfileFixture* fixture) {
     if (device == NULL) {
         return;
     }
-    const K22RegisterManifest* manifest = k22_register_manifest_get(fixture->profile);
+    const KinetisRegisterManifest* manifest = kinetis_register_manifest_get(fixture->profile);
     expect(state, manifest != NULL, "manifest != NULL");
     if (manifest != NULL) {
         for (size_t index = 0u; index < manifest->register_count; index++) {

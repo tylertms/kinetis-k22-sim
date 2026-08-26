@@ -1,8 +1,8 @@
 #include "internal.h"
 
-static uint32_t advance_pit_channel_ticks(K22Timing* timing, uint8_t pit_channel,
+static uint32_t advance_pit_channel_ticks(KinetisTiming* timing, uint8_t pit_channel,
                                           uint64_t elapsed_ticks) {
-    K22PitChannel* pit_channel_state = &timing->pit[pit_channel];
+    KinetisPitChannel* pit_channel_state = &timing->pit[pit_channel];
     if ((pit_channel_state->control & 1u) == 0 || elapsed_ticks == 0) {
         return 0;
     }
@@ -20,23 +20,23 @@ static uint32_t advance_pit_channel_ticks(K22Timing* timing, uint8_t pit_channel
             pit_channel_state->load - (uint32_t)(elapsed_ticks % reload_period);
         pit_channel_state->flag = true;
         if ((pit_channel_state->control & 2u) != 0) {
-            k22_timing_internal_set_irq(timing, IRQ_PIT0 + pit_channel, true);
+            kinetis_timing_internal_set_irq(timing, IRQ_PIT0 + pit_channel, true);
         }
-        k22_timing_internal_trigger_dma(timing, pit_channel);
-        k22_timing_internal_trigger_adc_alternate(timing, (uint8_t)(4u + pit_channel));
+        kinetis_timing_internal_trigger_dma(timing, pit_channel);
+        kinetis_timing_internal_trigger_adc_alternate(timing, (uint8_t)(4u + pit_channel));
     } else {
         pit_channel_state->current -= (uint32_t)elapsed_ticks;
     }
     return expiration_count;
 }
 
-void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
-    if (!k22_timing_internal_has(timing, K22_PERIPHERAL_PIT) ||
+void kinetis_timing_internal_advance_pit(KinetisTiming* timing, uint32_t cycles) {
+    if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PIT) ||
         (timing->sim_scgc6 & (1u << 23u)) == 0 || (timing->pit_mcr & 2u) != 0 ||
         ((timing->pit_mcr & 1u) != 0u && timing->debug_halted)) {
         return;
     }
-    const uint64_t elapsed_ticks = k22_timing_internal_clock_ticks(
+    const uint64_t elapsed_ticks = kinetis_timing_internal_clock_ticks(
         &timing->pit_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
     uint64_t chained_ticks = elapsed_ticks;
 
@@ -48,8 +48,8 @@ void k22_timing_internal_advance_pit(K22Timing* timing, uint32_t cycles) {
     }
 }
 
-bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uint8_t size,
-                                  uint32_t* output_value) {
+bool kinetis_timing_internal_pit_read(const KinetisTiming* timing, uint32_t address, uint8_t size,
+                                      uint32_t* output_value) {
     if (size != 4) {
         return false;
     }
@@ -79,8 +79,8 @@ bool k22_timing_internal_pit_read(const K22Timing* timing, uint32_t address, uin
     }
 }
 
-bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t size,
-                                   uint32_t write_value) {
+bool kinetis_timing_internal_pit_write(KinetisTiming* timing, uint32_t address, uint8_t size,
+                                       uint32_t write_value) {
     if (size != 4) {
         return false;
     }
@@ -97,19 +97,19 @@ bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t 
         timing->pit[channel].load = write_value;
         return true;
     case 8: {
-        K22PitChannel* pit = &timing->pit[channel];
+        KinetisPitChannel* pit = &timing->pit[channel];
         const bool was_enabled = (pit->control & 1u) != 0u;
         pit->control = write_value & (channel == 0u ? 3u : 7u);
         if (!was_enabled && (pit->control & 1u) != 0u)
             pit->current = pit->load;
-        k22_timing_internal_set_irq(timing, IRQ_PIT0 + channel,
-                                    pit->flag && (pit->control & 2u) != 0u);
+        kinetis_timing_internal_set_irq(timing, IRQ_PIT0 + channel,
+                                        pit->flag && (pit->control & 2u) != 0u);
         return true;
     }
     case 12:
         if ((write_value & 1u) != 0) {
             timing->pit[channel].flag = false;
-            k22_timing_internal_set_irq(timing, IRQ_PIT0 + channel, false);
+            kinetis_timing_internal_set_irq(timing, IRQ_PIT0 + channel, false);
         }
         return true;
     default:
@@ -117,7 +117,7 @@ bool k22_timing_internal_pit_write(K22Timing* timing, uint32_t address, uint8_t 
     }
 }
 
-static uint32_t lptmr_clock_hz(const K22Timing* timing) {
+static uint32_t lptmr_clock_hz(const KinetisTiming* timing) {
     switch (timing->lptmr_psr & 3u) {
     case 0:
         return (timing->mcg[1] & 1u) != 0 ? timing->fast_irc_hz : timing->slow_irc_hz;
@@ -130,12 +130,12 @@ static uint32_t lptmr_clock_hz(const K22Timing* timing) {
     }
 }
 
-static bool is_lptmr_running(const K22Timing* timing) {
-    return k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0) &&
+static bool is_lptmr_running(const KinetisTiming* timing) {
+    return kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_LPTMR0) &&
            (timing->sim_scgc5 & 1u) != 0 && (timing->lptmr_csr & 1u) != 0;
 }
 
-bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing) {
+bool kinetis_timing_internal_lptmr_selected_active(const KinetisTiming* timing) {
     const uint8_t input_index = (uint8_t)((timing->lptmr_csr >> 4u) & 3u);
     if (input_index >= 3u)
         return false;
@@ -143,7 +143,7 @@ bool k22_timing_internal_lptmr_selected_active(const K22Timing* timing) {
     return (timing->lptmr_csr & 8u) == 0 ? input_high : !input_high;
 }
 
-static void advance_lptmr_counter(K22Timing* timing, uint64_t ticks) {
+static void advance_lptmr_counter(KinetisTiming* timing, uint64_t ticks) {
     if (ticks == 0)
         return;
     const uint32_t compare = timing->lptmr_cmr & 0xffffu;
@@ -153,8 +153,8 @@ static void advance_lptmr_counter(K22Timing* timing, uint64_t ticks) {
         if (accumulated_ticks >= period) {
             timing->lptmr_csr |= 0x80u;
             if ((timing->lptmr_csr & 0x40u) != 0)
-                k22_timing_internal_set_irq(timing, IRQ_LPTMR, true);
-            k22_timing_internal_trigger_adc_alternate(timing, 14u);
+                kinetis_timing_internal_set_irq(timing, IRQ_LPTMR, true);
+            kinetis_timing_internal_trigger_adc_alternate(timing, 14u);
         }
         timing->lptmr_counter = (uint16_t)(accumulated_ticks % period);
         return;
@@ -163,19 +163,19 @@ static void advance_lptmr_counter(K22Timing* timing, uint64_t ticks) {
     if (ticks >= distance) {
         timing->lptmr_csr |= 0x80u;
         if ((timing->lptmr_csr & 0x40u) != 0)
-            k22_timing_internal_set_irq(timing, IRQ_LPTMR, true);
-        k22_timing_internal_trigger_adc_alternate(timing, 14u);
+            kinetis_timing_internal_set_irq(timing, IRQ_LPTMR, true);
+        kinetis_timing_internal_trigger_adc_alternate(timing, 14u);
     }
     timing->lptmr_counter = (uint16_t)((uint64_t)timing->lptmr_counter + ticks);
 }
 
-static void sample_lptmr_filter(K22Timing* timing, uint32_t cycles) {
+static void sample_lptmr_filter(KinetisTiming* timing, uint32_t cycles) {
     const uint8_t prescale = (uint8_t)((timing->lptmr_psr >> 3u) & 15u);
     if (prescale == 0u)
         return;
-    const uint64_t samples = k22_timing_internal_clock_ticks(
+    const uint64_t samples = kinetis_timing_internal_clock_ticks(
         &timing->lptmr_filter_remainder, cycles, lptmr_clock_hz(timing), timing->core_clock_hz);
-    const bool active = k22_timing_internal_lptmr_selected_active(timing);
+    const bool active = kinetis_timing_internal_lptmr_selected_active(timing);
     if (active == timing->lptmr_observed_active) {
         timing->lptmr_filter_ticks = 0u;
         return;
@@ -192,7 +192,7 @@ static void sample_lptmr_filter(K22Timing* timing, uint32_t cycles) {
         advance_lptmr_counter(timing, 1u);
 }
 
-void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles) {
+void kinetis_timing_internal_advance_lptmr(KinetisTiming* timing, uint32_t cycles) {
     if (!is_lptmr_running(timing)) {
         return;
     }
@@ -205,20 +205,20 @@ void k22_timing_internal_advance_lptmr(K22Timing* timing, uint32_t cycles) {
     if ((timing->lptmr_psr & 4u) == 0) {
         source_hz >>= ((timing->lptmr_psr >> 3u) & 15u) + 1u;
     }
-    const uint64_t ticks = k22_timing_internal_clock_ticks(&timing->lptmr_remainder, cycles,
-                                                           source_hz, timing->core_clock_hz);
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&timing->lptmr_remainder, cycles,
+                                                               source_hz, timing->core_clock_hz);
     advance_lptmr_counter(timing, ticks);
 }
 
-bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input_index, bool input_high) {
+bool kinetis_timing_set_lptmr_input(KinetisTiming* timing, uint8_t input_index, bool input_high) {
     if (timing == NULL || timing->profile == NULL || input_index >= 3u ||
-        !k22_timing_internal_has(timing, K22_PERIPHERAL_LPTMR0))
+        !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_LPTMR0))
         return false;
     timing->lptmr_input[input_index] = input_high;
     if (!is_lptmr_running(timing) || (timing->lptmr_csr & 2u) == 0 ||
         (timing->lptmr_psr & 4u) == 0 || ((timing->lptmr_csr >> 4u) & 3u) != input_index)
         return true;
-    const bool active = k22_timing_internal_lptmr_selected_active(timing);
+    const bool active = kinetis_timing_internal_lptmr_selected_active(timing);
     if (active != timing->lptmr_observed_active) {
         timing->lptmr_observed_active = active;
         if (active)
@@ -227,24 +227,24 @@ bool k22_timing_set_lptmr_input(K22Timing* timing, uint8_t input_index, bool inp
     return true;
 }
 
-uint32_t k22_timing_internal_rtc_access_reset(const K22Timing* timing) {
-    return timing->profile->id == K22_PROFILE_MK22FN1M012 ||
-                   timing->profile->id == K22_PROFILE_MK22FX51212
+uint32_t kinetis_timing_internal_rtc_access_reset(const KinetisTiming* timing) {
+    return timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
+                   timing->profile->id == KINETIS_PROFILE_MK22FX51212
                ? 0xffffu
                : 0xffu;
 }
 
-void k22_timing_internal_update_rtc_irq(const K22Timing* timing) {
+void kinetis_timing_internal_update_rtc_irq(const KinetisTiming* timing) {
     const uint32_t enabled_flags = timing->rtc_ier & timing->rtc_sr & 7u;
-    k22_timing_internal_set_irq(timing, IRQ_RTC, enabled_flags != 0u);
+    kinetis_timing_internal_set_irq(timing, IRQ_RTC, enabled_flags != 0u);
 }
 
-static uint32_t rtc_second_ticks(const K22Timing* timing) {
+static uint32_t rtc_second_ticks(const KinetisTiming* timing) {
     const int8_t compensation = (int8_t)(timing->rtc_tcr >> 16u);
     return (uint32_t)(32768 - compensation);
 }
 
-static void rtc_complete_second(K22Timing* timing) {
+static void rtc_complete_second(KinetisTiming* timing) {
     const uint8_t interval_counter = (uint8_t)(timing->rtc_tcr >> 24u);
     if (interval_counter == 0u) {
         timing->rtc_tcr = (timing->rtc_tcr & 0xffffu) | ((timing->rtc_tcr & 0xff00u) << 16u) |
@@ -261,22 +261,23 @@ static void rtc_complete_second(K22Timing* timing) {
     } else {
         timing->rtc_tsr++;
     }
-    k22_timing_internal_trigger_adc_alternate(timing, 13u);
-    k22_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, (timing->rtc_ier & 0x10u) != 0u);
-    k22_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, false);
+    kinetis_timing_internal_trigger_adc_alternate(timing, 13u);
+    kinetis_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, (timing->rtc_ier & 0x10u) != 0u);
+    kinetis_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, false);
     if (timing->rtc_tsr == timing->rtc_tar) {
         timing->rtc_sr |= 4u;
-        k22_timing_internal_trigger_adc_alternate(timing, 12u);
+        kinetis_timing_internal_trigger_adc_alternate(timing, 12u);
     }
-    k22_timing_internal_update_rtc_irq(timing);
+    kinetis_timing_internal_update_rtc_irq(timing);
 }
 
-void k22_timing_internal_advance_rtc(K22Timing* timing, uint32_t cycles) {
-    if (!k22_timing_internal_has(timing, K22_PERIPHERAL_RTC) || (timing->rtc_cr & 0x100u) == 0u ||
-        (timing->rtc_sr & 0x10u) == 0 || (timing->rtc_sr & 3u) != 0) {
+void kinetis_timing_internal_advance_rtc(KinetisTiming* timing, uint32_t cycles) {
+    if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC) ||
+        (timing->rtc_cr & 0x100u) == 0u || (timing->rtc_sr & 0x10u) == 0 ||
+        (timing->rtc_sr & 3u) != 0) {
         return;
     }
-    const uint64_t ticks = k22_timing_internal_clock_ticks(
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(
         &timing->rtc_remainder, cycles, timing->rtc_oscillator_hz, timing->core_clock_hz);
     uint64_t remaining = ticks;
     while (remaining != 0u && (timing->rtc_sr & 2u) == 0u) {
@@ -300,7 +301,7 @@ static uint32_t pdb_divider(uint32_t sc) {
     return (1u << ((sc >> 12u) & 7u)) * multipliers[(sc >> 2u) & 3u];
 }
 
-bool k22_timing_internal_pdb_auxiliary_offset(uint32_t offset) {
+bool kinetis_timing_internal_pdb_auxiliary_offset(uint32_t offset) {
     return (offset >= 0x10u && offset <= 0x1cu && (offset & 3u) == 0) ||
            (offset >= 0x38u && offset <= 0x44u && (offset & 3u) == 0) ||
            (offset >= 0x150u && offset <= 0x15cu && (offset & 3u) == 0) ||
@@ -317,14 +318,14 @@ static bool counter_reached(uint16_t start_counter, uint64_t ticks, uint32_t per
     return ticks >= distance;
 }
 
-void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
-    if (!k22_timing_internal_has(timing, K22_PERIPHERAL_PDB0) ||
+void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles) {
+    if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PDB0) ||
         (timing->sim_scgc6 & (1u << 22u)) == 0 || (timing->pdb_sc & 1u) == 0) {
         return;
     }
     const uint32_t source_hz = timing->bus_clock_hz / pdb_divider(timing->pdb_sc);
-    const uint64_t ticks = k22_timing_internal_clock_ticks(&timing->pdb_remainder, cycles,
-                                                           source_hz, timing->core_clock_hz);
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(&timing->pdb_remainder, cycles,
+                                                               source_hz, timing->core_clock_hz);
     if (ticks == 0) {
         return;
     }
@@ -345,8 +346,8 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
                 counter_reached((uint16_t)(accumulated_ticks - ticks), ticks, (uint32_t)period,
                                 delay)) {
                 timing->pdb_registers[(channel_base + 4u) >> 2u] |= 1u << pretrigger;
-                k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_PDB_ADC, channel,
-                                            pretrigger);
+                kinetis_timing_internal_trigger(timing, KINETIS_TIMING_TRIGGER_PDB_ADC, channel,
+                                                pretrigger);
             }
         }
     }
@@ -358,13 +359,13 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
         if ((control & 1u) != 0 && interval <= timing->pdb_mod &&
             counter_reached((uint16_t)(accumulated_ticks - ticks), ticks, (uint32_t)period,
                             interval)) {
-            k22_timing_internal_trigger(timing, K22_TIMING_TRIGGER_PDB_DAC, instance, 0);
+            kinetis_timing_internal_trigger(timing, KINETIS_TIMING_TRIGGER_PDB_DAC, instance, 0);
         }
     }
     if (delayed) {
         timing->pdb_sc |= 1u << 6u;
         if ((timing->pdb_sc & (1u << 5u)) != 0) {
-            k22_timing_internal_set_irq(timing, IRQ_PDB, true);
+            kinetis_timing_internal_set_irq(timing, IRQ_PDB, true);
         }
     }
     if ((timing->pdb_sc & 2u) == 0 && accumulated_ticks >= period) {
@@ -372,13 +373,13 @@ void k22_timing_internal_advance_pdb(K22Timing* timing, uint32_t cycles) {
     }
 }
 
-bool k22_timing_internal_ftm_location(const K22Timing* timing, uint32_t address, uint8_t* instance,
-                                      uint32_t* offset) {
-    const K22PeripheralId ids[4] = {K22_PERIPHERAL_FTM0, K22_PERIPHERAL_FTM1, K22_PERIPHERAL_FTM2,
-                                    K22_PERIPHERAL_FTM3};
+bool kinetis_timing_internal_ftm_location(const KinetisTiming* timing, uint32_t address,
+                                          uint8_t* instance, uint32_t* offset) {
+    const KinetisPeripheralId ids[4] = {KINETIS_PERIPHERAL_FTM0, KINETIS_PERIPHERAL_FTM1,
+                                        KINETIS_PERIPHERAL_FTM2, KINETIS_PERIPHERAL_FTM3};
     for (uint8_t instance_index = 0; instance_index < 4; instance_index++) {
-        K22PeripheralBlock block;
-        if (k22_profile_peripheral_block(timing->profile, ids[instance_index], &block) &&
+        KinetisPeripheralBlock block;
+        if (kinetis_profile_peripheral_block(timing->profile, ids[instance_index], &block) &&
             address >= block.address && address < block.address + block.size) {
             *instance = instance_index;
             *offset = address - block.address;

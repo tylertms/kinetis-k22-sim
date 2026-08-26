@@ -12,7 +12,7 @@ static void mix(FtmStateCensus* census, uint32_t value) {
     census->fingerprint = (census->fingerprint ^ value) * UINT64_C(1099511628211);
 }
 
-static void configure_case(K22FtmState* ftm, uint32_t selector) {
+static void configure_case(KinetisFtmState* ftm, uint32_t selector) {
     static const uint16_t bounds[] = {0u, 1u, 50u, 100u, 500u, 1000u, UINT16_MAX};
     static const uint32_t channel_modes[] = {0u,    4u,    8u,    0x10u, 0x14u,
                                              0x18u, 0x20u, 0x24u, 0x28u, 0x30u};
@@ -78,10 +78,10 @@ static void configure_case(K22FtmState* ftm, uint32_t selector) {
 int main(void) {
     TestState state = {0u, 0u, 0u};
     FtmStateCensus census = {0u, 0u, UINT64_C(14695981039346656037)};
-    K22Timing timing;
+    KinetisTiming timing;
     expect(&state,
-           k22_timing_init(&timing, k22_profile_get(K22_PROFILE_MK22FN1M012), 16000000u, 32768u,
-                           (K22TimingSignals){0}),
+           kinetis_timing_init(&timing, kinetis_profile_get(KINETIS_PROFILE_MK22FN1M012), 16000000u,
+                               32768u, (KinetisTimingSignals){0}),
            "initialize FTM state census");
     timing.sim_scgc3 = UINT32_MAX;
     timing.sim_scgc6 = UINT32_MAX;
@@ -89,38 +89,40 @@ int main(void) {
     timing.bus_clock_hz = 60000000u;
     for (uint32_t selector = 0u; selector < 100000u; selector++) {
         const uint8_t instance = (uint8_t)(selector & 3u);
-        K22FtmState* ftm = &timing.ftm[instance];
+        KinetisFtmState* ftm = &timing.ftm[instance];
         configure_case(ftm, selector * UINT32_C(2654435761));
         const uint8_t channel =
-            (uint8_t)((selector >> 2u) % k22_timing_internal_ftm_channel_count(&timing, instance));
+            (uint8_t)((selector >> 2u) %
+                      kinetis_timing_internal_ftm_channel_count(&timing, instance));
         const uint8_t input = (uint8_t)((selector >> 6u) & 3u);
         const bool high = (selector & 1u) != 0u;
-        const bool accepted_input = k22_timing_set_ftm_input(&timing, instance, channel, high);
-        const bool accepted_fault = k22_timing_set_ftm_fault(&timing, instance, input, high);
-        const bool accepted_trigger =
-            k22_timing_trigger_ftm_hardware(&timing, instance, (uint8_t)((selector >> 8u) % 3u));
+        const bool accepted_input = kinetis_timing_set_ftm_input(&timing, instance, channel, high);
+        const bool accepted_fault = kinetis_timing_set_ftm_fault(&timing, instance, input, high);
+        const bool accepted_trigger = kinetis_timing_trigger_ftm_hardware(
+            &timing, instance, (uint8_t)((selector >> 8u) % 3u));
         bool output = false;
-        const bool accepted_output = k22_timing_get_ftm_output(&timing, instance, channel, &output);
-        k22_timing_internal_ftm_apply_software_sync(ftm);
-        k22_timing_internal_ftm_update_fault_status(ftm);
-        k22_timing_internal_advance_ftm(&timing, instance, (selector & 0x3ffu) + 1u);
+        const bool accepted_output =
+            kinetis_timing_get_ftm_output(&timing, instance, channel, &output);
+        kinetis_timing_internal_ftm_apply_software_sync(ftm);
+        kinetis_timing_internal_ftm_update_fault_status(ftm);
+        kinetis_timing_internal_advance_ftm(&timing, instance, (selector & 0x3ffu) + 1u);
         census.cases++;
         census.signals += accepted_input + accepted_fault + accepted_trigger + accepted_output;
         mix(&census, accepted_input | (accepted_fault << 1u) | (accepted_trigger << 2u) |
                          (accepted_output << 3u) | (output << 4u));
         mix(&census, ftm->sc ^ ftm->counter ^ ftm->registers[8]);
         mix(&census, ftm->channel_value[channel] ^ ((uint32_t)ftm->channel_output[channel] << 24u));
-        mix(&census, k22_timing_internal_ftm_active_fault_mask(ftm));
-        mix(&census, k22_timing_internal_ftm_output_compare_mode(ftm, channel));
-        mix(&census, k22_timing_internal_ftm_input_capture_mode(ftm, channel));
+        mix(&census, kinetis_timing_internal_ftm_active_fault_mask(ftm));
+        mix(&census, kinetis_timing_internal_ftm_output_compare_mode(ftm, channel));
+        mix(&census, kinetis_timing_internal_ftm_input_capture_mode(ftm, channel));
     }
-    K22Timing incomplete = timing;
+    KinetisTiming incomplete = timing;
     incomplete.profile = NULL;
     bool output = false;
-    mix(&census, k22_timing_set_ftm_input(&incomplete, 0u, 0u, false));
-    mix(&census, k22_timing_set_ftm_fault(&incomplete, 0u, 0u, false));
-    mix(&census, k22_timing_trigger_ftm_hardware(&incomplete, 0u, 0u));
-    mix(&census, k22_timing_get_ftm_output(&incomplete, 0u, 0u, &output));
+    mix(&census, kinetis_timing_set_ftm_input(&incomplete, 0u, 0u, false));
+    mix(&census, kinetis_timing_set_ftm_fault(&incomplete, 0u, 0u, false));
+    mix(&census, kinetis_timing_trigger_ftm_hardware(&incomplete, 0u, 0u));
+    mix(&census, kinetis_timing_get_ftm_output(&incomplete, 0u, 0u, &output));
     expect(&state,
            census.cases == 100000u && census.signals == 400000u &&
                census.fingerprint == UINT64_C(11262719079239042716),

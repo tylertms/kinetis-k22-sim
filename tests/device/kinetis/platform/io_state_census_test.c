@@ -35,15 +35,15 @@ static void mix_fingerprint(IoCensus* census, uint32_t input_value) {
     census->fingerprint = (census->fingerprint ^ input_value) * UINT64_C(1099511628211);
 }
 
-static void record_event(void* context, const K22IoEvent* event) {
+static void record_event(void* context, const KinetisIoEvent* event) {
     IoCensus* census = context;
     census->event_count++;
     mix_fingerprint(census, event->type ^ event->source ^ event->value ^ event->auxiliary);
 }
 
-static void randomize_state(K22Io* io, IoCensus* census, uint32_t random_value) {
-    const uint8_t port = (uint8_t)(random_value % K22_IO_PORT_COUNT);
-    const uint8_t pin = (uint8_t)((random_value >> 8u) % K22_IO_PIN_COUNT);
+static void randomize_state(KinetisIo* io, IoCensus* census, uint32_t random_value) {
+    const uint8_t port = (uint8_t)(random_value % KINETIS_IO_PORT_COUNT);
+    const uint8_t pin = (uint8_t)((random_value >> 8u) % KINETIS_IO_PIN_COUNT);
     const uint32_t next_value = next_random(census);
     io->port_pcr[port][pin] = random_value;
     io->port_isfr[port] = next_value;
@@ -71,12 +71,12 @@ static void randomize_state(K22Io* io, IoCensus* census, uint32_t random_value) 
     io->i2s[(random_value >> 16u) % (sizeof(io->i2s) / sizeof(io->i2s[0]))] = next_value;
     io->i2s[0] = random_value | UINT32_C(0x80000000);
     io->i2s[0x80u / 4u] = next_value | UINT32_C(0x80000000);
-    io->i2s_receive_read = (uint8_t)(random_value % K22_IO_FIFO_CAPACITY);
-    io->i2s_receive_write = (uint8_t)(next_value % K22_IO_FIFO_CAPACITY);
-    io->i2s_receive_count = (uint8_t)(random_value % (K22_IO_FIFO_CAPACITY + 1u));
-    io->i2s_transmit_read = (uint8_t)(next_value % K22_IO_FIFO_CAPACITY);
-    io->i2s_transmit_write = (uint8_t)(random_value % K22_IO_FIFO_CAPACITY);
-    io->i2s_transmit_count = (uint8_t)(next_value % (K22_IO_FIFO_CAPACITY + 1u));
+    io->i2s_receive_read = (uint8_t)(random_value % KINETIS_IO_FIFO_CAPACITY);
+    io->i2s_receive_write = (uint8_t)(next_value % KINETIS_IO_FIFO_CAPACITY);
+    io->i2s_receive_count = (uint8_t)(random_value % (KINETIS_IO_FIFO_CAPACITY + 1u));
+    io->i2s_transmit_read = (uint8_t)(next_value % KINETIS_IO_FIFO_CAPACITY);
+    io->i2s_transmit_write = (uint8_t)(random_value % KINETIS_IO_FIFO_CAPACITY);
+    io->i2s_transmit_count = (uint8_t)(next_value % (KINETIS_IO_FIFO_CAPACITY + 1u));
 
     io->flexbus[(random_value >> 16u) % (sizeof(io->flexbus) / sizeof(io->flexbus[0]))] =
         next_value;
@@ -101,17 +101,17 @@ static uint32_t address_for(uint32_t random_value) {
 int main(void) {
     TestState state = {0u, 0u, 0u};
     IoCensus census = {UINT32_C(0x243f6a88), 0u, 0u, 0u, UINT64_C(14695981039346656037)};
-    K22IoConfiguration configuration =
-        k22_io_default_configuration(k22_profile_get(K22_PROFILE_MK22FN1M012));
-    for (uint8_t port = 0u; port < K22_IO_PORT_COUNT; port++) {
+    KinetisIoConfiguration configuration =
+        kinetis_io_default_configuration(kinetis_profile_get(KINETIS_PROFILE_MK22FN1M012));
+    for (uint8_t port = 0u; port < KINETIS_IO_PORT_COUNT; port++) {
         configuration.package_pin_mask[port] = UINT32_MAX;
     }
     configuration.event_handler = record_event;
     configuration.event_context = &census;
-    K22Io io;
-    expect(&state, k22_io_init(&io, configuration), "initialize I/O state census");
-    for (K22PeripheralId peripheral = 0; peripheral < K22_PERIPHERAL_COUNT; peripheral++) {
-        k22_io_set_clock(&io, peripheral, true);
+    KinetisIo io;
+    expect(&state, kinetis_io_init(&io, configuration), "initialize I/O state census");
+    for (KinetisPeripheralId peripheral = 0; peripheral < KINETIS_PERIPHERAL_COUNT; peripheral++) {
+        kinetis_io_set_clock(&io, peripheral, true);
     }
     for (uint32_t iteration = 0u; iteration < 100000u; iteration++) {
         const uint32_t random_value = next_random(&census);
@@ -119,31 +119,31 @@ int main(void) {
         const uint32_t address = address_for(random_value);
         const uint8_t access_size = (uint8_t)(random_value % 6u);
         uint32_t read_value = UINT32_MAX;
-        const bool read_succeeded = k22_io_read(&io, address, access_size, &read_value);
+        const bool read_succeeded = kinetis_io_read(&io, address, access_size, &read_value);
         const bool write_succeeded =
-            k22_io_write(&io, address, access_size, random_value ^ UINT32_C(0xa5a55a5a));
-        const uint8_t port = (uint8_t)((random_value >> 8u) % K22_IO_PORT_COUNT);
-        const uint8_t pin = (uint8_t)((random_value >> 16u) % K22_IO_PIN_COUNT);
+            kinetis_io_write(&io, address, access_size, random_value ^ UINT32_C(0xa5a55a5a));
+        const uint8_t port = (uint8_t)((random_value >> 8u) % KINETIS_IO_PORT_COUNT);
+        const uint8_t pin = (uint8_t)((random_value >> 16u) % KINETIS_IO_PIN_COUNT);
         const bool pin_drive_succeeded =
-            k22_io_drive_pin(&io, port, pin, (random_value & 1u) != 0u);
-        const bool pin_release_succeeded = k22_io_release_pin(&io, port, pin);
-        K22CanFrame frame = {random_value,
-                             (uint8_t)(random_value % 10u),
-                             {0u},
-                             (random_value & 1u) != 0u,
-                             (random_value & 2u) != 0u};
+            kinetis_io_drive_pin(&io, port, pin, (random_value & 1u) != 0u);
+        const bool pin_release_succeeded = kinetis_io_release_pin(&io, port, pin);
+        KinetisCanFrame frame = {random_value,
+                                 (uint8_t)(random_value % 10u),
+                                 {0u},
+                                 (random_value & 1u) != 0u,
+                                 (random_value & 2u) != 0u};
         frame.data[0] = (uint8_t)random_value;
-        const bool can_receive_succeeded = k22_io_can_receive(&io, &frame);
-        const bool i2s_receive_succeeded = k22_io_i2s_receive(&io, random_value);
+        const bool can_receive_succeeded = kinetis_io_can_receive(&io, &frame);
+        const bool i2s_receive_succeeded = kinetis_io_i2s_receive(&io, random_value);
         uint32_t transmit_sample = 0u;
-        const bool i2s_transmit_succeeded = k22_io_i2s_transmit(&io, &transmit_sample);
-        const bool sysmpu_access_allowed = k22_io_sysmpu_access(
+        const bool i2s_transmit_succeeded = kinetis_io_i2s_transmit(&io, &transmit_sample);
+        const bool sysmpu_access_allowed = kinetis_io_sysmpu_access(
             &io, random_value, (uint8_t)((random_value >> 20u) % 9u), (random_value & 4u) != 0u,
-            (K22SysMpuAccess)((random_value >> 24u) % 4u));
+            (KinetisSysMpuAccess)((random_value >> 24u) % 4u));
         const bool flexbus_transfer_succeeded =
-            k22_io_flexbus_transfer(&io, random_value, access_size, (random_value & 8u) != 0u,
-                                    random_value ^ UINT32_C(0x5a5aa5a5));
-        k22_io_advance(&io, (random_value & 0x7ffu) + 1u);
+            kinetis_io_flexbus_transfer(&io, random_value, access_size, (random_value & 8u) != 0u,
+                                        random_value ^ UINT32_C(0x5a5aa5a5));
+        kinetis_io_advance(&io, (random_value & 0x7ffu) + 1u);
         census.read_successes += read_succeeded;
         census.write_successes += write_succeeded;
         mix_fingerprint(&census, read_value);
@@ -153,8 +153,8 @@ int main(void) {
                             (pin_release_succeeded << 3u) | (can_receive_succeeded << 4u) |
                             (i2s_receive_succeeded << 5u) | (i2s_transmit_succeeded << 6u) |
                             (sysmpu_access_allowed << 7u) | (flexbus_transfer_succeeded << 8u));
-        mix_fingerprint(&census, k22_io_pin_input(&io, port));
-        mix_fingerprint(&census, k22_io_irq_asserted(&io, (uint8_t)(random_value >> 24u)));
+        mix_fingerprint(&census, kinetis_io_pin_input(&io, port));
+        mix_fingerprint(&census, kinetis_io_irq_asserted(&io, (uint8_t)(random_value >> 24u)));
     }
     expect(&state,
            census.read_successes == 7833u && census.write_successes == 6818u &&
