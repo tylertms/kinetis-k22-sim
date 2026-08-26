@@ -42,7 +42,7 @@ static void expect_serial_dma_sources(TestState* state) {
            "kinetis_serial_receive(device, KINETIS_SERIAL_UART5, 0x55u, 0u)");
     expect(state, kinetis_integration_test_read16(device, DMA_HRS, &dma_requests),
            "kinetis_integration_test_read16(device, DMA_HRS, &dma_requests)");
-    expect(state, dma_requests == 1u, "dma_requests == 1u");
+    expect(state, dma_requests == 3u, "dma_requests == 3u");
     kinetis_destroy(device);
 }
 

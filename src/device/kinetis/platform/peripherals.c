@@ -597,8 +597,7 @@ void kinetis_internal_refresh_serial_signals(Kinetis* device) {
         30, 26, 27, 65, 24, 25, 74, 31, 32, 33, 34, 35, 36, 37, 38, 66, 67, 68, 69,
     };
     static const uint8_t dma_sources[KINETIS_SERIAL_DMA_COUNT] = {
-        58, 59, 14, 15, 16, 16, 17, 17, 18, 19,        19,        2,
-        3,  4,  5,  6,  7,  8,  9,  10, 10, UINT8_MAX, UINT8_MAX,
+        58, 59, 14, 15, 16, 16, 17, 17, 18, 19, 19, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11,
     };
     if (device->cpu != NULL) {
         for (uint8_t irq_index = 0; irq_index < KINETIS_SERIAL_IRQ_COUNT; irq_index++) {
