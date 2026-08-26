@@ -321,6 +321,10 @@ static void expect_kv30_adc_inputs(TestState* state) {
            "FM ADC0 channel 14 is absent");
     expect(state, kinetis_package_adc_input_exists(lf, 0u, KINETIS_ADC_MUX_A, 14u),
            "LF ADC0 channel 14 exists");
+    expect(state, !kinetis_package_adc_input_exists(fm, 1u, KINETIS_ADC_MUX_A, 18u),
+           "FM ADC1 channel 18 is absent");
+    expect(state, kinetis_package_adc_input_exists(lf, 1u, KINETIS_ADC_MUX_A, 18u),
+           "LF ADC1 channel 18 exists");
     expect(state, kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_B, 7u),
            "LH ADC1 channel 7B exists");
     const uint8_t internal_channels[] = {26u, 27u, 29u, 30u};
@@ -349,6 +353,41 @@ static void expect_k22_adc_inputs(TestState* state) {
            "LL ADC0 channel 17 exists");
     expect(state, kinetis_package_adc_input_exists(dc, 1u, KINETIS_ADC_MUX_A, 23u),
            "DC ADC1 channel 23 exists");
+
+    profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN12810);
+    const KinetisPackageSelection* ak =
+        kinetis_package_select(profile, KINETIS_PACKAGE_AK_49_WLCSP);
+    expect(state, !kinetis_package_adc_input_exists(ak, 0u, KINETIS_ADC_MUX_A, 0u),
+           "AK ADC0 channel 0 is absent");
+    expect(state, !kinetis_package_adc_input_exists(ak, 1u, KINETIS_ADC_MUX_A, 3u),
+           "AK ADC1 channel 3 is absent");
+
+    profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN12812);
+    const KinetisPackageSelection* ah =
+        kinetis_package_select(profile, KINETIS_PACKAGE_AH_64_WLCSP);
+    expect(state, kinetis_package_adc_input_exists(ah, 0u, KINETIS_ADC_MUX_A, 1u),
+           "AH ADC0 channel 1 exists");
+    expect(state, !kinetis_package_adc_input_exists(ah, 0u, KINETIS_ADC_MUX_A, 3u),
+           "AH ADC0 channel 3 is absent");
+    expect(state, !kinetis_package_adc_input_exists(ah, 1u, KINETIS_ADC_MUX_A, 0u),
+           "AH ADC1 channel 0 is absent");
+
+    profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
+    const KinetisPackageSelection* ap =
+        kinetis_package_select(profile, KINETIS_PACKAGE_AP_80_WLCSP);
+    const KinetisPackageSelection* bp =
+        kinetis_package_select(profile, KINETIS_PACKAGE_BP_80_WLCSP);
+    const KinetisPackageSelection* packages[] = {ap, bp};
+    for (size_t index = 0u; index < sizeof(packages) / sizeof(packages[0]); index++) {
+        expect(state, kinetis_package_adc_input_exists(packages[index], 0u, KINETIS_ADC_MUX_A, 2u),
+               "AP/BP ADC0 channel 2 exists");
+        expect(state, kinetis_package_adc_input_exists(packages[index], 1u, KINETIS_ADC_MUX_A, 1u),
+               "AP/BP ADC1 channel 1 exists");
+        expect(state, !kinetis_package_adc_input_exists(packages[index], 0u, KINETIS_ADC_MUX_A, 3u),
+               "AP/BP ADC0 channel 3 is absent");
+        expect(state, !kinetis_package_adc_input_exists(packages[index], 1u, KINETIS_ADC_MUX_A, 0u),
+               "AP/BP ADC1 channel 0 is absent");
+    }
 }
 
 int main(void) {

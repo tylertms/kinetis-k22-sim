@@ -217,28 +217,28 @@ static bool k22_adc_pin_exists(const KinetisPackageSelection* selection, uint8_t
 
 static bool k22_adc_dedicated_input_exists(const KinetisPackageSelection* selection,
                                            uint8_t instance, uint8_t channel) {
-    const KinetisPackageDescription* package = kinetis_package_selection_package(selection);
-    if (package == NULL)
+    static const KinetisPeripheralId dac_peripherals[2] = {KINETIS_PERIPHERAL_DAC0,
+                                                           KINETIS_PERIPHERAL_DAC1};
+    static const uint32_t inputs[KINETIS_PACKAGE_COUNT][2] = {
+        [KINETIS_PACKAGE_LH_64_LQFP] = {0x00080009u, 0x004c0009u},
+        [KINETIS_PACKAGE_MP_64_MAPBGA] = {0x00080009u, 0x004c0009u},
+        [KINETIS_PACKAGE_AH_64_WLCSP] = {0x00000003u, 0x00040008u},
+        [KINETIS_PACKAGE_LK_80_LQFP] = {0x00080009u, 0x004c0009u},
+        [KINETIS_PACKAGE_AP_80_WLCSP] = {0x00000005u, 0x0004000au},
+        [KINETIS_PACKAGE_BP_80_WLCSP] = {0x00000005u, 0x0004000au},
+        [KINETIS_PACKAGE_FX_88_HVQFN] = {0x00080009u, 0x004c0009u},
+        [KINETIS_PACKAGE_LL_100_LQFP] = {0x0018000fu, 0x005c000bu},
+        [KINETIS_PACKAGE_DC_121_XFBGA] = {0x0079000fu, 0x005d000bu},
+        [KINETIS_PACKAGE_MC_121_MAPBGA] = {0x0079000fu, 0x005d000bu},
+        [KINETIS_PACKAGE_LQ_144_LQFP] = {0x0079000fu, 0x005d000bu},
+        [KINETIS_PACKAGE_MD_144_MAPBGA] = {0x0079000fu, 0x005d000bu},
+        [KINETIS_PACKAGE_AK_49_WLCSP] = {0x00000000u, 0x00040000u},
+    };
+    if (selection == NULL || instance >= 2u)
         return false;
-
-    if (instance == 0u) {
-        if (channel == 0u || channel == 3u || channel == 19u)
-            return true;
-        if (channel == 23u)
-            return kinetis_package_has_peripheral(selection, KINETIS_PERIPHERAL_DAC0);
-        if (channel == 1u || channel == 2u || channel == 20u)
-            return package->terminal_count >= 100u;
-        return (channel == 16u || channel == 21u || channel == 22u) &&
-               package->terminal_count >= 121u;
-    }
-
-    if (channel == 0u || channel == 3u || channel == 18u || channel == 19u || channel == 22u)
-        return true;
     if (channel == 23u)
-        return kinetis_package_has_peripheral(selection, KINETIS_PERIPHERAL_DAC1);
-    if (channel == 1u || channel == 20u)
-        return package->terminal_count >= 100u;
-    return channel == 16u && package->terminal_count >= 121u;
+        return kinetis_package_has_peripheral(selection, dac_peripherals[instance]);
+    return (inputs[selection->package][instance] & (UINT32_C(1) << channel)) != 0u;
 }
 
 static bool k22_adc_input_exists(const KinetisPackageSelection* selection, uint8_t instance,
@@ -261,7 +261,7 @@ bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, 
         static const uint32_t inputs[3][2][KINETIS_ADC_MUX_COUNT] = {
             {{0x6c86f3ffu, 0x000000f0u}, {0x6c84033fu, 0x000000f0u}},
             {{0x6c86f3f7u, 0x000000f0u}, {0x6c04030eu, 0x00000000u}},
-            {{0x6c8683f6u, 0x000000d0u}, {0x6c040306u, 0x00000000u}},
+            {{0x6c8683f6u, 0x000000d0u}, {0x6c000306u, 0x00000000u}},
         };
         const uint8_t package_index = kv30_package_index(selection->package);
         return package_index < 3u &&
