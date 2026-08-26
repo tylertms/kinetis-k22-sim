@@ -92,6 +92,47 @@ static void test_error_replacement(TestState* state, const KinetisDeviceProfile*
     kinetis_data_destroy(data);
 }
 
+static void test_bus_error_progress(TestState* state, const KinetisDeviceProfile* profile) {
+    BusState bus = {0u};
+    KinetisData* data =
+        kinetis_data_create(profile, (KinetisDataBus){&bus, bus_read, bus_write, NULL, NULL, NULL});
+    expect(state, data != NULL, "create DMA for bus error progress");
+    if (data == NULL)
+        return;
+
+    prepare_descriptor(data);
+    uint8_t* descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, 0u, 4u, UINT32_C(0x200000fc));
+    kinetis_data_internal_store_bytes(descriptor, 4u, 2u, 4u);
+    kinetis_data_internal_store_bytes(descriptor, 6u, 2u, UINT32_C(0x0202));
+    kinetis_data_internal_store_bytes(descriptor, 8u, 4u, 8u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x10), 4u, UINT32_C(0x20000000));
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x14), 2u, 4u);
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA reports a source fault after one completed transfer");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == UINT32_C(0x20000100),
+           "source fault preserves completed source progress");
+    expect(state,
+           kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000004),
+           "source fault preserves completed destination progress");
+
+    prepare_descriptor(data);
+    descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, 4u, 2u, 4u);
+    kinetis_data_internal_store_bytes(descriptor, 6u, 2u, UINT32_C(0x0204));
+    kinetis_data_internal_store_bytes(descriptor, 8u, 4u, 16u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x10), 4u, UINT32_C(0x20000100));
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x14), 2u, 16u);
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA reports a destination fault after completing source reads");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == UINT32_C(0x20000010),
+           "destination fault preserves completed source progress");
+    expect(state,
+           kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000100),
+           "destination fault does not advance the failed destination");
+    kinetis_data_destroy(data);
+}
+
 static void test_configuration_errors(TestState* state, const KinetisDeviceProfile* profile) {
     BusState bus = {0u};
     KinetisData* data =
@@ -272,6 +313,7 @@ int main(void) {
     if (profile != NULL) {
         test_missing_bus_callbacks(&state, profile);
         test_error_replacement(&state, profile);
+        test_bus_error_progress(&state, profile);
         test_configuration_errors(&state, profile);
         test_minor_byte_count_formats(&state, profile);
         test_scatter_gather(&state, profile);

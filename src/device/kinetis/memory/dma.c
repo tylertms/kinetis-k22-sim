@@ -336,6 +336,7 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
             source_bytes += source_transfer_size;
             source_address =
                 dma_advance_address(source_address, source_address_delta, source_modulo_bits);
+            kinetis_data_internal_store_bytes(transfer_descriptor, 0u, 4u, source_address);
         }
         if (buffered_bytes < destination_transfer_size ||
             !dma_bus_write_transfer(data, destination_address, destination_transfer_size,
@@ -347,6 +348,7 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         }
         destination_address = dma_advance_address(destination_address, destination_address_delta,
                                                   destination_modulo_bits);
+        kinetis_data_internal_store_bytes(transfer_descriptor, 0x10u, 4u, destination_address);
         destination_bytes += destination_transfer_size;
         buffered_bytes = (uint8_t)(buffered_bytes - destination_transfer_size);
         memmove(transfer_buffer, transfer_buffer + destination_transfer_size, buffered_bytes);
