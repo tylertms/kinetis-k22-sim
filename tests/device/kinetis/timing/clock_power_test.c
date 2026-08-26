@@ -11,6 +11,7 @@ enum {
     LPUART0_DATA = 0x4002a00cu,
     LPTMR0_CSR = 0x40040000u,
     MCG_C1 = 0x40064000u,
+    MCG_C5 = 0x40064004u,
     MCG_C6 = 0x40064005u,
     MCG_S = 0x40064006u,
     SMC_PMPROT = 0x4007e000u,
@@ -85,6 +86,26 @@ int main(void) {
     expect(&state, kinetis_serial_transmit(device, KINETIS_SERIAL_LPUART0, &transmitted_value),
            "selected LPUART source completes transmission");
 
+    kinetis_destroy(device);
+
+    device = kinetis_create(kinetis_default_configuration());
+    expect(&state, device != NULL, "PLL-clocked LPUART device is created");
+    expect(&state, kinetis_test_disable_watchdog(device), "PLL-clocked LPUART watchdog disabled");
+    write_register(&state, device, MCG_C5, 1u, 1u);
+    write_register(&state, device, MCG_C6, 1u, 0x40u);
+    write_register(&state, device, SIM_SOPT2, 4u, (1u << 26u) | (1u << 16u));
+    write_register(&state, device, SIM_SCGC6, 4u,
+                   read_register(&state, device, SIM_SCGC6, 4u) | (1u << 10u));
+    write_register(&state, device, LPUART0_BAUD, 4u, 0x0f000001u);
+    write_register(&state, device, LPUART0_CTRL, 4u, 1u << 19u);
+    write_register(&state, device, LPUART0_DATA, 4u, 0x5au);
+    kinetis_advance(device, 159u);
+    expect(&state, !kinetis_serial_transmit(device, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "PLL-clocked LPUART frame remains active through its penultimate clock");
+    kinetis_advance(device, 1u);
+    expect(&state, kinetis_serial_transmit(device, KINETIS_SERIAL_LPUART0, &transmitted_value),
+           "PLL-clocked LPUART frame completes on its final clock");
+    expect(&state, transmitted_value == 0x5au, "PLL-clocked LPUART transmits its data");
     kinetis_destroy(device);
 
     KinetisConfiguration mkv30_configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);

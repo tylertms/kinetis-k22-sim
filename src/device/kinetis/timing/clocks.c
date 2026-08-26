@@ -67,9 +67,18 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
         return 0u;
     switch ((timing->sim_sopt2 >> 26u) & 3u) {
     case 1u:
-        if (((timing->sim_sopt2 >> 16u) & 3u) == 0u)
+        switch ((timing->sim_sopt2 >> 16u) & 3u) {
+        case 0u:
             return calculate_fll_clock_hz(timing);
-        return ((timing->sim_sopt2 >> 16u) & 3u) == 3u ? 48000000u : 0u;
+        case 1u:
+            return ((timing->mcg[4] | timing->mcg[5]) & 0x40u) != 0u
+                       ? calculate_pll_clock_hz(timing)
+                       : 0u;
+        case 3u:
+            return 48000000u;
+        default:
+            return 0u;
+        }
     case 2u:
         return (timing->osc_cr & 0x80u) != 0u ? timing->external_oscillator_hz : 0u;
     case 3u:
