@@ -61,11 +61,10 @@ uint32_t kinetis_timing_internal_erclk32k_hz(const KinetisTiming* timing) {
     if (timing == NULL)
         return 0u;
     switch ((timing->sim_sopt1 >> 18u) & 3u) {
-    case 0u:
-        return (timing->osc_cr & 0x80u) != 0u && timing->external_oscillator_hz >= 30000u &&
-                       timing->external_oscillator_hz <= 40000u
-                   ? timing->external_oscillator_hz
-                   : 0u;
+    case 0u: {
+        const uint32_t oscillator_hz = kinetis_timing_internal_oscer_clock_hz(timing);
+        return oscillator_hz >= 30000u && oscillator_hz <= 40000u ? oscillator_hz : 0u;
+    }
     case 2u:
         return timing->profile->id != KINETIS_PROFILE_MKV30F12810 && (timing->rtc_cr & 0x100u) != 0u
                    ? timing->rtc_oscillator_hz

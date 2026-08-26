@@ -289,6 +289,20 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     lptmr_source.external_oscillator_hz = 32768u;
     expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
            "ERCLK32K selects an enabled 32 kHz system oscillator");
+    lptmr_source.deep_sleeping = true;
+    lptmr_source.smc[3] = 2u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
+           "K22 ERCLK32K system oscillator stops without EREFSTEN");
+    lptmr_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 0u,
+           "KV30 ERCLK32K system oscillator stops without EREFSTEN");
+    lptmr_source.osc_cr |= 0x20u;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
+           "EREFSTEN keeps the KV30 ERCLK32K system oscillator active in Stop");
+    lptmr_source.profile = timing->profile;
+    expect(state, lptmr_ticks_in_one_second(lptmr_source, 2u) == 32768u,
+           "EREFSTEN keeps the K22 ERCLK32K system oscillator active in Stop");
+    lptmr_source.deep_sleeping = false;
     lptmr_source.external_oscillator_hz = timing->external_oscillator_hz;
     lptmr_source.osc_cr = 0u;
     expect(state, lptmr_ticks_in_one_second(lptmr_source, 3u) == 0u,
