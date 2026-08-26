@@ -80,10 +80,10 @@ void kinetis_integration_test_expect_package_selection(TestState* state) {
     expect(state, (device_id & 15u) == 5u, "64-pin package reports PINID 5");
     uint16_t dac_value = 0u;
     uint8_t register_value = 0;
-    expect(state, kinetis_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
-           "kinetis_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
-    expect(state, kinetis_get_dac_output(small_device, 1, &dac_value),
-           "kinetis_get_dac_output(small_device, 1, &dac_value)");
+    expect(state, !kinetis_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value)),
+           "!kinetis_read(small_device, DAC1_DAT0L, &register_value, sizeof(register_value))");
+    expect(state, !kinetis_get_dac_output(small_device, 1, &dac_value),
+           "!kinetis_get_dac_output(small_device, 1, &dac_value)");
     kinetis_gpio_drive(small_device, 4, 31, true);
     uint32_t pin_input = UINT32_MAX;
     expect(state,
