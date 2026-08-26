@@ -40,6 +40,12 @@ typedef enum {
     KINETIS_PACKAGE_COUNT,
 } KinetisPackage;
 
+typedef enum {
+    KINETIS_ADC_MUX_A,
+    KINETIS_ADC_MUX_B,
+    KINETIS_ADC_MUX_COUNT,
+} KinetisAdcMux;
+
 typedef struct {
     KinetisProfile profile;
     KinetisPackage package;
@@ -152,9 +158,8 @@ void kinetis_watchdog_advance(Kinetis* device, uint32_t ticks);
 uint32_t kinetis_core_clock_hz(const Kinetis* device);
 uint32_t kinetis_bus_clock_hz(const Kinetis* device);
 bool kinetis_next_event(Kinetis* device, KinetisEvent* event);
-bool kinetis_set_adc_channel(Kinetis* device, uint8_t instance, uint8_t channel,
-                             uint16_t sample_value);
-void kinetis_set_adc0_channel(Kinetis* device, uint8_t channel, uint16_t sample_value);
+bool kinetis_set_adc_input(Kinetis* device, uint8_t instance, KinetisAdcMux mux, uint8_t channel,
+                           uint16_t sample_value);
 bool kinetis_set_cmp_input(Kinetis* device, uint8_t instance, uint8_t input_index,
                            uint8_t input_level);
 bool kinetis_set_lptmr_input(Kinetis* device, uint8_t input_index, bool input_high);

@@ -146,8 +146,8 @@ void kinetis_data_test_test_profile_boundaries(TestState* state) {
            "!kinetis_data_read(small, DMAMUX + 4, 1, &value)");
     expect(state, kinetis_data_read(small, DMAMUX + 3, 1, &value),
            "kinetis_data_read(small, DMAMUX + 3, 1, &value)");
-    expect(state, !kinetis_data_set_adc_input(small, 2, 0, 0),
-           "!kinetis_data_set_adc_input(small, 2, 0, 0)");
+    expect(state, !kinetis_data_set_adc_input(small, 2, KINETIS_ADC_MUX_A, 0, 0),
+           "!kinetis_data_set_adc_input(small, 2, KINETIS_ADC_MUX_A, 0, 0)");
     expect(state, !kinetis_data_set_cmp_input(small, 2, 0, 0),
            "!kinetis_data_set_cmp_input(small, 2, 0, 0)");
     kinetis_data_destroy(small);
@@ -517,8 +517,8 @@ void kinetis_data_test_test_adc(TestState* state) {
     expect(state, kinetis_data_test_read_value(state, data, ADC0, 1) == 0x1fu,
            "kinetis_data_test_read_value(state, data, ADC0, 1) == 0x1fu");
     kinetis_data_test_write_value(state, data, ADC0 + 8, 1, 0x0cu);
-    expect(state, kinetis_data_set_adc_input(data, 0, 7, 0x0abcu),
-           "kinetis_data_set_adc_input(data, 0, 7, 0x0abcu)");
+    expect(state, kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 7, 0x0abcu),
+           "kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 7, 0x0abcu)");
     kinetis_data_test_write_value(state, data, ADC0, 1, 7u | 0x40u);
     kinetis_data_advance(data, 5);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) == 0,
@@ -532,8 +532,8 @@ void kinetis_data_test_test_adc(TestState* state) {
            "kinetis_data_test_read_value(state, data, ADC0 + 0x10, 2) == 0x0abcu");
     expect(state, !bus.interrupt[KINETIS_DATA_INTERRUPT_ADC0],
            "!bus.interrupt[KINETIS_DATA_INTERRUPT_ADC0]");
-    expect(state, kinetis_data_set_adc_input(data, 1, 3, 0x0555u),
-           "kinetis_data_set_adc_input(data, 1, 3, 0x0555u)");
+    expect(state, kinetis_data_set_adc_input(data, 1, KINETIS_ADC_MUX_A, 3, 0x0555u),
+           "kinetis_data_set_adc_input(data, 1, KINETIS_ADC_MUX_A, 3, 0x0555u)");
     kinetis_data_test_write_value(state, data, ADC1 + 8, 1, 0x0cu);
     kinetis_data_test_write_value(state, data, ADC1 + 0x20, 1, 0x40u);
     kinetis_data_test_write_value(state, data, ADC1, 1, 3u);
@@ -555,8 +555,8 @@ void kinetis_data_test_test_adc(TestState* state) {
 void kinetis_data_test_test_adc_compare_dma_and_continuous(TestState* state) {
     TestBus bus = {0};
     KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN51212);
-    expect(state, kinetis_data_set_adc_input(data, 0, 1, 100u),
-           "kinetis_data_set_adc_input(data, 0, 1, 100u)");
+    expect(state, kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 1, 100u),
+           "kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 1, 100u)");
     kinetis_data_test_write_value(state, data, ADC0 + 0x18u, 2, 90u);
     kinetis_data_test_write_value(state, data, ADC0 + 0x1cu, 2, 110u);
     kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x28u);

@@ -45,8 +45,14 @@ static bool adc_compare(const KinetisAdc* adc, uint16_t conversion_result) {
                                : conversion_result < compare_value_low;
 }
 
+static KinetisAdcMux adc_mux(const KinetisAdc* adc, uint8_t channel) {
+    if (channel >= 4u && channel <= 7u && (adc->registers[0x0cu] & 0x10u) != 0u)
+        return KINETIS_ADC_MUX_B;
+    return KINETIS_ADC_MUX_A;
+}
+
 static uint16_t adc_result(const KinetisAdc* adc, uint8_t channel) {
-    uint16_t sample_value = adc->inputs[channel];
+    uint16_t sample_value = adc->inputs[adc_mux(adc, channel)][channel];
     const uint8_t conversion_mode = (adc->registers[8] >> 2) & 3u;
     const uint8_t resolution_bits = conversion_mode == 0u   ? 8u
                                     : conversion_mode == 1u ? 12u
@@ -99,8 +105,7 @@ bool kinetis_data_internal_adc_write(KinetisData* data, uint8_t instance, uint32
     const uint32_t register_offset = address - data->adc_base[instance];
     if (!kinetis_data_internal_valid_access(register_offset, byte_count, ADC_REGISTER_SIZE))
         return false;
-    if (register_offset == 0x10u || register_offset == 0x14u || register_offset == 0x0cu ||
-        register_offset == 0x28u)
+    if (register_offset == 0x10u || register_offset == 0x14u || register_offset == 0x28u)
         return false;
     if (register_offset == 0u || register_offset == 4u) {
         const uint8_t conversion_slot = (uint8_t)(register_offset / 4u);

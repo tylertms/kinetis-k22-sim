@@ -102,7 +102,7 @@ void kinetis_data_destroy(KinetisData* data) {
 void kinetis_data_reset(KinetisData* data) {
     if (data == NULL)
         return;
-    uint16_t adc_inputs[2][32];
+    uint16_t adc_inputs[2][KINETIS_ADC_MUX_COUNT][32];
     uint8_t cmp_inputs[3][8];
     for (uint8_t adc_index = 0; adc_index < 2; adc_index++)
         memcpy(adc_inputs[adc_index], data->adc[adc_index].inputs, sizeof(adc_inputs[adc_index]));
@@ -357,11 +357,12 @@ void kinetis_data_adc_pretrigger(KinetisData* data, uint8_t instance, uint8_t pr
         kinetis_data_internal_adc_start(&data->adc[instance], pretrigger);
 }
 
-bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, uint8_t channel,
-                                uint16_t sample_value) {
-    if (data == NULL || instance >= data->adc_count || channel >= 32)
+bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, KinetisAdcMux mux,
+                                uint8_t channel, uint16_t sample_value) {
+    if (data == NULL || instance >= data->adc_count || (unsigned)mux >= KINETIS_ADC_MUX_COUNT ||
+        channel >= 31u || (mux == KINETIS_ADC_MUX_B && (channel < 4u || channel > 7u)))
         return false;
-    data->adc[instance].inputs[channel] = sample_value;
+    data->adc[instance].inputs[mux][channel] = sample_value;
     return true;
 }
 

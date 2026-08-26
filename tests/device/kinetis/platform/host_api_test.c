@@ -72,14 +72,18 @@ static void test_data_api(TestState* state, Kinetis* device) {
     expect(state, !kinetis_set_reset_state(NULL, 0u, false),
            "!kinetis_set_reset_state(NULL, 0u, false)");
 
-    expect(state, kinetis_set_adc_channel(device, 0u, 31u, 0x1234u),
-           "kinetis_set_adc_channel(device, 0u, 31u, 0x1234u)");
-    expect(state, !kinetis_set_adc_channel(device, 2u, 0u, 0u),
-           "!kinetis_set_adc_channel(device, 2u, 0u, 0u)");
-    expect(state, !kinetis_set_adc_channel(NULL, 0u, 0u, 0u),
-           "!kinetis_set_adc_channel(NULL, 0u, 0u, 0u)");
-    kinetis_set_adc0_channel(device, 3u, 0x4567u);
-    kinetis_set_adc0_channel(NULL, 3u, 0u);
+    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 30u, 0x1234u),
+           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 30u, 0x1234u)");
+    expect(state, !kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 31u, 0u),
+           "!kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 31u, 0u)");
+    expect(state, !kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 8u, 0u),
+           "!kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 8u, 0u)");
+    expect(state, !kinetis_set_adc_input(device, 2u, KINETIS_ADC_MUX_A, 0u, 0u),
+           "!kinetis_set_adc_input(device, 2u, KINETIS_ADC_MUX_A, 0u, 0u)");
+    expect(state, !kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_COUNT, 0u, 0u),
+           "!kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_COUNT, 0u, 0u)");
+    expect(state, !kinetis_set_adc_input(NULL, 0u, KINETIS_ADC_MUX_A, 0u, 0u),
+           "!kinetis_set_adc_input(NULL, 0u, KINETIS_ADC_MUX_A, 0u, 0u)");
     expect(state, kinetis_set_cmp_input(device, 1u, 7u, 1u),
            "kinetis_set_cmp_input(device, 1u, 7u, 1u)");
     expect(state, !kinetis_set_cmp_input(device, 3u, 0u, 0u),
@@ -330,6 +334,14 @@ static void test_mkv30_package_and_channels(TestState* state) {
            "MKV30 FTM0 channel 6 does not exist");
     expect(state, !kinetis_get_ftm_output(device, 0u, 7u, &output),
            "MKV30 FTM0 channel 7 does not exist");
+    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 4u, 0x123u),
+           "MKV30 FM32 ADC0 channel 4A exists");
+    expect(state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 4u, 0x456u),
+           "MKV30 FM32 ADC0 channel 4B exists");
+    expect(state, !kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 5u, 0u),
+           "MKV30 FM32 ADC0 channel 5B does not exist");
+    expect(state, !kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 14u, 0u),
+           "MKV30 FM32 ADC0 channel 14 does not exist");
     uint32_t vref_value = 0u;
     expect(state,
            !kinetis_peripheral_read(device, 0x40074000u, 1u, CORTEX_M4_ACCESS_DEBUG, &vref_value),

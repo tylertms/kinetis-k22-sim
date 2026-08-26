@@ -33,6 +33,8 @@ uint8_t kinetis_package_pin_id(const KinetisPackageSelection* selection);
 uint32_t kinetis_package_port_pin_mask(const KinetisPackageSelection* selection, uint8_t port);
 bool kinetis_package_pin_exists(const KinetisPackageSelection* selection, uint8_t port,
                                 uint8_t pin);
+bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, uint8_t instance,
+                                      KinetisAdcMux mux, uint8_t channel);
 bool kinetis_package_has_peripheral(const KinetisPackageSelection* selection,
                                     KinetisPeripheralId peripheral);
 

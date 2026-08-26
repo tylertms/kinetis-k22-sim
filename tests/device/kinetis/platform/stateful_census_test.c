@@ -33,9 +33,9 @@ static void exercise_signal(Kinetis* device, StatefulCensus* census, uint32_t ra
     uint16_t dac_output = 0u;
     switch (random_value % 16u) {
     case 0u:
-        operation_succeeded =
-            kinetis_set_adc_channel(device, (uint8_t)(random_value >> 8u) % 3u,
-                                    (uint8_t)(random_value >> 12u) % 32u, (uint16_t)random_value);
+        operation_succeeded = kinetis_set_adc_input(
+            device, (uint8_t)(random_value >> 8u) % 3u, (KinetisAdcMux)((random_value >> 24u) % 3u),
+            (uint8_t)(random_value >> 12u) % 32u, (uint16_t)random_value);
         break;
     case 1u:
         operation_succeeded =
@@ -155,9 +155,9 @@ int main(void) {
          profile++) {
         exercise_profile(&state, &census, profile);
     }
-    const bool census_matches =
-        census.read_successes == 40615u && census.write_successes == 41344u &&
-        census.signal_count == 101840u && census.fingerprint == UINT64_C(1553916612557823414);
+    const bool census_matches = census.read_successes == 40615u &&
+                                census.write_successes == 41344u && census.signal_count == 96149u &&
+                                census.fingerprint == UINT64_C(2840597531439217600);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32

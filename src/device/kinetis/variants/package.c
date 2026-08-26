@@ -167,6 +167,37 @@ bool kinetis_package_pin_exists(const KinetisPackageSelection* selection, uint8_
            (selection->port_pin_mask[port] & (UINT32_C(1) << pin)) != 0;
 }
 
+static uint8_t kv30_package_index(KinetisPackage package) {
+    switch (package) {
+    case KINETIS_PACKAGE_LH_64_LQFP:
+        return 0u;
+    case KINETIS_PACKAGE_LF_48_LQFP:
+        return 1u;
+    case KINETIS_PACKAGE_FM_32_QFN:
+        return 2u;
+    default:
+        return 3u;
+    }
+}
+
+bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, uint8_t instance,
+                                      KinetisAdcMux mux, uint8_t channel) {
+    if (selection == NULL || instance >= 2u || (unsigned)mux >= KINETIS_ADC_MUX_COUNT ||
+        channel >= 31u || (mux == KINETIS_ADC_MUX_B && (channel < 4u || channel > 7u)))
+        return false;
+    if (selection->profile != KINETIS_PROFILE_MKV30F12810)
+        return true;
+
+    static const uint32_t inputs[3][2][KINETIS_ADC_MUX_COUNT] = {
+        {{0x0086f3ffu, 0x000000f0u}, {0x0084033fu, 0x000000f0u}},
+        {{0x0086f3f7u, 0x000000f0u}, {0x0004030eu, 0x00000000u}},
+        {{0x008683f6u, 0x000000d0u}, {0x00040306u, 0x00000000u}},
+    };
+    const uint8_t package_index = kv30_package_index(selection->package);
+    return package_index < 3u &&
+           (inputs[package_index][instance][mux] & (UINT32_C(1) << channel)) != 0u;
+}
+
 bool kinetis_package_has_peripheral(const KinetisPackageSelection* selection,
                                     KinetisPeripheralId peripheral) {
     if (selection == NULL || (unsigned)peripheral >= KINETIS_PERIPHERAL_COUNT)

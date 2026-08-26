@@ -63,8 +63,8 @@ bool kinetis_data_dma_request(KinetisData* data, uint8_t request_source);
 bool kinetis_data_dma_trigger(KinetisData* data, uint8_t channel);
 void kinetis_data_adc_trigger(KinetisData* data, uint8_t instance);
 void kinetis_data_adc_pretrigger(KinetisData* data, uint8_t instance, uint8_t pretrigger);
-bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, uint8_t channel,
-                                uint16_t sample_value);
+bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, KinetisAdcMux mux,
+                                uint8_t channel, uint16_t sample_value);
 bool kinetis_data_set_cmp_input(KinetisData* data, uint8_t instance, uint8_t input_index,
                                 uint8_t input_level);
 bool kinetis_data_get_cmp_output(const KinetisData* data, uint8_t instance, bool* output_high);

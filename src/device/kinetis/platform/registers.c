@@ -258,9 +258,10 @@ bool kinetis_next_event(Kinetis* device, KinetisEvent* event) {
     return true;
 }
 
-bool kinetis_set_adc_channel(Kinetis* device, uint8_t instance, uint8_t channel,
-                             uint16_t sample_value) {
-    if (device == NULL)
+bool kinetis_set_adc_input(Kinetis* device, uint8_t instance, KinetisAdcMux mux, uint8_t channel,
+                           uint16_t sample_value) {
+    if (device == NULL ||
+        !kinetis_package_adc_input_exists(device->package, instance, mux, channel))
         return false;
-    return kinetis_data_set_adc_input(device->data, instance, channel, sample_value);
+    return kinetis_data_set_adc_input(device->data, instance, mux, channel, sample_value);
 }

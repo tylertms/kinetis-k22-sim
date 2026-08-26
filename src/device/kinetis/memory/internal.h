@@ -28,7 +28,7 @@ enum {
 
 typedef struct {
     uint8_t registers[ADC_REGISTER_SIZE];
-    uint16_t inputs[32];
+    uint16_t inputs[KINETIS_ADC_MUX_COUNT][32];
     uint32_t remaining_cycles;
     uint8_t active_slot;
     bool converting;

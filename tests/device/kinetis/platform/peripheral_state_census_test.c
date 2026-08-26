@@ -122,9 +122,9 @@ int main(void) {
         mix_fingerprint(&census, access_results);
         mix_fingerprint(&census, (uint32_t)device->cmt_cycles ^ device->timing.sim_scgc6);
     }
-    const bool census_matches = census.accepted_accesses == 411342u &&
-                                census.rejected_accesses == 288658u &&
-                                census.fingerprint == UINT64_C(6539320689429548134);
+    const bool census_matches = census.accepted_accesses == 411511u &&
+                                census.rejected_accesses == 288489u &&
+                                census.fingerprint == UINT64_C(18429700810583176930);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " fingerprint=%" PRIu64 "\n",

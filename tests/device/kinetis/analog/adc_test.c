@@ -7,6 +7,7 @@
 enum {
     ADC0_SC1A = 0x4003b000u,
     ADC0_CFG1 = 0x4003b008u,
+    ADC0_CFG2 = 0x4003b00cu,
     ADC0_RA = 0x4003b010u,
     ADC0_SC3 = 0x4003b024u,
     ADC0_PG = 0x4003b02cu,
@@ -35,7 +36,10 @@ int main(void) {
     expect(&state, device != NULL, "device != NULL");
     write32(&state, device, SIM_SCGC6, read32(&state, device, SIM_SCGC6) | (1u << 27));
     write32(&state, device, ADC0_CFG1, 0x0cu);
-    kinetis_set_adc0_channel(device, 7, 0x345u);
+    expect(&state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 7u, 0x345u),
+           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_A, 7u, 0x345u)");
+    expect(&state, kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 7u, 0x678u),
+           "kinetis_set_adc_input(device, 0u, KINETIS_ADC_MUX_B, 7u, 0x678u)");
     write32(&state, device, ADC0_SC1A, 7u | 0x40u);
     kinetis_advance(device, 18u);
     expect(&state, (read32(&state, device, ADC0_SC1A) & 0x80u) != 0,
@@ -47,6 +51,11 @@ int main(void) {
     expect(&state, (read32(&state, device, ADC0_SC1A) & 0x80u) == 0,
            "(read32(&state, device, ADC0_SC1A) & 0x80u) == 0");
     cortex_m4_set_irq(kinetis_cpu(device), ADC0_IRQ, false);
+    write32(&state, device, ADC0_CFG2, 0x10u);
+    write32(&state, device, ADC0_SC1A, 7u);
+    kinetis_advance(device, 18u);
+    expect(&state, read32(&state, device, ADC0_RA) == 0x678u,
+           "read32(&state, device, ADC0_RA) == 0x678u");
     write32(&state, device, ADC0_SC1A, 31u);
     expect(&state, (read32(&state, device, ADC0_SC1A) & 0x80u) == 0,
            "(read32(&state, device, ADC0_SC1A) & 0x80u) == 0");

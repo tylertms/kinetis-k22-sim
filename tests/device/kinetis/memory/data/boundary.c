@@ -60,9 +60,11 @@ void kinetis_data_test_test_api_boundaries(TestState* state) {
     kinetis_data_adc_pretrigger(first, UINT8_MAX, 0u);
     kinetis_data_adc_pretrigger(first, 0u, 2u);
     expect(state,
-           !kinetis_data_set_adc_input(NULL, 0u, 0u, 0u) &&
-               !kinetis_data_set_adc_input(first, UINT8_MAX, 0u, 0u) &&
-               !kinetis_data_set_adc_input(first, 0u, 32u, 0u),
+           !kinetis_data_set_adc_input(NULL, 0u, KINETIS_ADC_MUX_A, 0u, 0u) &&
+               !kinetis_data_set_adc_input(first, UINT8_MAX, KINETIS_ADC_MUX_A, 0u, 0u) &&
+               !kinetis_data_set_adc_input(first, 0u, KINETIS_ADC_MUX_COUNT, 0u, 0u) &&
+               !kinetis_data_set_adc_input(first, 0u, KINETIS_ADC_MUX_A, 31u, 0u) &&
+               !kinetis_data_set_adc_input(first, 0u, KINETIS_ADC_MUX_B, 8u, 0u),
            "invalid ADC inputs are rejected");
     expect(state,
            !kinetis_data_set_cmp_input(NULL, 0u, 0u, 0u) &&

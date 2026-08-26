@@ -93,9 +93,9 @@ void kinetis_data_test_test_state_census(TestState* state) {
         const bool written = kinetis_data_write(data, address, size, random ^ UINT32_C(0xa5a55a5a));
         const bool requested = kinetis_data_dma_request(data, (uint8_t)(random >> 24u));
         const bool triggered = kinetis_data_dma_trigger(data, (uint8_t)((random >> 20u) % 18u));
-        const bool adc =
-            kinetis_data_set_adc_input(data, (uint8_t)((random >> 8u) % 3u),
-                                       (uint8_t)((random >> 16u) % 34u), (uint16_t)random);
+        const bool adc = kinetis_data_set_adc_input(
+            data, (uint8_t)((random >> 8u) % 3u), (KinetisAdcMux)((random >> 24u) % 3u),
+            (uint8_t)((random >> 16u) % 34u), (uint16_t)random);
         const bool cmp =
             kinetis_data_set_cmp_input(data, (uint8_t)((random >> 10u) % 4u),
                                        (uint8_t)((random >> 18u) % 10u), (uint8_t)random);
@@ -117,8 +117,8 @@ void kinetis_data_test_test_state_census(TestState* state) {
         mix(&census, data->dma_requests ^ data->rng_status ^ data->crc_value);
     }
     expect(state,
-           census.reads == 19524u && census.writes == 19053u && census.signals == 86424u &&
-               census.fingerprint == UINT64_C(5457665838010798238),
+           census.reads == 19524u && census.writes == 19097u && census.signals == 66372u &&
+               census.fingerprint == UINT64_C(7330588028485455910),
            "data state census matches");
     kinetis_data_destroy(data);
 }

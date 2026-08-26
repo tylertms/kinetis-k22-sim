@@ -290,6 +290,14 @@ static void expect_fail_closed(TestState* state) {
            "!kinetis_package_pin_exists(selected, KINETIS_PACKAGE_PORT_COUNT, 0)");
     expect(state, !kinetis_package_pin_exists(selected, 0, KINETIS_PACKAGE_PIN_COUNT),
            "!kinetis_package_pin_exists(selected, 0, KINETIS_PACKAGE_PIN_COUNT)");
+    expect(state, !kinetis_package_adc_input_exists(NULL, 0u, KINETIS_ADC_MUX_A, 0u),
+           "!kinetis_package_adc_input_exists(NULL, 0u, KINETIS_ADC_MUX_A, 0u)");
+    expect(state,
+           !kinetis_package_adc_input_exists(selected, 2u, KINETIS_ADC_MUX_A, 0u) &&
+               !kinetis_package_adc_input_exists(selected, 0u, KINETIS_ADC_MUX_COUNT, 0u) &&
+               !kinetis_package_adc_input_exists(selected, 0u, KINETIS_ADC_MUX_A, 31u) &&
+               !kinetis_package_adc_input_exists(selected, 0u, KINETIS_ADC_MUX_B, 8u),
+           "invalid ADC inputs are rejected");
     expect(state, !kinetis_package_has_peripheral(NULL, KINETIS_PERIPHERAL_DMA),
            "!kinetis_package_has_peripheral(NULL, KINETIS_PERIPHERAL_DMA)");
     expect(state, !kinetis_package_has_peripheral(selected, (KinetisPeripheralId)-1),
@@ -298,11 +306,31 @@ static void expect_fail_closed(TestState* state) {
            "!kinetis_package_has_peripheral(selected, KINETIS_PERIPHERAL_COUNT)");
 }
 
+static void expect_kv30_adc_inputs(TestState* state) {
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
+    const KinetisPackageSelection* fm = kinetis_package_select(profile, KINETIS_PACKAGE_FM_32_QFN);
+    const KinetisPackageSelection* lf = kinetis_package_select(profile, KINETIS_PACKAGE_LF_48_LQFP);
+    const KinetisPackageSelection* lh = kinetis_package_select(profile, KINETIS_PACKAGE_LH_64_LQFP);
+    expect(state, kinetis_package_adc_input_exists(fm, 0u, KINETIS_ADC_MUX_A, 4u),
+           "FM ADC0 channel 4A exists");
+    expect(state, kinetis_package_adc_input_exists(fm, 0u, KINETIS_ADC_MUX_B, 4u),
+           "FM ADC0 channel 4B exists");
+    expect(state, !kinetis_package_adc_input_exists(fm, 0u, KINETIS_ADC_MUX_B, 5u),
+           "FM ADC0 channel 5B is absent");
+    expect(state, !kinetis_package_adc_input_exists(fm, 0u, KINETIS_ADC_MUX_A, 14u),
+           "FM ADC0 channel 14 is absent");
+    expect(state, kinetis_package_adc_input_exists(lf, 0u, KINETIS_ADC_MUX_A, 14u),
+           "LF ADC0 channel 14 exists");
+    expect(state, kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_B, 7u),
+           "LH ADC1 channel 7B exists");
+}
+
 int main(void) {
     TestState state = {0};
     expect_package_metadata(&state);
     expect_all_combinations(&state);
     expect_defaults(&state);
     expect_fail_closed(&state);
+    expect_kv30_adc_inputs(&state);
     return test_finish(&state);
 }

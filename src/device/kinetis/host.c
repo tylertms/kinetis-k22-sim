@@ -1,9 +1,5 @@
 #include "device/kinetis/internal.h"
 
-void kinetis_set_adc0_channel(Kinetis* device, uint8_t channel, uint16_t sample_value) {
-    (void)kinetis_set_adc_channel(device, 0, channel, sample_value);
-}
-
 bool kinetis_set_cmp_input(Kinetis* device, uint8_t instance, uint8_t input_index,
                            uint8_t input_level) {
     if (device == NULL)
