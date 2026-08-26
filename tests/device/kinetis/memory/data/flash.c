@@ -486,6 +486,10 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
            "kinetis_data_test_read_fccob(state, data, 6u) == 0u");
     expect(state, kinetis_data_test_read_fccob(state, data, 7u) == 0u,
            "kinetis_data_test_read_fccob(state, data, 7u) == 0u");
+    kinetis_data_test_write_fccob(state, data, 1u, 0xffu);
+    kinetis_data_test_flash_command_without_address(state, data, 0x81u, 40u);
+    expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
+           "MK22FN1M0 rejects Set FlexRAM Function");
     kinetis_data_destroy(data);
 
     memset(&bus, 0, sizeof(bus));

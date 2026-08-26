@@ -329,7 +329,7 @@ static bool flash_program_partition(KinetisData* data) {
 }
 
 static bool flash_set_flexram(KinetisData* data) {
-    if (data->flexram == NULL)
+    if (data->profile->flexnvm_size == 0u)
         return false;
     const uint8_t control = flash_fccob(data, 1u);
     if (control != 0u && control != 0xffu)
