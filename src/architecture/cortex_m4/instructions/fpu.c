@@ -9,6 +9,9 @@
 _Static_assert(FLT_RADIX == 2, "The simulator requires binary floating point");
 _Static_assert(sizeof(float) == 4, "The simulator requires 32-bit float");
 
+#define FPSCR_WRITABLE UINT32_C(0xf7c09f9f)
+#define FLOAT_SIGN UINT32_C(0x80000000)
+
 enum {
     FPSCR_IOC = 1u << 0,
     FPSCR_DZC = 1u << 1,
@@ -20,8 +23,6 @@ enum {
     FPSCR_FZ = 1u << 24,
     FPSCR_DN = 1u << 25,
     FPSCR_AHP = 1u << 26,
-    FPSCR_WRITABLE = 0xf7c09f9fu,
-    FLOAT_SIGN = 1u << 31,
     FLOAT_EXPONENT = 0x7f800000u,
     FLOAT_FRACTION = 0x007fffffu,
     FLOAT_QUIET = 0x00400000u,
