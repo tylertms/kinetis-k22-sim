@@ -2,7 +2,7 @@
 
 #define COUNT(array) (sizeof(array) / sizeof((array)[0]))
 
-static const char* const mk22f12810_peripherals[] = {
+static const char* const mk22fn12810_peripherals[] = {
     "FTFA_FlashConfig",
     "DMA",
     "FMC",
@@ -56,7 +56,7 @@ static const char* const mk22f12810_peripherals[] = {
     "MCM",
 };
 
-static const KinetisRegisterDescriptor mk22f12810_registers[] = {
+static const KinetisRegisterDescriptor mk22fn12810_registers[] = {
     {0x00000400u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 0x00000000u, 0u,
      8u, (KinetisRegisterAccess)1},
     {0x00000401u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 0x00000000u, 0u,
@@ -2045,10 +2045,10 @@ static const KinetisRegisterDescriptor mk22f12810_registers[] = {
      32u, (KinetisRegisterAccess)3},
 };
 
-const KinetisRegisterManifest* kinetis_mk22f12810_register_manifest(void) {
+const KinetisRegisterManifest* kinetis_mk22fn12810_register_manifest(void) {
     static const KinetisRegisterManifest manifest = {
-        KINETIS_PROFILE_MK22F12810,   mk22f12810_registers,          COUNT(mk22f12810_registers),
-        mk22f12810_peripherals,       COUNT(mk22f12810_peripherals), UINT64_C(0xf61e2e5f714e55ac),
+        KINETIS_PROFILE_MK22FN12810,  mk22fn12810_registers,          COUNT(mk22fn12810_registers),
+        mk22fn12810_peripherals,      COUNT(mk22fn12810_peripherals), UINT64_C(0xf61e2e5f714e55ac),
         UINT64_C(0x8b036d005f6d0028),
     };
     return &manifest;

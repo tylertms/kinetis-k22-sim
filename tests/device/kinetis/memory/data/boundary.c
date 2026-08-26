@@ -7,7 +7,7 @@ void kinetis_data_test_test_api_boundaries(TestState* state) {
     static TestBus second_bus;
     KinetisDataBus empty_bus = {0};
     KinetisData* first = kinetis_data_test_create(state, &first_bus, KINETIS_PROFILE_MK22FX51212);
-    KinetisData* second = kinetis_data_test_create(state, &second_bus, KINETIS_PROFILE_MK22F12810);
+    KinetisData* second = kinetis_data_test_create(state, &second_bus, KINETIS_PROFILE_MK22FN12810);
     uint32_t word = 0u;
     uint16_t dac = 0u;
     uint8_t configuration[16] = {0};

@@ -28,7 +28,7 @@ static const KinetisPeripheralBlock mkv30f12810_blocks[] = {
     BLOCK(GPIOE, 0x400ff100u, 0x18u),        BLOCK(MCM, 0xe0080008u, 0x3cu),
 };
 
-static const KinetisPeripheralBlock mk22f12810_blocks[] = {
+static const KinetisPeripheralBlock mk22fn12810_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1080u),
     BLOCK(FMC, 0x4001f000u, 0x300u),         BLOCK(FTFA, 0x40020000u, 0x2cu),
     BLOCK(DMAMUX, 0x40021000u, 0x04u),       BLOCK(ADC1, 0x40027000u, 0x70u),
@@ -169,8 +169,8 @@ static const KinetisPeripheralBlock mk22f12_blocks[] = {
      .maximum_core_clock_hz = clock}
 
 static const KinetisDeviceProfile profiles[KINETIS_PROFILE_COUNT] = {
-    {.id = KINETIS_PROFILE_MK22F12810,
-     .name = "MK22F12810",
+    {.id = KINETIS_PROFILE_MK22FN12810,
+     .name = "MK22FN12810",
      .program_flash_size = 0x20000u,
      .program_flash_block_count = 1u,
      .sram_lower_address = 0x1fffe000u,
@@ -182,8 +182,8 @@ static const KinetisDeviceProfile profiles[KINETIS_PROFILE_COUNT] = {
      .fmc_set_count = 8u,
      .fmc_line_size = 8u,
      .cpu = CPU(100000000u, 86u),
-     .peripheral_blocks = mk22f12810_blocks,
-     .peripheral_block_count = COUNT(mk22f12810_blocks)},
+     .peripheral_blocks = mk22fn12810_blocks,
+     .peripheral_block_count = COUNT(mk22fn12810_blocks)},
     {.id = KINETIS_PROFILE_MKV30F12810,
      .name = "MKV30F12810",
      .program_flash_size = 0x20000u,

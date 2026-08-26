@@ -151,7 +151,7 @@ static void exercise_profile(TestState* state, StatefulCensus* census, KinetisPr
 int main(void) {
     TestState state = {0u, 0u, 0u};
     StatefulCensus census = {UINT32_C(0x6d2b79f5), 0u, 0u, 0u, UINT64_C(14695981039346656037)};
-    for (KinetisProfile profile = KINETIS_PROFILE_MK22F12810; profile < KINETIS_PROFILE_COUNT;
+    for (KinetisProfile profile = KINETIS_PROFILE_MK22FN12810; profile < KINETIS_PROFILE_COUNT;
          profile++) {
         exercise_profile(&state, &census, profile);
     }

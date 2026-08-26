@@ -20,7 +20,7 @@ static void record(TestState* state, CommandCensus* census, KinetisData* data, u
 
 void kinetis_data_test_test_flash_command_census(TestState* state) {
     static const KinetisProfile profiles[] = {
-        KINETIS_PROFILE_MK22F12810,
+        KINETIS_PROFILE_MK22FN12810,
         KINETIS_PROFILE_MK22FX51212,
         KINETIS_PROFILE_MK22FN51212,
         KINETIS_PROFILE_MK22FN1M012,

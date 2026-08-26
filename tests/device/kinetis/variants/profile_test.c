@@ -130,7 +130,7 @@ static void expect_profile(TestState* state, const KinetisExpectedProfile* expec
 }
 
 static void expect_fail_closed(TestState* state) {
-    const KinetisDeviceProfile* small_profile = kinetis_profile_get(KINETIS_PROFILE_MK22F12810);
+    const KinetisDeviceProfile* small_profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN12810);
     const KinetisDeviceProfile* large_profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN1M012);
     expect(state, !kinetis_profile_resolve_peripheral(NULL, 0x40000000u, 4, NULL),
            "!kinetis_profile_resolve_peripheral(NULL, 0x40000000u, 4, NULL)");
@@ -195,7 +195,7 @@ int main(void) {
     expect(&state, kinetis_profile_find("") == NULL, "kinetis_profile_find(\"\") == NULL");
     expect(&state, kinetis_profile_find("MK22FN512VLL12") == NULL,
            "kinetis_profile_find(\"MK22FN512VLL12\") == NULL");
-    KinetisProfile public_profile = KINETIS_PROFILE_MK22F12810;
+    KinetisProfile public_profile = KINETIS_PROFILE_MK22FN12810;
     expect(&state, !kinetis_profile_from_name(NULL, &public_profile),
            "!kinetis_profile_from_name(NULL, &public_profile)");
     expect(&state, !kinetis_profile_from_name("unknown", &public_profile),

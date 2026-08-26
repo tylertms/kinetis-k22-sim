@@ -3,7 +3,7 @@
 
 #include "device/kinetis/variants/manifest.h"
 
-const KinetisRegisterManifest* kinetis_mk22f12810_register_manifest(void);
+const KinetisRegisterManifest* kinetis_mk22fn12810_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mkv30f12810_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mk22fn12812_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mk22fn25612_register_manifest(void);

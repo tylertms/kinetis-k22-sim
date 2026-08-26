@@ -6,8 +6,8 @@
 
 const KinetisRegisterManifest* kinetis_register_manifest_get(KinetisProfile profile) {
     switch (profile) {
-    case KINETIS_PROFILE_MK22F12810:
-        return kinetis_mk22f12810_register_manifest();
+    case KINETIS_PROFILE_MK22FN12810:
+        return kinetis_mk22fn12810_register_manifest();
     case KINETIS_PROFILE_MKV30F12810:
         return kinetis_mkv30f12810_register_manifest();
     case KINETIS_PROFILE_MK22FN12812:

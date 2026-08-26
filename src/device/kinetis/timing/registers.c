@@ -515,7 +515,7 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     timing->lpo_hz = 1000u;
     timing->elapsed_core_cycles = elapsed;
     timing->reset_generation = generation + 1u;
-    timing->sim_sopt1 = timing->profile->id == KINETIS_PROFILE_MK22F12810 ? 0u : 0x80000000u;
+    timing->sim_sopt1 = timing->profile->id == KINETIS_PROFILE_MK22FN12810 ? 0u : 0x80000000u;
     timing->sim_sopt2 = 0x1000u;
     timing->sim_scgc4 = 0xf0100030u;
     timing->sim_scgc5 = 0x00040182u;

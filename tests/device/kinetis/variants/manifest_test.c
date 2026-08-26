@@ -7,8 +7,8 @@
 #include "test.h"
 
 #define KINETIS_EXPECTED_PERIPHERAL(name) name,
-static const char* const mk22f12810_peripherals[] = {
-#include "device/kinetis/variants/expected/mk22f12810_peripherals.def"
+static const char* const mk22fn12810_peripherals[] = {
+#include "device/kinetis/variants/expected/mk22fn12810_peripherals.def"
 };
 static const char* const mk22f25612_peripherals[] = {
 #include "device/kinetis/variants/expected/mk22f25612_peripherals.def"
@@ -31,8 +31,8 @@ static const char* const mkv30f12810_peripherals[] = {
      read_mask,  write_mask,                                                                       \
      w1c_mask,   peripheral_index,                                                                 \
      width,      (KinetisRegisterAccess)access},
-static const KinetisRegisterDescriptor mk22f12810_registers[] = {
-#include "device/kinetis/variants/expected/mk22f12810_registers.def"
+static const KinetisRegisterDescriptor mk22fn12810_registers[] = {
+#include "device/kinetis/variants/expected/mk22fn12810_registers.def"
 };
 static const KinetisRegisterDescriptor mk22f25612_registers[] = {
 #include "device/kinetis/variants/expected/mk22f25612_registers.def"
@@ -235,7 +235,7 @@ static void expect_manifest(TestState* state, KinetisProfile profile,
 
 int main(void) {
     TestState state = {0};
-    expect_manifest(&state, KINETIS_PROFILE_MK22F12810, &expected_manifests[0]);
+    expect_manifest(&state, KINETIS_PROFILE_MK22FN12810, &expected_manifests[0]);
     expect_manifest(&state, KINETIS_PROFILE_MKV30F12810, &expected_manifests[4]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN12812, &expected_manifests[1]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN25612, &expected_manifests[1]);
@@ -251,8 +251,8 @@ int main(void) {
            "kinetis_register_manifest_lookup(KINETIS_PROFILE_COUNT, 0x40000000u, 32u) == NULL");
     expect(&state, !kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_COUNT, "SIM"),
            "!kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_COUNT, \"SIM\")");
-    expect(&state, !kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_MK22F12810, NULL),
-           "!kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_MK22F12810, NULL)");
+    expect(&state, !kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_MK22FN12810, NULL),
+           "!kinetis_register_manifest_has_peripheral(KINETIS_PROFILE_MK22FN12810, NULL)");
     expect(&state, kinetis_register_manifest_peripheral_name(NULL, 0u) == NULL,
            "kinetis_register_manifest_peripheral_name(NULL, 0u) == NULL");
     return test_finish(&state);

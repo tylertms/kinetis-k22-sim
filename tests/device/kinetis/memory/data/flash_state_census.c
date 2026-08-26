@@ -64,7 +64,7 @@ static void randomize_state(KinetisData* data, TestBus* bus, FlashStateCensus* c
 
 void kinetis_data_test_test_flash_state_census(TestState* state) {
     static const KinetisProfile profiles[] = {
-        KINETIS_PROFILE_MK22F12810, KINETIS_PROFILE_MK22FX51212, KINETIS_PROFILE_MK22FN51212,
+        KINETIS_PROFILE_MK22FN12810, KINETIS_PROFILE_MK22FX51212, KINETIS_PROFILE_MK22FN51212,
         KINETIS_PROFILE_MK22FN1M012};
     static const uint8_t commands[] = {0x00u, 0x01u, 0x02u, 0x03u, 0x06u, 0x07u,
                                        0x08u, 0x09u, 0x0bu, 0x40u, 0x41u, 0x43u,

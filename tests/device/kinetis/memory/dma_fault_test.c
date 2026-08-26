@@ -78,7 +78,7 @@ static void test_channel_boundaries(TestState* state, const KinetisDeviceProfile
 
 int main(void) {
     TestState state = {0u, 0u, 0u};
-    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22F12810);
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN12810);
     expect(&state, profile != NULL, "find DMA test profile");
     if (profile != NULL) {
         test_missing_bus_callbacks(&state, profile);

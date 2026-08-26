@@ -136,7 +136,7 @@ static void store_tcd(TestBus* bus, uint32_t base, uint32_t source, int16_t sour
 
 void kinetis_data_test_test_profile_boundaries(TestState* state) {
     TestBus bus = {0};
-    KinetisData* small = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22F12810);
+    KinetisData* small = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN12810);
     uint32_t value = 0;
     expect(state, !kinetis_data_read(small, RNG, 4, &value),
            "!kinetis_data_read(small, RNG, 4, &value)");
@@ -500,7 +500,7 @@ void kinetis_data_test_test_dma_arbitration_and_control(TestState* state) {
     kinetis_data_destroy(data);
 
     memset(&bus, 0, sizeof(bus));
-    KinetisData* small = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22F12810);
+    KinetisData* small = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN12810);
     uint32_t value = 0u;
     expect(state, !kinetis_data_read(small, DMA + 0x104u, 1u, &value),
            "!kinetis_data_read(small, DMA + 0x104u, 1u, &value)");
