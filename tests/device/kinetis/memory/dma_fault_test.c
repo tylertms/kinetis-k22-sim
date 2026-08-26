@@ -11,6 +11,11 @@ typedef struct {
 
 static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* value) {
     BusState* state = context;
+    if (address == UINT32_C(0x7fffffff) && size == 1u) {
+        state->reads++;
+        *value = 0u;
+        return true;
+    }
     if (address < UINT32_C(0x20000000) ||
         address - UINT32_C(0x20000000) > sizeof(state->memory) - size)
         return false;
@@ -214,6 +219,29 @@ static void test_burst_sizes(TestState* state, const KinetisDeviceProfile* profi
     kinetis_data_destroy(data);
 }
 
+static void test_maximum_modulo(TestState* state, const KinetisDeviceProfile* profile) {
+    BusState bus = {0u};
+    KinetisData* data =
+        kinetis_data_create(profile, (KinetisDataBus){&bus, bus_read, bus_write, NULL, NULL, NULL});
+    expect(state, data != NULL, "create DMA for maximum modulo");
+    if (data == NULL)
+        return;
+
+    prepare_descriptor(data);
+    uint8_t* descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, 0u, 4u, UINT32_C(0x7fffffff));
+    kinetis_data_internal_store_bytes(descriptor, 4u, 2u, 1u);
+    kinetis_data_internal_store_bytes(descriptor, 6u, 2u, 31u << 11u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x16), 2u, 2u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x1e), 2u, 2u);
+
+    expect(state, kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA accepts the maximum source modulo");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == 0u,
+           "maximum source modulo wraps at 2 GiB");
+    kinetis_data_destroy(data);
+}
+
 static void test_channel_boundaries(TestState* state, const KinetisDeviceProfile* profile) {
     KinetisData* data = kinetis_data_create(profile, (KinetisDataBus){0});
     expect(state, data != NULL, "create DMA for channel boundaries");
@@ -248,6 +276,7 @@ int main(void) {
         test_minor_byte_count_formats(&state, profile);
         test_scatter_gather(&state, profile);
         test_burst_sizes(&state, profile);
+        test_maximum_modulo(&state, profile);
         test_channel_boundaries(&state, profile);
     }
     return test_finish(&state);

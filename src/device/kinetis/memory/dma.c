@@ -67,7 +67,7 @@ static uint8_t dma_link_channel(uint16_t encoded_control) {
 
 static uint32_t dma_advance_address(uint32_t address, int16_t address_delta, uint8_t modulo_bits) {
     const uint32_t advanced_address = (uint32_t)((int64_t)address + address_delta);
-    if (modulo_bits == 0u || modulo_bits >= 31u)
+    if (modulo_bits == 0u)
         return advanced_address;
     const uint32_t modulo_mask = (1u << modulo_bits) - 1u;
     return (address & ~modulo_mask) | (advanced_address & modulo_mask);
