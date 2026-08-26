@@ -327,11 +327,14 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
                         PRIVATE kinetis_k22_firmware_image)
   set(kinetis_k22_runner_smoke_image
       ${CMAKE_CURRENT_BINARY_DIR}/kinetis_k22_firmware_runner_smoke.bin)
+  set(kinetis_k22_runner_fault_image
+      ${CMAKE_CURRENT_BINARY_DIR}/kinetis_k22_firmware_runner_fault.bin)
   kinetis_k22_add_test(firmware_runner_fixture
                        tests/system/runner_fixture_test.c "runner;system")
   target_compile_definitions(
     kinetis_k22_firmware_runner_fixture_test
-    PRIVATE KINETIS_K22_RUNNER_SMOKE_IMAGE="${kinetis_k22_runner_smoke_image}")
+    PRIVATE KINETIS_K22_RUNNER_SMOKE_IMAGE="${kinetis_k22_runner_smoke_image}"
+            KINETIS_K22_RUNNER_FAULT_IMAGE="${kinetis_k22_runner_fault_image}")
   set_tests_properties(kinetis_k22_firmware_runner_fixture_test
                        PROPERTIES FIXTURES_SETUP kinetis_k22_runner_smoke)
 
@@ -347,8 +350,18 @@ if(PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
                kinetis_k22_runner_smoke PASS_REGULAR_EXPRESSION
                "instructions=1")
 
+  add_test(
+    NAME kinetis_k22_firmware_runner_fault_test
+    COMMAND kinetis_k22_firmware_runner ${kinetis_k22_runner_fault_image}
+            --reset-address 0 --binary-address 0 --max-instructions 10)
+  set_tests_properties(
+    kinetis_k22_firmware_runner_fault_test
+    PROPERTIES LABELS "runner;system" FIXTURES_REQUIRED
+               kinetis_k22_runner_smoke WILL_FAIL TRUE)
+
   add_test(NAME kinetis_k22_firmware_runner_cleanup_test
-           COMMAND ${CMAKE_COMMAND} -E rm -f ${kinetis_k22_runner_smoke_image})
+           COMMAND ${CMAKE_COMMAND} -E rm -f ${kinetis_k22_runner_smoke_image}
+                   ${kinetis_k22_runner_fault_image})
   set_tests_properties(
     kinetis_k22_firmware_runner_cleanup_test
     PROPERTIES LABELS "runner;system" FIXTURES_CLEANUP kinetis_k22_runner_smoke)

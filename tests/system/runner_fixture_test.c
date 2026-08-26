@@ -3,16 +3,25 @@
 
 #include "test.h"
 
-int main(void) {
-    const uint8_t image[] = {0x00u, 0x10u, 0x00u, 0x20u, 0x09u, 0x00u,
-                             0x00u, 0x00u, 0x00u, 0xbfu, 0x00u, 0xbfu};
-    TestState state = {0};
-    FILE* file = fopen(KINETIS_K22_RUNNER_SMOKE_IMAGE, "wb");
-    expect(&state, file != NULL, "open runner smoke image");
+static void write_image(TestState* state, const char* path, const uint8_t* image, size_t size) {
+    FILE* file = fopen(path, "wb");
+    expect(state, file != NULL, "open runner smoke image");
     if (file != NULL) {
-        expect(&state, fwrite(image, 1u, sizeof(image), file) == sizeof(image),
-               "write runner smoke image");
-        expect(&state, fclose(file) == 0, "close runner smoke image");
+        expect(state, fwrite(image, 1u, size, file) == size, "write runner smoke image");
+        expect(state, fclose(file) == 0, "close runner smoke image");
     }
+}
+
+int main(void) {
+    const uint8_t smoke_image[] = {0x00u, 0x10u, 0x00u, 0x20u, 0x09u, 0x00u,
+                                   0x00u, 0x00u, 0x00u, 0xbfu, 0x00u, 0xbfu};
+    const uint8_t fault_image[] = {
+        0x00u, 0x10u, 0x00u, 0x20u, 0x21u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x25u,
+        0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+        0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0xdeu, 0x00u, 0xbfu, 0xfeu, 0xe7u,
+    };
+    TestState state = {0};
+    write_image(&state, KINETIS_K22_RUNNER_SMOKE_IMAGE, smoke_image, sizeof(smoke_image));
+    write_image(&state, KINETIS_K22_RUNNER_FAULT_IMAGE, fault_image, sizeof(fault_image));
     return test_finish(&state);
 }

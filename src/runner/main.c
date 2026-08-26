@@ -124,19 +124,20 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     const CortexM4Result result = cortex_m4_run(kinetis_k22_cpu(device), limits);
+    const uint32_t fault_status = cortex_m4_get_fault_status(kinetis_k22_cpu(device));
     printf("stop=%u pc=0x%08" PRIx32 " opcode=0x%08" PRIx32 " instructions=%" PRIu64
            " cycles=%" PRIu64 " entry=0x%08" PRIx32 " cfsr=0x%08" PRIx32 " bfar=0x%08" PRIx32 "\n",
            result.stop, result.pc, result.opcode, result.instructions, result.cycles, entry_address,
-           cortex_m4_get_fault_status(kinetis_k22_cpu(device)),
-           cortex_m4_get_fault_address(kinetis_k22_cpu(device)));
+           fault_status, cortex_m4_get_fault_address(kinetis_k22_cpu(device)));
     for (uint8_t register_index = 0; register_index < 16; register_index++) {
         printf("r%u=0x%08" PRIx32 "%c", register_index,
                cortex_m4_get_register(kinetis_k22_cpu(device), register_index),
                register_index == 15 ? '\n' : ' ');
     }
     kinetis_k22_destroy(device);
-    return result.stop == CORTEX_M4_STOP_UNSUPPORTED || result.stop == CORTEX_M4_STOP_BUS_FAULT ||
-                   result.stop == CORTEX_M4_STOP_USAGE_FAULT || result.stop == CORTEX_M4_STOP_LOCKUP
-               ? EXIT_FAILURE
-               : EXIT_SUCCESS;
+    const bool failed = fault_status != 0 || result.stop == CORTEX_M4_STOP_UNSUPPORTED ||
+                        result.stop == CORTEX_M4_STOP_BUS_FAULT ||
+                        result.stop == CORTEX_M4_STOP_USAGE_FAULT ||
+                        result.stop == CORTEX_M4_STOP_LOCKUP;
+    return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
