@@ -392,7 +392,7 @@ uint32_t cortex_m4_xpsr_value(const CortexM4* cpu) {
 
 void cortex_m4_load_xpsr(CortexM4* cpu, uint32_t value) {
     cpu->it_state = (uint8_t)(((value >> 25) & 3u) | ((value >> 8) & 0xfcu));
-    cpu->xpsr = (value & ~0x0600fc00u) | CORTEX_M4_XPSR_T;
+    cpu->xpsr = (value & ~0x0600fe00u) | CORTEX_M4_XPSR_T;
     cortex_m4_exception_advanced_load_xpsr(cpu, value);
 }
 

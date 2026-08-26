@@ -357,6 +357,14 @@ static void test_basic_frame(TestState* state, CortexM4* cpu) {
     expect(state, cpu->it_state == 0x88u, "cpu->it_state == 0x88u");
     expect(state, cpu->faultmask == 0, "cpu->faultmask == 0");
     expect(state, cpu->exception_frame_depth == 0, "cpu->exception_frame_depth == 0");
+    expect(state, (cpu->xpsr & (1u << 9)) == 0, "(cpu->xpsr & (1u << 9)) == 0");
+
+    stack_pointer = 0x20001000u;
+    expect(state, cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &return_value),
+           "cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &return_value)");
+    expect(state, bus_read(cpu->bus.context, 0x20000ffcu, 4, CORTEX_M4_ACCESS_DEBUG, &stacked_xpsr),
+           "bus_read(cpu->bus.context, 0x20000ffcu, 4, CORTEX_M4_ACCESS_DEBUG, &stacked_xpsr)");
+    expect(state, (stacked_xpsr & (1u << 9)) == 0, "(stacked_xpsr & (1u << 9)) == 0");
 }
 
 static void test_extended_frame(TestState* state, CortexM4* cpu) {
