@@ -81,7 +81,7 @@ static const KinetisPackageSelection selections[] = {
               0x00000fffu, 0x000000ffu, 0x00000000u),
     SELECTION(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_AH_64_WLCSP, 0x000c303fu, 0x000f000fu,
               0x00000fffu, 0x000000ffu, 0x00000000u),
-    SELECTION(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_AP_80_WLCSP, 0x000ff03fu, 0x000f0c0fu,
+    SELECTION(KINETIS_PROFILE_MK22FN256CAP12, KINETIS_PACKAGE_AP_80_WLCSP, 0x000ff03fu, 0x000f0c0fu,
               0x00030fffu, 0x000000ffu, 0x00000000u),
     SELECTION(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_LL_100_LQFP, 0x000ff03fu, 0x00ff0e0fu,
               0x0007ffffu, 0x000000ffu, 0x07000000u),
@@ -162,6 +162,8 @@ const KinetisPackageSelection* kinetis_package_default(const KinetisDeviceProfil
         return NULL;
     if (profile->id == KINETIS_PROFILE_MK22FN12812)
         return kinetis_package_select(profile, KINETIS_PACKAGE_AH_64_WLCSP);
+    if (profile->id == KINETIS_PROFILE_MK22FN256CAP12)
+        return kinetis_package_select(profile, KINETIS_PACKAGE_AP_80_WLCSP);
     return kinetis_package_select(profile, KINETIS_PACKAGE_LH_64_LQFP);
 }
 
@@ -272,6 +274,7 @@ bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, 
     case KINETIS_PROFILE_MK22FN12810:
     case KINETIS_PROFILE_MK22FN12812:
     case KINETIS_PROFILE_MK22FN25612:
+    case KINETIS_PROFILE_MK22FN256CAP12:
     case KINETIS_PROFILE_MK22FN51212:
     case KINETIS_PROFILE_MK22FN1M012:
     case KINETIS_PROFILE_MK22FX51212:
@@ -291,9 +294,13 @@ bool kinetis_package_has_peripheral(const KinetisPackageSelection* selection,
     if (selection->profile == KINETIS_PROFILE_MKV30F12810 &&
         selection->package == KINETIS_PACKAGE_FM_32_QFN && peripheral == KINETIS_PERIPHERAL_VREF)
         return false;
-    if (selection->profile == KINETIS_PROFILE_MK22FN51212 && peripheral == KINETIS_PERIPHERAL_DAC1)
+    if ((selection->profile == KINETIS_PROFILE_MK22FN256CAP12 ||
+         selection->profile == KINETIS_PROFILE_MK22FN51212) &&
+        peripheral == KINETIS_PERIPHERAL_DAC1)
         return selection->package == KINETIS_PACKAGE_DC_121_XFBGA;
-    if (selection->profile == KINETIS_PROFILE_MK22FN51212 && peripheral == KINETIS_PERIPHERAL_FB)
+    if ((selection->profile == KINETIS_PROFILE_MK22FN256CAP12 ||
+         selection->profile == KINETIS_PROFILE_MK22FN51212) &&
+        peripheral == KINETIS_PERIPHERAL_FB)
         return selection->package != KINETIS_PACKAGE_FX_88_HVQFN;
     if (selection->profile == KINETIS_PROFILE_MK22FN1M012 ||
         selection->profile == KINETIS_PROFILE_MK22FX51212) {

@@ -20,6 +20,7 @@ static const ProfileFixture fixtures[] = {
     {KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_LH_64_LQFP},
     {KINETIS_PROFILE_MK22FN12812, KINETIS_PACKAGE_AH_64_WLCSP},
     {KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_DC_121_XFBGA},
+    {KINETIS_PROFILE_MK22FN256CAP12, KINETIS_PACKAGE_AP_80_WLCSP},
     {KINETIS_PROFILE_MK22FN51212, KINETIS_PACKAGE_DC_121_XFBGA},
     {KINETIS_PROFILE_MK22FN1M012, KINETIS_PACKAGE_LQ_144_LQFP},
     {KINETIS_PROFILE_MK22FX51212, KINETIS_PACKAGE_LQ_144_LQFP},
@@ -31,11 +32,20 @@ static const uint8_t flash_configuration[16] = {
 };
 
 static const uint32_t sim_fcfg2_reset_values[KINETIS_PROFILE_COUNT] = {
-    0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
+    0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u,
+    0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
 };
 
 static uint32_t width_mask(uint8_t width) {
     return width == 32u ? UINT32_MAX : (UINT32_C(1) << width) - 1u;
+}
+
+static bool descriptor_available(const Kinetis* device,
+                                 const KinetisRegisterDescriptor* descriptor) {
+    KinetisPeripheralLocation location;
+    return kinetis_profile_resolve_peripheral(device->profile, descriptor->address,
+                                              (uint8_t)(descriptor->width / 8u), &location) &&
+           kinetis_package_has_peripheral(device->package, location.id);
 }
 
 static Kinetis* create_device(TestState* state, const ProfileFixture* fixture) {
@@ -128,7 +138,8 @@ static bool uses_flash_configuration(const KinetisRegisterDescriptor* descriptor
 static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFixture* fixture,
                               const KinetisRegisterManifest* manifest,
                               const KinetisRegisterDescriptor* descriptor) {
-    if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
+    if (descriptor->address < KINETIS_PERIPHERAL_BASE ||
+        !descriptor_available(device, descriptor)) {
         return;
     }
     expect(state, kinetis_reset(device), "kinetis_reset(device)");
@@ -166,7 +177,8 @@ static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFi
 
 static void expect_declared_writes(TestState* state, Kinetis* device,
                                    const KinetisRegisterDescriptor* descriptor) {
-    if (descriptor->address < KINETIS_PERIPHERAL_BASE) {
+    if (descriptor->address < KINETIS_PERIPHERAL_BASE ||
+        !descriptor_available(device, descriptor)) {
         return;
     }
     const uint8_t size = (uint8_t)(descriptor->width / 8u);

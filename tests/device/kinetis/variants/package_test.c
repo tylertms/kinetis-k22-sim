@@ -69,8 +69,8 @@ static const ExpectedSelection expected_selections[] = {
              0x00000fffu, 0x000000ffu, 0x00000000u, false, false),
     EXPECTED(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_AH_64_WLCSP, 0x000c303fu, 0x000f000fu,
              0x00000fffu, 0x000000ffu, 0x00000000u, false, false),
-    EXPECTED(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_AP_80_WLCSP, 0x000ff03fu, 0x000f0c0fu,
-             0x00030fffu, 0x000000ffu, 0x00000000u, false, false),
+    EXPECTED(KINETIS_PROFILE_MK22FN256CAP12, KINETIS_PACKAGE_AP_80_WLCSP, 0x000ff03fu, 0x000f0c0fu,
+             0x00030fffu, 0x000000ffu, 0x00000000u, false, true),
     EXPECTED(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_LL_100_LQFP, 0x000ff03fu, 0x00ff0e0fu,
              0x0007ffffu, 0x000000ffu, 0x07000000u, false, false),
     EXPECTED(KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_DC_121_XFBGA, 0x000ff03fu, 0x00ff0fcfu,
@@ -236,9 +236,11 @@ static void expect_defaults(TestState* state) {
         const KinetisDeviceProfile* profile = kinetis_profile_get((KinetisProfile)profile_id);
         const KinetisPackageSelection* selected = kinetis_package_default(profile);
         expect(state, selected != NULL, "selected != NULL");
-        const KinetisPackage expected = profile_id == KINETIS_PROFILE_MK22FN12812
-                                            ? KINETIS_PACKAGE_AH_64_WLCSP
-                                            : KINETIS_PACKAGE_LH_64_LQFP;
+        KinetisPackage expected = KINETIS_PACKAGE_LH_64_LQFP;
+        if (profile_id == KINETIS_PROFILE_MK22FN12812)
+            expected = KINETIS_PACKAGE_AH_64_WLCSP;
+        if (profile_id == KINETIS_PROFILE_MK22FN256CAP12)
+            expected = KINETIS_PACKAGE_AP_80_WLCSP;
         expect(state, kinetis_package_selection_package(selected)->id == expected,
                "kinetis_package_selection_package(selected)->id == expected");
     }

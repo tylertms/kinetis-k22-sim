@@ -381,8 +381,8 @@ void kinetis_data_test_test_dmamux_triggers(TestState* state) {
 void kinetis_data_test_test_dmamux_source_matrix(TestState* state) {
     static const uint64_t expected[KINETIS_PROFILE_COUNT] = {
         UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xf03f2f00f3f4c03c), UINT64_C(0xfc3f2f00fffdf0fc),
-        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc), UINT64_C(0xfffffffffffffffc),
-        UINT64_C(0xfffffffffffffffc),
+        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc),
+        UINT64_C(0xfffffffffffffffc), UINT64_C(0xfffffffffffffffc),
     };
     TestBus bus = {0};
     for (uint8_t profile = 0u; profile < KINETIS_PROFILE_COUNT; profile++) {

@@ -14,6 +14,8 @@ const KinetisRegisterManifest* kinetis_register_manifest_get(KinetisProfile prof
         return kinetis_mk22fn12812_register_manifest();
     case KINETIS_PROFILE_MK22FN25612:
         return kinetis_mk22fn25612_register_manifest();
+    case KINETIS_PROFILE_MK22FN256CAP12:
+        return kinetis_mk22fn256cap12_register_manifest();
     case KINETIS_PROFILE_MK22FN51212:
         return kinetis_mk22fn51212_register_manifest();
     case KINETIS_PROFILE_MK22FN1M012:

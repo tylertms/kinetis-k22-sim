@@ -137,7 +137,8 @@ static uint64_t dma_source_mask(const KinetisData* data) {
     if (data->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
         data->profile->id == KINETIS_PROFILE_MK22FX51212)
         return UINT64_C(0xfffffffffffffffc);
-    if (data->profile->id == KINETIS_PROFILE_MK22FN51212)
+    if (data->profile->id == KINETIS_PROFILE_MK22FN256CAP12 ||
+        data->profile->id == KINETIS_PROFILE_MK22FN51212)
         return UINT64_C(0xfc3f6ffffffdf0fc);
     return UINT64_C(0xfc3f2f00fffdf0fc);
 }

@@ -1,13 +1,13 @@
 # Kinetis Simulator
 
-C simulator for NXP Kinetis K22F and KV30F microcontrollers and their Arm Cortex-M4F cores.
+C simulator for NXP Kinetis microcontrollers and their Arm Cortex-M4F cores.
 
 ## Features
 
 - CPU Core: Armv7E-M instruction set (Thumb, Thumb-2, DSP, FPv4-SP-D16 floating-point unit).
 - Core Peripherals: NVIC, SCB, SysTick, bit-band operations, MPU, breakpoints, and cycle-counted execution.
 - Kinetis Peripherals: Flash/SRAM, eDMA, DMAMUX, SIM, MCG, WDOG, PIT, LPTMR, ADC, UART, SPI, I2C, USB, GPIO.
-- Device Profiles: MK22FN12810, MK22FN12812, MK22FN25612, MK22FN51212, MK22FN1M012, MK22FX51212, and MKV30F12810.
+- Device Profiles: MK22FN12810, MK22FN12812, MK22FN25612, MK22FN256CAP12, MK22FN51212, MK22FN1M012, MK22FX51212, and MKV30F12810.
 - Device Packages: AK, FM, LF, LH, MP, AH, LK, AP, BP, FX, LL, DC, MC, LQ, and MD variants supported by each profile.
 
 The 50 MHz K22D5 devices use Cortex-M4 cores without floating-point units and a different peripheral map. They are outside this simulator's scope.

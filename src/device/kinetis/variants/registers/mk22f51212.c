@@ -2567,3 +2567,12 @@ const KinetisRegisterManifest* kinetis_mk22fn51212_register_manifest(void) {
     };
     return &manifest;
 }
+
+const KinetisRegisterManifest* kinetis_mk22fn256cap12_register_manifest(void) {
+    static const KinetisRegisterManifest manifest = {
+        KINETIS_PROFILE_MK22FN256CAP12, mk22f51212_registers,          COUNT(mk22f51212_registers),
+        mk22f51212_peripherals,         COUNT(mk22f51212_peripherals), UINT64_C(0x888f32dea7d49bde),
+        UINT64_C(0xcb5f795ba1e30ea8),
+    };
+    return &manifest;
+}

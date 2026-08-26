@@ -239,6 +239,7 @@ int main(void) {
     expect_manifest(&state, KINETIS_PROFILE_MKV30F12810, &expected_manifests[4]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN12812, &expected_manifests[1]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN25612, &expected_manifests[1]);
+    expect_manifest(&state, KINETIS_PROFILE_MK22FN256CAP12, &expected_manifests[2]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN51212, &expected_manifests[2]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FN1M012, &expected_manifests[3]);
     expect_manifest(&state, KINETIS_PROFILE_MK22FX51212, &expected_manifests[3]);
