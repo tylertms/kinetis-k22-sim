@@ -212,6 +212,12 @@ int main(void) {
            "kinetis_k22_read(device, 0x20000004u, &value, sizeof(value))");
     expect(&state, value == 0, "value == 0");
 
+    initialize_image(image);
+    write32(image, ELF_HEADER_SIZE + ELF_PROGRAM_HEADER_SIZE + 4u, UINT32_MAX);
+    write32(image, ELF_HEADER_SIZE + ELF_PROGRAM_HEADER_SIZE + 16u, 0u);
+    expect(&state, cortex_m4_load_elf_data(device, image, sizeof(image), NULL),
+           "zero-sized file segment does not require a valid file offset");
+
     image[0] = 0;
     expect(&state, !cortex_m4_load_elf_data(device, image, sizeof(image), NULL),
            "!cortex_m4_load_elf_data(device, image, sizeof(image), NULL)");

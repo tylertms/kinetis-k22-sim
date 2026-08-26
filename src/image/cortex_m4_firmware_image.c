@@ -77,8 +77,10 @@ bool cortex_m4_load_elf_data(KinetisK22* device, const void* image_data, size_t 
         const uint32_t file_size = read_u32(program_header + 16);
         const uint32_t memory_size = read_u32(program_header + 20);
         const uint32_t load_address = physical_address != 0 ? physical_address : virtual_address;
-        if ((uint64_t)file_offset + file_size > image_size || file_size > memory_size ||
-            !kinetis_k22_load(device, load_address, bytes + file_offset, file_size)) {
+        if (file_size > memory_size ||
+            (file_size != 0u &&
+             ((uint64_t)file_offset + file_size > image_size ||
+              !kinetis_k22_load(device, load_address, bytes + file_offset, file_size)))) {
             loaded = false;
             break;
         }
