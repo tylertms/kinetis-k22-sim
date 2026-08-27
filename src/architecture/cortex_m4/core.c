@@ -53,6 +53,7 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
         return false;
     }
     const CortexM4Bus bus = destination->bus;
+    CortexM4Coverage* const coverage = destination->coverage;
     const CortexM4Trace trace = destination->trace;
     void* const trace_context = destination->trace_context;
     const CortexM4ClockRunning clock_running = destination->clock_running;
@@ -64,6 +65,7 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     const uint8_t mpu_region_count = destination->mpu_region_count;
     *destination = *source;
     destination->bus = bus;
+    destination->coverage = coverage;
     destination->trace = trace;
     destination->trace_context = trace_context;
     destination->clock_running = clock_running;
@@ -128,6 +130,7 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
         return false;
     }
     CortexM4Bus bus = cpu->bus;
+    CortexM4Coverage* const coverage = cpu->coverage;
     const CortexM4Trace trace = cpu->trace;
     void* const trace_context = cpu->trace_context;
     const CortexM4ClockRunning clock_running = cpu->clock_running;
@@ -143,6 +146,7 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     const uint8_t breakpoint_enabled = cpu->breakpoint_enabled;
     memset(cpu, 0, sizeof(*cpu));
     cpu->bus = bus;
+    cpu->coverage = coverage;
     cpu->trace = trace;
     cpu->trace_context = trace_context;
     cpu->clock_running = clock_running;
@@ -256,6 +260,10 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         second_halfword = (uint16_t)second_halfword_value;
         cpu->registers[15] = instruction_address + 4;
         cpu->current_opcode = ((uint32_t)first_halfword << 16) | second_halfword;
+        if (cpu->coverage != NULL) {
+            cortex_m4_coverage_record(cpu->coverage, instruction_address, cpu->current_opcode,
+                                      should_execute);
+        }
         if (cpu->trace != NULL) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
                        should_execute);
@@ -270,6 +278,10 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         }
     } else {
         cpu->current_opcode = first_halfword;
+        if (cpu->coverage != NULL) {
+            cortex_m4_coverage_record(cpu->coverage, instruction_address, cpu->current_opcode,
+                                      should_execute);
+        }
         if (cpu->trace != NULL) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
                        should_execute);
@@ -361,6 +373,12 @@ void cortex_m4_set_trace(CortexM4* cpu, CortexM4Trace trace, void* context) {
     if (cpu != NULL) {
         cpu->trace = trace;
         cpu->trace_context = context;
+    }
+}
+
+void cortex_m4_set_coverage(CortexM4* cpu, CortexM4Coverage* coverage) {
+    if (cpu != NULL) {
+        cpu->coverage = coverage;
     }
 }
 

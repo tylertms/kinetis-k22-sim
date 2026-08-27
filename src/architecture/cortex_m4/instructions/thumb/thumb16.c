@@ -437,7 +437,11 @@ static bool execute_miscellaneous(CortexM4* cpu, uint16_t opcode) {
         const bool nonzero = (opcode & (1u << 11)) != 0;
         const uint8_t source = (uint8_t)(opcode & 7u);
         const uint32_t immediate = ((opcode >> 3) & 0x1fu) * 2u + ((opcode >> 9) & 1u) * 64u;
-        if ((cpu->registers[source] != 0) == nonzero) {
+        const bool taken = (cpu->registers[source] != 0) == nonzero;
+        if (cpu->coverage != NULL) {
+            cortex_m4_coverage_record_branch(cpu->coverage, cpu->registers[15] - 2u, taken);
+        }
+        if (taken) {
             cpu->registers[15] = visible_pc16(cpu) + immediate;
         }
         return true;
@@ -562,7 +566,11 @@ bool cortex_m4_execute_thumb16(CortexM4* cpu, uint16_t opcode) {
         }
         if (condition == 14)
             return false;
-        if (cortex_m4_condition_passed(cpu, condition)) {
+        const bool taken = cortex_m4_condition_passed(cpu, condition);
+        if (cpu->coverage != NULL) {
+            cortex_m4_coverage_record_branch(cpu->coverage, cpu->registers[15] - 2u, taken);
+        }
+        if (taken) {
             cpu->registers[15] = visible_pc16(cpu) +
                                  (uint32_t)(cortex_m4_internal_sign_extend(opcode & 0xffu, 8) * 2);
         }

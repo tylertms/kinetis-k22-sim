@@ -134,6 +134,7 @@ typedef struct {
 
 struct CortexM4 {
     CortexM4Bus bus;
+    CortexM4Coverage* coverage;
     CortexM4Trace trace;
     void* trace_context;
     CortexM4ClockRunning clock_running;
@@ -226,6 +227,8 @@ struct CortexM4 {
     bool exception_frame_memory_management_fault;
     CortexM4Debug debug;
 };
+
+void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t address, bool taken);
 
 uint32_t cortex_m4_read_register_internal(const CortexM4* cpu, uint8_t index);
 void cortex_m4_write_register_internal(CortexM4* cpu, uint8_t index, uint32_t value);

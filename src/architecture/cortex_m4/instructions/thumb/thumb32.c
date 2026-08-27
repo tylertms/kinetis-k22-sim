@@ -236,7 +236,11 @@ bool cortex_m4_execute_thumb32(CortexM4* cpu, uint16_t first, uint16_t second) {
     }
     if ((first & 0xf800u) == 0xf000u && (second & 0xd000u) == 0x8000u) {
         const uint8_t condition = (uint8_t)((first >> 6) & 15u);
-        if (condition < 14 && cortex_m4_condition_passed(cpu, condition)) {
+        const bool taken = condition < 14u && cortex_m4_condition_passed(cpu, condition);
+        if (condition < 14u && cpu->coverage != NULL) {
+            cortex_m4_coverage_record_branch(cpu->coverage, cpu->registers[15] - 4u, taken);
+        }
+        if (taken) {
             const uint32_t encoded =
                 ((uint32_t)((first >> 10) & 1u) << 20) | ((uint32_t)((second >> 11) & 1u) << 19) |
                 ((uint32_t)((second >> 13) & 1u) << 18) | ((uint32_t)(first & 0x3fu) << 12) |

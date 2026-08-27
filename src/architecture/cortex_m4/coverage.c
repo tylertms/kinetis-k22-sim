@@ -10,8 +10,14 @@ struct CortexM4Coverage {
     uint64_t instructions;
     uint64_t skipped;
     uint64_t outside_range;
+    uint64_t conditional_branches;
+    uint64_t branches_taken;
+    uint64_t branches_not_taken;
     size_t unique_instructions;
     size_t unique_skipped;
+    size_t unique_branch_sites;
+    size_t unique_branch_outcomes;
+    size_t fully_covered_branch_sites;
     uint8_t slots[];
 };
 
@@ -91,13 +97,49 @@ void cortex_m4_coverage_record(void* context, uint32_t address, uint32_t opcode,
     (void)opcode;
 }
 
+void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t address, bool taken) {
+    uint8_t* slot = coverage_slot(coverage, address);
+    if (slot == NULL) {
+        return;
+    }
+    const uint8_t outcome =
+        taken ? CORTEX_M4_COVERAGE_BRANCH_TAKEN : CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN;
+    const uint8_t opposite =
+        taken ? CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN : CORTEX_M4_COVERAGE_BRANCH_TAKEN;
+    if ((*slot & (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN)) == 0u) {
+        coverage->unique_branch_sites++;
+    }
+    if ((*slot & outcome) == 0u) {
+        *slot |= outcome;
+        coverage->unique_branch_outcomes++;
+        if ((*slot & opposite) != 0u) {
+            coverage->fully_covered_branch_sites++;
+        }
+    }
+    coverage->conditional_branches++;
+    if (taken) {
+        coverage->branches_taken++;
+    } else {
+        coverage->branches_not_taken++;
+    }
+}
+
 CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverage) {
     if (coverage == NULL) {
         return (CortexM4CoverageResult){0};
     }
     return (CortexM4CoverageResult){
-        coverage->instructions,        coverage->skipped,        coverage->outside_range,
-        coverage->unique_instructions, coverage->unique_skipped,
+        coverage->instructions,
+        coverage->skipped,
+        coverage->outside_range,
+        coverage->conditional_branches,
+        coverage->branches_taken,
+        coverage->branches_not_taken,
+        coverage->unique_instructions,
+        coverage->unique_skipped,
+        coverage->unique_branch_sites,
+        coverage->unique_branch_outcomes,
+        coverage->fully_covered_branch_sites,
     };
 }
 

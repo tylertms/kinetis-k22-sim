@@ -61,14 +61,22 @@ typedef struct {
 typedef enum {
     CORTEX_M4_COVERAGE_EXECUTED = 1u << 0,
     CORTEX_M4_COVERAGE_SKIPPED = 1u << 1,
+    CORTEX_M4_COVERAGE_BRANCH_TAKEN = 1u << 2,
+    CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN = 1u << 3,
 } CortexM4CoverageFlag;
 
 typedef struct {
     uint64_t instructions;
     uint64_t skipped;
     uint64_t outside_range;
+    uint64_t conditional_branches;
+    uint64_t branches_taken;
+    uint64_t branches_not_taken;
     size_t unique_instructions;
     size_t unique_skipped;
+    size_t unique_branch_sites;
+    size_t unique_branch_outcomes;
+    size_t fully_covered_branch_sites;
 } CortexM4CoverageResult;
 
 CortexM4Coverage* cortex_m4_coverage_create(uint32_t address, size_t size);
@@ -89,6 +97,7 @@ CortexM4Result cortex_m4_run(CortexM4* cpu, CortexM4RunLimits limits);
 void cortex_m4_request_stop(CortexM4* cpu);
 bool cortex_m4_set_breakpoint(CortexM4* cpu, uint8_t index, uint32_t address, bool enabled);
 void cortex_m4_set_trace(CortexM4* cpu, CortexM4Trace trace, void* context);
+void cortex_m4_set_coverage(CortexM4* cpu, CortexM4Coverage* coverage);
 void cortex_m4_set_clock(CortexM4* cpu, CortexM4ClockRunning clock_running, void* context);
 void cortex_m4_set_wait_states(CortexM4* cpu, CortexM4WaitStates wait_states, void* context);
 bool cortex_m4_set_exclusive_granule(CortexM4* cpu, uint32_t bytes);

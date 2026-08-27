@@ -61,7 +61,7 @@ int main(void) {
 
     CortexM4Coverage* coverage = cortex_m4_coverage_create(0x100u, 16u);
     expect(&state, coverage != NULL, "coverage != NULL");
-    cortex_m4_set_trace(kinetis_cpu(device), cortex_m4_coverage_record, coverage);
+    cortex_m4_set_coverage(kinetis_cpu(device), coverage);
     expect(&state, kinetis_reset(device), "coverage reset succeeds");
     test_connect_debugger(&state, kinetis_cpu(device));
     const CortexM4Result coverage_run =
@@ -75,6 +75,7 @@ int main(void) {
     expect(&state, coverage_result.unique_instructions == 5u,
            "coverage counts unique instructions");
     expect(&state, coverage_result.unique_skipped == 1u, "coverage counts unique skips");
+    expect(&state, coverage_result.conditional_branches == 0u, "coverage does not invent branches");
     expect(&state, cortex_m4_coverage_flags(coverage, 0x100u) == CORTEX_M4_COVERAGE_EXECUTED,
            "coverage exposes executed instructions");
     expect(&state, cortex_m4_coverage_flags(coverage, 0x106u) == CORTEX_M4_COVERAGE_SKIPPED,
@@ -82,9 +83,52 @@ int main(void) {
     expect(&state, cortex_m4_coverage_flags(coverage, 0x10cu) == CORTEX_M4_COVERAGE_EXECUTED,
            "coverage exposes the final instruction");
     cortex_m4_coverage_clear(coverage);
+    const uint16_t branch_program[] = {0xd100u, 0xbf00u, 0xf040u, 0x8001u,
+                                       0xbf00u, 0xb100u, 0xbf00u, 0xbe00u};
+    expect(&state, kinetis_load(device, 0x100u, branch_program, sizeof(branch_program)),
+           "branch coverage program is loaded");
+    expect(&state, kinetis_reset(device), "taken branch reset succeeds");
+    test_connect_debugger(&state, kinetis_cpu(device));
+    expect(&state,
+           cortex_m4_run(kinetis_cpu(device), (CortexM4RunLimits){16, 32}).stop ==
+               CORTEX_M4_STOP_BREAKPOINT,
+           "taken branch reaches the breakpoint");
+    expect(&state, kinetis_reset(device), "not-taken branch reset succeeds");
+    cortex_m4_set_register(kinetis_cpu(device), 0u, 1u);
+    cortex_m4_set_xpsr(kinetis_cpu(device), (1u << 30u) | (1u << 24u));
+    test_connect_debugger(&state, kinetis_cpu(device));
+    expect(&state,
+           cortex_m4_run(kinetis_cpu(device), (CortexM4RunLimits){16, 32}).stop ==
+               CORTEX_M4_STOP_BREAKPOINT,
+           "not-taken branch reaches the breakpoint");
     coverage_result = cortex_m4_coverage_result(coverage);
-    expect(&state, coverage_result.instructions == 0u, "coverage clear resets counters");
-    expect(&state, cortex_m4_coverage_flags(coverage, 0x100u) == 0u, "coverage clear resets slots");
+    expect(&state, coverage_result.instructions == 11u, "coverage clear resets counters");
+    expect(&state, coverage_result.conditional_branches == 6u,
+           "coverage records conditional branches");
+    expect(&state, coverage_result.branches_taken == 3u, "coverage records taken branches");
+    expect(&state, coverage_result.branches_not_taken == 3u, "coverage records not-taken branches");
+    expect(&state, coverage_result.unique_branch_sites == 3u,
+           "coverage counts unique branch sites");
+    expect(&state, coverage_result.unique_branch_outcomes == 6u,
+           "coverage counts unique branch outcomes");
+    expect(&state, coverage_result.fully_covered_branch_sites == 3u,
+           "coverage counts branches with both outcomes");
+    expect(&state,
+           cortex_m4_coverage_flags(coverage, 0x100u) ==
+               (CORTEX_M4_COVERAGE_EXECUTED | CORTEX_M4_COVERAGE_BRANCH_TAKEN |
+                CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN),
+           "coverage exposes branch outcomes");
+    expect(&state,
+           cortex_m4_coverage_flags(coverage, 0x104u) ==
+               (CORTEX_M4_COVERAGE_EXECUTED | CORTEX_M4_COVERAGE_BRANCH_TAKEN |
+                CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN),
+           "coverage exposes wide branch outcomes");
+    expect(&state,
+           cortex_m4_coverage_flags(coverage, 0x10au) ==
+               (CORTEX_M4_COVERAGE_EXECUTED | CORTEX_M4_COVERAGE_BRANCH_TAKEN |
+                CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN),
+           "coverage exposes compare-and-branch outcomes");
+    cortex_m4_set_coverage(kinetis_cpu(device), NULL);
     cortex_m4_coverage_destroy(coverage);
     expect(&state, cortex_m4_coverage_create(1u, 2u) == NULL, "coverage rejects odd addresses");
     expect(&state, cortex_m4_coverage_create(0u, 1u) == NULL, "coverage rejects odd sizes");
