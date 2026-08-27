@@ -228,6 +228,7 @@ struct CortexM4 {
     CortexM4Debug debug;
 };
 
+void cortex_m4_coverage_record(CortexM4Coverage* coverage, uint32_t address, bool executed);
 void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t address, bool taken);
 
 uint32_t cortex_m4_read_register_internal(const CortexM4* cpu, uint8_t index);

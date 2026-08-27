@@ -82,7 +82,6 @@ typedef struct {
 CortexM4Coverage* cortex_m4_coverage_create(uint32_t address, size_t size);
 void cortex_m4_coverage_destroy(CortexM4Coverage* coverage);
 void cortex_m4_coverage_clear(CortexM4Coverage* coverage);
-void cortex_m4_coverage_record(void* context, uint32_t address, uint32_t opcode, bool executed);
 CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverage);
 uint8_t cortex_m4_coverage_flags(const CortexM4Coverage* coverage, uint32_t address);
 

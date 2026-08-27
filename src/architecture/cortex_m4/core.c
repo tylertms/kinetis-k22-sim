@@ -261,8 +261,7 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         cpu->registers[15] = instruction_address + 4;
         cpu->current_opcode = ((uint32_t)first_halfword << 16) | second_halfword;
         if (cpu->coverage != NULL) {
-            cortex_m4_coverage_record(cpu->coverage, instruction_address, cpu->current_opcode,
-                                      should_execute);
+            cortex_m4_coverage_record(cpu->coverage, instruction_address, should_execute);
         }
         if (cpu->trace != NULL) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
@@ -279,8 +278,7 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
     } else {
         cpu->current_opcode = first_halfword;
         if (cpu->coverage != NULL) {
-            cortex_m4_coverage_record(cpu->coverage, instruction_address, cpu->current_opcode,
-                                      should_execute);
+            cortex_m4_coverage_record(cpu->coverage, instruction_address, should_execute);
         }
         if (cpu->trace != NULL) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,

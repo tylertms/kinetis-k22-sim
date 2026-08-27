@@ -135,7 +135,6 @@ int main(void) {
     expect(&state, cortex_m4_coverage_create(UINT32_MAX - 1u, 4u) == NULL,
            "coverage rejects overflowing ranges");
     cortex_m4_coverage_clear(NULL);
-    cortex_m4_coverage_record(NULL, 0u, 0u, true);
     cortex_m4_coverage_destroy(NULL);
 
     kinetis_destroy(device);
