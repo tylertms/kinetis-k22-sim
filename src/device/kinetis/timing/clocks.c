@@ -236,9 +236,6 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     timing->core_clock_hz = mcg_output_clock_hz / core_divider;
     timing->bus_clock_hz = mcg_output_clock_hz / bus_divider;
     timing->flash_clock_hz = mcg_output_clock_hz / flash_divider;
-    if (timing->core_clock_hz == 0) {
-        timing->core_clock_hz = 1;
-    }
 }
 
 static uint32_t sim_fcfg1_value(const KinetisTiming* timing) {

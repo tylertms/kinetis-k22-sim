@@ -506,6 +506,11 @@ static void kinetis_advance_bus(void* context, uint32_t cycle_count) {
 
 static void kinetis_reset_bus(void* context) { kinetis_warm_reset(context, 0, 0x04u); }
 
+static bool kinetis_core_clock_running(void* context) {
+    Kinetis* device = context;
+    return device->timing.core_clock_hz != 0u;
+}
+
 KinetisConfiguration kinetis_configuration(KinetisProfile profile_id) {
     KinetisConfiguration configuration;
     const KinetisDeviceProfile* profile = kinetis_profile_get(profile_id);
@@ -623,8 +628,12 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
     CortexM4Bus bus = {device, kinetis_read_bus, kinetis_write_bus, kinetis_advance_bus,
                        kinetis_reset_bus};
     device->cpu = cortex_m4_create(bus);
-    if (device->cpu == NULL ||
-        !cortex_m4_configure_implementation(device->cpu, profile->cpu.external_irq_count,
+    if (device->cpu == NULL) {
+        destroy_partial_device(device);
+        return NULL;
+    }
+    cortex_m4_set_clock(device->cpu, kinetis_core_clock_running, device);
+    if (!cortex_m4_configure_implementation(device->cpu, profile->cpu.external_irq_count,
                                             profile->cpu.nvic_priority_bits,
                                             profile->cpu.has_mpu ? 8u : 0u)) {
         destroy_partial_device(device);

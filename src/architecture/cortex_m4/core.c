@@ -15,6 +15,12 @@ static CortexM4Result cortex_m4_result(const CortexM4* cpu) {
     return result;
 }
 
+static bool cortex_m4_clock_running(CortexM4* cpu) {
+    const bool running = cpu->clock_running == NULL || cpu->clock_running(cpu->clock_context);
+    cpu->stop = running ? CORTEX_M4_STOP_RUNNING : CORTEX_M4_STOP_CLOCK;
+    return running;
+}
+
 bool cortex_m4_access_is_unprivileged_data(const CortexM4* cpu, CortexM4Access access) {
     return access == CORTEX_M4_ACCESS_UNPRIVILEGED_DATA ||
            (access == CORTEX_M4_ACCESS_DATA && (cpu->xpsr & 0x1ffu) == 0u &&
@@ -49,6 +55,8 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     const CortexM4Bus bus = destination->bus;
     const CortexM4Trace trace = destination->trace;
     void* const trace_context = destination->trace_context;
+    const CortexM4ClockRunning clock_running = destination->clock_running;
+    void* const clock_context = destination->clock_context;
     const CortexM4WaitStates wait_states = destination->wait_states;
     void* const wait_state_context = destination->wait_state_context;
     const uint16_t external_irq_count = destination->external_irq_count;
@@ -58,6 +66,8 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     destination->bus = bus;
     destination->trace = trace;
     destination->trace_context = trace_context;
+    destination->clock_running = clock_running;
+    destination->clock_context = clock_context;
     destination->wait_states = wait_states;
     destination->wait_state_context = wait_state_context;
     destination->external_irq_count = external_irq_count;
@@ -120,6 +130,8 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     CortexM4Bus bus = cpu->bus;
     const CortexM4Trace trace = cpu->trace;
     void* const trace_context = cpu->trace_context;
+    const CortexM4ClockRunning clock_running = cpu->clock_running;
+    void* const clock_context = cpu->clock_context;
     const CortexM4WaitStates wait_states = cpu->wait_states;
     void* const wait_state_context = cpu->wait_state_context;
     const uint32_t exclusive_granule = cpu->exclusive_granule;
@@ -133,6 +145,8 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     cpu->bus = bus;
     cpu->trace = trace;
     cpu->trace_context = trace_context;
+    cpu->clock_running = clock_running;
+    cpu->clock_context = clock_context;
     cpu->external_irq_count = external_irq_count;
     cpu->priority_bits = priority_bits;
     cpu->mpu_region_count = mpu_region_count;
@@ -169,7 +183,7 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         CortexM4Result result = {CORTEX_M4_STOP_LOCKUP, 0, 0, 0, 0};
         return result;
     }
-    if (cpu->stop != CORTEX_M4_STOP_RUNNING) {
+    if (cpu->stop != CORTEX_M4_STOP_RUNNING && cpu->stop != CORTEX_M4_STOP_CLOCK) {
         return cortex_m4_result(cpu);
     }
     if (cpu->stop_requested) {
@@ -186,6 +200,9 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         if (cpu->bus.reset != NULL) {
             cpu->bus.reset(cpu->bus.context);
         }
+        return cortex_m4_result(cpu);
+    }
+    if (!cortex_m4_clock_running(cpu)) {
         return cortex_m4_result(cpu);
     }
     cortex_m4_take_pending_exception(cpu);
@@ -301,6 +318,9 @@ CortexM4Result cortex_m4_run(CortexM4* cpu, CortexM4RunLimits limits) {
     }
     const uint64_t start_instructions = cpu->instructions;
     const uint64_t start_cycles = cpu->cycles;
+    if (cpu->stop == CORTEX_M4_STOP_CLOCK && !cortex_m4_clock_running(cpu)) {
+        return cortex_m4_result(cpu);
+    }
     while (cpu->stop == CORTEX_M4_STOP_RUNNING) {
         if ((limits.instruction_limit != 0 &&
              cpu->instructions - start_instructions >= limits.instruction_limit) ||
@@ -340,6 +360,13 @@ void cortex_m4_set_trace(CortexM4* cpu, CortexM4Trace trace, void* context) {
     if (cpu != NULL) {
         cpu->trace = trace;
         cpu->trace_context = context;
+    }
+}
+
+void cortex_m4_set_clock(CortexM4* cpu, CortexM4ClockRunning clock_running, void* context) {
+    if (cpu != NULL) {
+        cpu->clock_running = clock_running;
+        cpu->clock_context = context;
     }
 }
 

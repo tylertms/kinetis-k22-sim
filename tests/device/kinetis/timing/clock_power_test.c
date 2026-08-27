@@ -134,15 +134,31 @@ int main(void) {
     missing_oscillator.external_oscillator_hz = 0u;
     device = kinetis_create(missing_oscillator);
     expect(&state, device != NULL, "missing-oscillator device is created");
+    const uint32_t vectors[2] = {0x20001000u, 0x101u};
+    const uint16_t nop = 0xbf00u;
+    expect(&state, kinetis_load(device, 0u, vectors, sizeof(vectors)), "clock test vectors load");
+    expect(&state, kinetis_load(device, 0x100u, &nop, sizeof(nop)), "clock test program loads");
+    expect(&state, kinetis_reset(device), "clock test device resets");
     write_register(&state, device, MCG_C1, 1u, 0u);
-    expect(&state, kinetis_core_clock_hz(device) == 1u,
+    expect(&state, kinetis_core_clock_hz(device) == 0u,
            "external-reference FLL has no output without its source");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_CLOCK,
+           "the core stops when its selected clock disappears");
+    expect(&state,
+           cortex_m4_get_register(kinetis_cpu(device), 15u) == 0x100u &&
+               cortex_m4_get_instruction_count(kinetis_cpu(device)) == 0u,
+           "clock loss retires no instruction");
+    write_register(&state, device, MCG_C1, 1u, 0x40u);
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "the core resumes when the host restores a valid clock");
+    expect(&state, cortex_m4_get_instruction_count(kinetis_cpu(device)) == 1u,
+           "the resumed core retires its pending instruction");
     write_register(&state, device, MCG_C1, 1u, 0x80u);
-    expect(&state, kinetis_core_clock_hz(device) == 1u,
+    expect(&state, kinetis_core_clock_hz(device) == 0u,
            "external clock has no output without its source");
     write_register(&state, device, MCG_C6, 1u, 0x40u);
     write_register(&state, device, MCG_C1, 1u, 0u);
-    expect(&state, kinetis_core_clock_hz(device) == 1u,
+    expect(&state, kinetis_core_clock_hz(device) == 0u,
            "PLL without an external oscillator has no usable output");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
            "PLL without an external oscillator remains unlocked");
@@ -171,7 +187,7 @@ int main(void) {
     write_register(&state, device, MCG_C5, 1u, 1u);
     write_register(&state, device, MCG_C6, 1u, 0x5fu);
     write_register(&state, device, MCG_C1, 1u, 0u);
-    expect(&state, kinetis_core_clock_hz(device) == 1u, "out-of-range PLL has no usable output");
+    expect(&state, kinetis_core_clock_hz(device) == 0u, "out-of-range PLL has no usable output");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
            "out-of-range PLL remains unlocked");
     kinetis_destroy(device);

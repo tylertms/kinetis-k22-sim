@@ -277,8 +277,8 @@ static void test_edge_paths(TestState* state, const KinetisDeviceProfile* profil
     kinetis_timing_test_disable_watchdog_fixture(&timing);
     timing.external_oscillator_hz = 0u;
     kinetis_timing_test_expect_write(state, &timing, MCG_C1, 1, 0x80u);
-    expect(state, kinetis_timing_core_clock_hz(&timing) == 1u,
-           "kinetis_timing_core_clock_hz(&timing) == 1u");
+    expect(state, kinetis_timing_core_clock_hz(&timing) == 0u,
+           "kinetis_timing_core_clock_hz(&timing) == 0u");
     timing.external_oscillator_hz = 8000000u;
     kinetis_timing_test_expect_write(state, &timing, MCG_C1 + 1u, 1, 4u);
     kinetis_timing_test_expect_write(state, &timing, MCG_C1, 1, 0x80u);

@@ -8,6 +8,7 @@ typedef struct {
     uint8_t memory[1024];
     uint32_t rejected_read;
     uint32_t reset_count;
+    bool clock_running;
 } ApiBus;
 
 static bool bus_read(void* context, uint32_t address, uint8_t size, CortexM4Access access,
@@ -38,12 +39,19 @@ static void bus_reset(void* context) {
     bus->reset_count++;
 }
 
+static bool bus_clock_running(void* context) {
+    ApiBus* bus = context;
+    return bus->clock_running;
+}
+
 static CortexM4* create_cpu(TestState* state, ApiBus* bus) {
     bus->rejected_read = UINT32_MAX;
+    bus->clock_running = true;
     const uint32_t vectors[2] = {0x300u, 0x101u};
     memcpy(bus->memory, vectors, sizeof(vectors));
     CortexM4* cpu = cortex_m4_create((CortexM4Bus){bus, bus_read, bus_write, NULL, bus_reset});
     expect(state, cpu != NULL, "cpu != NULL");
+    cortex_m4_set_clock(cpu, bus_clock_running, bus);
     expect(state, cortex_m4_reset(cpu, 0u), "cortex_m4_reset(cpu, 0u)");
     return cpu;
 }
@@ -55,9 +63,9 @@ static void load_instruction(ApiBus* bus, uint16_t first_halfword, uint16_t seco
 
 static void test_creation_and_configuration(TestState* state) {
     expect(state, cortex_m4_create((CortexM4Bus){NULL, NULL, bus_write, NULL, NULL}) == NULL,
-           "cortex_m4_create((CortexM4Bus){NULL, NULL, bus_write, NULL, NULL}) == NULL");
+           "core creation requires a readable bus");
     expect(state, cortex_m4_create((CortexM4Bus){NULL, bus_read, NULL, NULL, NULL}) == NULL,
-           "cortex_m4_create((CortexM4Bus){NULL, bus_read, NULL, NULL, NULL}) == NULL");
+           "core creation requires a writable bus");
     ApiBus bus = {0};
     CortexM4* cpu = create_cpu(state, &bus);
     cpu->mpu_region_number = 7u;
@@ -101,6 +109,25 @@ static void test_step_guards(TestState* state) {
     expect(state, cortex_m4_step(cpu).stop == CORTEX_M4_STOP_LIMIT,
            "cortex_m4_step(cpu).stop == CORTEX_M4_STOP_LIMIT");
     cortex_m4_request_stop(NULL);
+    cortex_m4_destroy(cpu);
+
+    memset(&bus, 0, sizeof(bus));
+    cpu = create_cpu(state, &bus);
+    bus.clock_running = false;
+    expect(state, cortex_m4_step(cpu).stop == CORTEX_M4_STOP_CLOCK,
+           "a stopped clock prevents a core step");
+    expect(state, cortex_m4_run(cpu, (CortexM4RunLimits){1u, 1u}).stop == CORTEX_M4_STOP_CLOCK,
+           "a stopped clock ends a core run");
+    expect(state, cortex_m4_get_register(cpu, 15u) == 0x100u,
+           "a stopped clock preserves the program counter");
+    expect(state,
+           cortex_m4_get_instruction_count(cpu) == 0u && cortex_m4_get_cycle_count(cpu) == 0u,
+           "a stopped clock retires no work");
+    bus.clock_running = true;
+    expect(state, cortex_m4_run(cpu, (CortexM4RunLimits){1u, 0u}).stop == CORTEX_M4_STOP_LIMIT,
+           "a core run resumes when its clock returns");
+    expect(state, cortex_m4_get_instruction_count(cpu) == 1u,
+           "the resumed core retires its next instruction");
     cortex_m4_destroy(cpu);
 
     memset(&bus, 0, sizeof(bus));

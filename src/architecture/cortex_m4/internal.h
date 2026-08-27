@@ -136,6 +136,8 @@ struct CortexM4 {
     CortexM4Bus bus;
     CortexM4Trace trace;
     void* trace_context;
+    CortexM4ClockRunning clock_running;
+    void* clock_context;
     CortexM4WaitStates wait_states;
     void* wait_state_context;
     uint16_t external_irq_count;
