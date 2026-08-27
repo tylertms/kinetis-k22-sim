@@ -505,7 +505,7 @@ foreach definition : test_definitions
       '-Wl,--wrap=realloc',
     ]
   endif
-  if get_option('b_coverage') and host_machine.system() == 'windows' and definition['name'] == 'device_data_complete'
+  if host_machine.system() == 'windows' and definition['name'] == 'device_data_complete'
     link_args += ['-Wl,--stack,33554432']
   endif
   target = executable(
