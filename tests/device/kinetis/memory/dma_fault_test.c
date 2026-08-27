@@ -7,10 +7,13 @@
 typedef struct {
     uint8_t memory[256];
     uint32_t reads;
+    uint32_t failed_read_address;
 } BusState;
 
 static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* value) {
     BusState* state = context;
+    if (address == state->failed_read_address)
+        return false;
     if (address == UINT32_C(0x7fffffff) && size == 1u) {
         state->reads++;
         *value = 0u;
@@ -217,6 +220,28 @@ static void test_scatter_gather(TestState* state, const KinetisDeviceProfile* pr
            "DMA completes before an invalid scatter address");
     expect(state, error_status(data) == UINT32_C(0x80000004),
            "unaligned scatter address records SGE");
+    expect(state,
+           kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000004),
+           "scatter address is not applied to the destination");
+    expect(state, (kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x1c), 2u) & 0x80u) != 0u,
+           "failed scatter fetch retains major completion");
+
+    prepare_descriptor(data);
+    descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x18), 4u, UINT32_C(0x20000080));
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x1c), 2u, UINT32_C(0x0012));
+    memcpy(bus.memory + UINT32_C(0x80), descriptor, DMA_TCD_SIZE);
+    bus.failed_read_address = UINT32_C(0x20000090);
+    expect(state, kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA completes before an aligned scatter bus fault");
+    expect(state, error_status(data) == UINT32_C(0x80000002),
+           "aligned scatter bus fault records SBE");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == UINT32_C(0x20000000),
+           "partial scatter fetch does not replace the descriptor");
+    expect(state, (kinetis_data_internal_load_bytes(data->dma, UINT32_C(0x24), 2u) & 1u) != 0u,
+           "scatter bus fault retains the major interrupt");
+    bus.failed_read_address = 0u;
+    memset(bus.memory + UINT32_C(0x80), 0, DMA_TCD_SIZE);
 
     prepare_descriptor(data);
     descriptor = data->dma + UINT32_C(0x1000);

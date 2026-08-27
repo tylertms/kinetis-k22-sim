@@ -208,46 +208,57 @@ static bool dma_copy_descriptor(KinetisData* data, uint8_t* descriptor, uint32_t
     return true;
 }
 
-static void dma_complete_major(KinetisData* data, uint8_t channel, uint8_t* descriptor) {
-    uint32_t source_address = kinetis_data_internal_load_bytes(descriptor, 0u, 4u);
-    uint32_t destination_address = kinetis_data_internal_load_bytes(descriptor, 0x10u, 4u);
-    source_address = (uint32_t)((int64_t)source_address +
-                                (int32_t)kinetis_data_internal_load_bytes(descriptor, 0x0cu, 4u));
-    destination_address =
-        (uint32_t)((int64_t)destination_address +
-                   (int32_t)kinetis_data_internal_load_bytes(descriptor, 0x18u, 4u));
-    kinetis_data_internal_store_bytes(descriptor, 0u, 4u, source_address);
-    kinetis_data_internal_store_bytes(descriptor, 0x10u, 4u, destination_address);
-    const uint16_t completed_control =
-        (uint16_t)kinetis_data_internal_load_bytes(descriptor, 0x1cu, 2u);
-    const uint16_t initial_iteration_count =
-        dma_iteration_count((uint16_t)kinetis_data_internal_load_bytes(descriptor, 0x1e, 2));
-    dma_set_iteration_count(descriptor, 0x16u, initial_iteration_count);
-    if ((completed_control & 0x10u) != 0u) {
-        const uint32_t next_descriptor_address =
-            kinetis_data_internal_load_bytes(descriptor, 0x18u, 4u);
-        if ((next_descriptor_address & 31u) != 0u ||
-            !dma_copy_descriptor(data, descriptor, next_descriptor_address)) {
-            kinetis_data_internal_dma_error(data, channel, 1u << 2);
-            return;
-        }
-    } else {
-        kinetis_data_internal_store_bytes(descriptor, 0x1cu, 2u, completed_control | 0x80u);
-    }
-    if ((completed_control & 0x08u) != 0u) {
+static void dma_signal_major_completion(KinetisData* data, uint8_t channel, uint8_t* descriptor,
+                                        uint16_t control) {
+    kinetis_data_internal_store_bytes(descriptor, 0x1cu, 2u, control | 0x80u);
+    if ((control & 0x08u) != 0u) {
         uint16_t enabled_channels =
             (uint16_t)kinetis_data_internal_load_bytes(data->dma, 0x0cu, 2u);
         enabled_channels &= (uint16_t)~(1u << channel);
         kinetis_data_internal_store_bytes(data->dma, 0x0cu, 2u, enabled_channels);
     }
-    if ((completed_control & 0x02u) != 0u) {
+    if ((control & 0x02u) != 0u) {
         uint16_t pending_interrupt_mask =
             (uint16_t)kinetis_data_internal_load_bytes(data->dma, 0x24u, 2u);
         pending_interrupt_mask |= (uint16_t)(1u << channel);
         kinetis_data_internal_store_bytes(data->dma, 0x24u, 2u, pending_interrupt_mask);
     }
-    if ((completed_control & 0x20u) != 0u)
-        dma_queue_channel(data, (uint8_t)((completed_control >> 8u) & 15u));
+    if ((control & 0x20u) != 0u)
+        dma_queue_channel(data, (uint8_t)((control >> 8u) & 15u));
+}
+
+static void dma_complete_major(KinetisData* data, uint8_t channel, uint8_t* descriptor) {
+    const uint16_t completed_control =
+        (uint16_t)kinetis_data_internal_load_bytes(descriptor, 0x1cu, 2u);
+    const bool scatter_gather = (completed_control & 0x10u) != 0u;
+    uint32_t source_address = kinetis_data_internal_load_bytes(descriptor, 0u, 4u);
+    uint32_t destination_address = kinetis_data_internal_load_bytes(descriptor, 0x10u, 4u);
+    source_address = (uint32_t)((int64_t)source_address +
+                                (int32_t)kinetis_data_internal_load_bytes(descriptor, 0x0cu, 4u));
+    if (!scatter_gather)
+        destination_address =
+            (uint32_t)((int64_t)destination_address +
+                       (int32_t)kinetis_data_internal_load_bytes(descriptor, 0x18u, 4u));
+    kinetis_data_internal_store_bytes(descriptor, 0u, 4u, source_address);
+    kinetis_data_internal_store_bytes(descriptor, 0x10u, 4u, destination_address);
+    const uint16_t initial_iteration_count =
+        dma_iteration_count((uint16_t)kinetis_data_internal_load_bytes(descriptor, 0x1e, 2));
+    dma_set_iteration_count(descriptor, 0x16u, initial_iteration_count);
+    dma_signal_major_completion(data, channel, descriptor, completed_control);
+    if (scatter_gather) {
+        const uint32_t next_descriptor_address =
+            kinetis_data_internal_load_bytes(descriptor, 0x18u, 4u);
+        if ((next_descriptor_address & 31u) != 0u) {
+            kinetis_data_internal_dma_error(data, channel, 1u << 2);
+            return;
+        }
+        uint8_t next_descriptor[DMA_TCD_SIZE];
+        if (!dma_copy_descriptor(data, next_descriptor, next_descriptor_address)) {
+            kinetis_data_internal_dma_error(data, channel, 1u << 1u);
+            return;
+        }
+        memcpy(descriptor, next_descriptor, sizeof(next_descriptor));
+    }
 }
 
 bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channel) {
