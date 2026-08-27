@@ -107,11 +107,11 @@ int main(void) {
            "coverage records conditional branches");
     expect(&state, coverage_result.branches_taken == 3u, "coverage records taken branches");
     expect(&state, coverage_result.branches_not_taken == 3u, "coverage records not-taken branches");
-    expect(&state, coverage_result.unique_branch_sites == 3u,
-           "coverage counts unique branch sites");
-    expect(&state, coverage_result.unique_branch_outcomes == 6u,
-           "coverage counts unique branch outcomes");
-    expect(&state, coverage_result.fully_covered_branch_sites == 3u,
+    expect(&state, coverage_result.observed_branch_sites == 3u,
+           "coverage counts observed branch sites");
+    expect(&state, coverage_result.observed_branch_outcomes == 6u,
+           "coverage counts observed branch outcomes");
+    expect(&state, coverage_result.branch_sites_with_both_outcomes == 3u,
            "coverage counts branches with both outcomes");
     expect(&state,
            cortex_m4_coverage_flags(coverage, 0x100u) ==

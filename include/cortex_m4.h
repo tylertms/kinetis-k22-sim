@@ -74,9 +74,9 @@ typedef struct {
     uint64_t branches_not_taken;
     size_t unique_instructions;
     size_t unique_skipped;
-    size_t unique_branch_sites;
-    size_t unique_branch_outcomes;
-    size_t fully_covered_branch_sites;
+    size_t observed_branch_sites;
+    size_t observed_branch_outcomes;
+    size_t branch_sites_with_both_outcomes;
 } CortexM4CoverageResult;
 
 CortexM4Coverage* cortex_m4_coverage_create(uint32_t address, size_t size);

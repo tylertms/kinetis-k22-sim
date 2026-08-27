@@ -13,9 +13,9 @@ struct CortexM4Coverage {
     uint64_t branches_not_taken;
     size_t unique_instructions;
     size_t unique_skipped;
-    size_t unique_branch_sites;
-    size_t unique_branch_outcomes;
-    size_t fully_covered_branch_sites;
+    size_t observed_branch_sites;
+    size_t observed_branch_outcomes;
+    size_t branch_sites_with_both_outcomes;
     uint8_t slots[];
 };
 
@@ -87,13 +87,13 @@ void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t addre
         taken ? CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN : CORTEX_M4_COVERAGE_BRANCH_TAKEN;
     if ((coverage->slots[slot] &
          (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN)) == 0u) {
-        coverage->unique_branch_sites++;
+        coverage->observed_branch_sites++;
     }
     if ((coverage->slots[slot] & outcome) == 0u) {
         coverage->slots[slot] |= outcome;
-        coverage->unique_branch_outcomes++;
+        coverage->observed_branch_outcomes++;
         if ((coverage->slots[slot] & opposite) != 0u) {
-            coverage->fully_covered_branch_sites++;
+            coverage->branch_sites_with_both_outcomes++;
         }
     }
     coverage->branches_taken += taken;
@@ -113,9 +113,9 @@ CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverag
         .branches_not_taken = coverage->branches_not_taken,
         .unique_instructions = coverage->unique_instructions,
         .unique_skipped = coverage->unique_skipped,
-        .unique_branch_sites = coverage->unique_branch_sites,
-        .unique_branch_outcomes = coverage->unique_branch_outcomes,
-        .fully_covered_branch_sites = coverage->fully_covered_branch_sites,
+        .observed_branch_sites = coverage->observed_branch_sites,
+        .observed_branch_outcomes = coverage->observed_branch_outcomes,
+        .branch_sites_with_both_outcomes = coverage->branch_sites_with_both_outcomes,
     };
     return result;
 }
