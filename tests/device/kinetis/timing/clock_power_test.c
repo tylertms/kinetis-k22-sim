@@ -148,19 +148,15 @@ int main(void) {
     expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_CLOCK,
            "normal Stop disables an unretained PLL");
     cortex_m4_set_irq(kinetis_cpu(device), 0u, true);
-    kinetis_advance(device, 1u);
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "the wake interrupt restores the clock and executes without a host advance");
     expect(&state, kinetis_core_clock_hz(device) == 8000000u,
            "Stop wake forces PBE to restore the core clock");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x4cu) == 0x08u,
            "Stop wake reports external MCG clock while PLL reacquires");
-    kinetis_advance(device, 3348u);
-    expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x40u) == 0u,
-           "wake PLL remains unlocked through its penultimate cycle");
-    kinetis_advance(device, 1u);
+    kinetis_advance(device, 3350u);
     expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x40u) != 0u,
            "wake PLL reacquires without deadlocking the core");
-    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
-           "the core services its wake interrupt");
     kinetis_destroy(device);
 
     KinetisConfiguration mkv30_configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);

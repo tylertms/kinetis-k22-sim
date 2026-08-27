@@ -508,6 +508,8 @@ static void kinetis_reset_bus(void* context) { kinetis_warm_reset(context, 0, 0x
 
 static bool kinetis_core_clock_running(void* context) {
     Kinetis* device = context;
+    kinetis_timing_set_cpu_sleeping(&device->timing, device->cpu->sleeping,
+                                    (device->cpu->scr & 4u) != 0u);
     return device->timing.core_clock_hz != 0u;
 }
 
