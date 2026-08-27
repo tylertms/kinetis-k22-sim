@@ -283,6 +283,24 @@ static void test_invalid_arithmetic(TestState* state, Kinetis* device) {
     expect(state, cortex_m4_get_fp_register(cpu, 0u) == 0x7fc00011u,
            "cortex_m4_get_fp_register(cpu, 0u) == 0x7fc00011u");
 
+    cpu = prepare(state, device, 0xeea1u, 0x0a02u);
+    cortex_m4_set_fp_register(cpu, 0u, 0x7fc00011u);
+    cortex_m4_set_fp_register(cpu, 2u, 0x7f800000u);
+    cortex_m4_set_fp_register(cpu, 4u, 0u);
+    run(state, cpu);
+    expect(state,
+           cortex_m4_get_fp_register(cpu, 0u) == 0x7fc00000u &&
+               (cortex_m4_get_fpscr(cpu) & FPSCR_IOC) != 0u,
+           "fused infinity times zero overrides a quiet accumulator NaN");
+
+    cpu = prepare(state, device, 0xeea1u, 0x0a02u);
+    cortex_m4_set_fp_register(cpu, 0u, 0x7fc00011u);
+    cortex_m4_set_fp_register(cpu, 2u, 0x7fc00022u);
+    cortex_m4_set_fp_register(cpu, 4u, 0x3f800000u);
+    run(state, cpu);
+    expect(state, cortex_m4_get_fp_register(cpu, 0u) == 0x7fc00011u,
+           "fused NaN selection prioritizes the accumulator");
+
     cpu = prepare(state, device, 0xee00u, 0x0a81u);
     cortex_m4_set_fp_register(cpu, 0u, 0x3f800000u);
     cortex_m4_set_fp_register(cpu, 1u, 0x7fc00011u);

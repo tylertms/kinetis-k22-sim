@@ -103,6 +103,20 @@ static uint32_t select_nan(CortexM4* cpu, uint32_t first, uint32_t second) {
     return float_is_nan(first) ? quiet_nan(cpu, first) : quiet_nan(cpu, second);
 }
 
+static uint32_t select_nan3(CortexM4* cpu, uint32_t first, uint32_t second, uint32_t third) {
+    if (float_is_signaling_nan(first))
+        return quiet_nan(cpu, first);
+    if (float_is_signaling_nan(second))
+        return quiet_nan(cpu, second);
+    if (float_is_signaling_nan(third))
+        return quiet_nan(cpu, third);
+    if (float_is_nan(first))
+        return quiet_nan(cpu, first);
+    if (float_is_nan(second))
+        return quiet_nan(cpu, second);
+    return quiet_nan(cpu, third);
+}
+
 static uint32_t prepare_operand(CortexM4* cpu, uint32_t bits) {
     if ((cpu->fpscr & FPSCR_FZ) != 0 && float_is_subnormal(bits)) {
         cpu->fpscr |= FPSCR_IDC;
@@ -543,15 +557,27 @@ static uint32_t multiply_accumulate(CortexM4* cpu, uint32_t accumulator, uint32_
     accumulator = prepare_operand(cpu, accumulator);
     left = prepare_operand(cpu, left);
     right = prepare_operand(cpu, right);
-    if (float_is_nan(accumulator) || float_is_nan(left) || float_is_nan(right)) {
-        uint32_t product_nan =
-            float_is_nan(left) || float_is_nan(right) ? select_nan(cpu, left, right) : accumulator;
-        return float_is_nan(accumulator) ? select_nan(cpu, product_nan, accumulator) : product_nan;
-    }
-    if ((float_is_infinity(left) && float_is_zero(right)) ||
-        (float_is_zero(left) && float_is_infinity(right))) {
-        cpu->fpscr |= FPSCR_IOC;
-        return DEFAULT_NAN;
+    const bool invalid_product = (float_is_infinity(left) && float_is_zero(right)) ||
+                                 (float_is_zero(left) && float_is_infinity(right));
+    if (fused) {
+        if (invalid_product && !float_is_signaling_nan(accumulator)) {
+            cpu->fpscr |= FPSCR_IOC;
+            return DEFAULT_NAN;
+        }
+        if (float_is_nan(accumulator) || float_is_nan(left) || float_is_nan(right))
+            return select_nan3(cpu, accumulator, left, right);
+    } else {
+        if (float_is_nan(accumulator) || float_is_nan(left) || float_is_nan(right)) {
+            uint32_t product_nan = float_is_nan(left) || float_is_nan(right)
+                                       ? select_nan(cpu, left, right)
+                                       : accumulator;
+            return float_is_nan(accumulator) ? select_nan(cpu, product_nan, accumulator)
+                                             : product_nan;
+        }
+        if (invalid_product) {
+            cpu->fpscr |= FPSCR_IOC;
+            return DEFAULT_NAN;
+        }
     }
     const double accumulator_value = bits_to_float(accumulator);
     const double left_value = bits_to_float(left);
