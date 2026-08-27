@@ -291,8 +291,8 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
            "K22 external-reference mode uses the selected RTC oscillator");
     mcg_source.rtc_cr = 0x300u;
     kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
-    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == mcg_source.slow_irc_hz,
-           "K22 external-reference mode requires RTC clock output");
+    expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 1u,
+           "K22 external-reference mode has no output without RTC clock output");
     mcg_source.rtc_cr = 0x100u;
     mcg_source.mcg[0] = 6u << 3u;
     kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);

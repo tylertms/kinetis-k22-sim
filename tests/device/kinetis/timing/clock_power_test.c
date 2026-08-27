@@ -124,9 +124,13 @@ int main(void) {
     device = kinetis_create(missing_oscillator);
     expect(&state, device != NULL, "missing-oscillator device is created");
     write_register(&state, device, MCG_C1, 1u, 0u);
-    expect(&state, kinetis_core_clock_hz(device) == 32768u * 640u,
-           "external-reference FLL falls back to the slow internal clock");
+    expect(&state, kinetis_core_clock_hz(device) == 1u,
+           "external-reference FLL has no output without its source");
+    write_register(&state, device, MCG_C1, 1u, 0x80u);
+    expect(&state, kinetis_core_clock_hz(device) == 1u,
+           "external clock has no output without its source");
     write_register(&state, device, MCG_C6, 1u, 0x40u);
+    write_register(&state, device, MCG_C1, 1u, 0u);
     expect(&state, kinetis_core_clock_hz(device) == 1u,
            "PLL without an external oscillator has no usable output");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,

@@ -60,8 +60,7 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
         const uint16_t dmx_multipliers[4] = {732u, 1464u, 2197u, 2929u};
         fll_multiplier = dmx_multipliers[(mcg_c4_value >> 5u) & 3u];
     }
-    return reference_clock_hz == 0 ? timing->slow_irc_hz * fll_multiplier
-                                   : reference_clock_hz * fll_multiplier;
+    return reference_clock_hz * fll_multiplier;
 }
 
 uint32_t kinetis_timing_internal_mcgir_clock_hz(const KinetisTiming* timing) {
@@ -176,9 +175,6 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
         if ((timing->mcg[0] & 4u) != 0) {
             mcg_status_value |= 1u << 4u;
         }
-    }
-    if (mcg_output_clock_hz == 0u && !pll_selected) {
-        mcg_output_clock_hz = timing->slow_irc_hz;
     }
     timing->mcg[6] = mcg_status_value;
 
