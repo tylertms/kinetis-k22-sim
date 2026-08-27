@@ -61,6 +61,14 @@ int main(void) {
 
     CortexM4Coverage* coverage = cortex_m4_coverage_create(0x100u, 16u);
     expect(&state, coverage != NULL, "coverage != NULL");
+    for (uint32_t address = 0x100u; address <= 0x106u; address += 2u) {
+        expect(&state, cortex_m4_coverage_define_instruction(coverage, address, false),
+               "coverage defines a narrow instruction");
+    }
+    expect(&state, cortex_m4_coverage_define_instruction(coverage, 0x108u, false),
+           "coverage defines a wide instruction");
+    expect(&state, cortex_m4_coverage_define_instruction(coverage, 0x10cu, false),
+           "coverage defines the breakpoint instruction");
     cortex_m4_set_coverage(kinetis_cpu(device), coverage);
     expect(&state, kinetis_reset(device), "coverage reset succeeds");
     test_connect_debugger(&state, kinetis_cpu(device));
@@ -76,6 +84,14 @@ int main(void) {
            "coverage counts unique instructions");
     expect(&state, coverage_result.unique_skipped == 1u, "coverage counts unique skips");
     expect(&state, coverage_result.conditional_branches == 0u, "coverage does not invent branches");
+    expect(&state, coverage_result.covered_instructions == 5u,
+           "coverage counts defined instructions reached");
+    expect(&state, coverage_result.total_instructions == 6u,
+           "coverage counts defined instructions");
+    expect(&state,
+           coverage_result.instruction_coverage_percent > 83.3 &&
+               coverage_result.instruction_coverage_percent < 83.4,
+           "coverage calculates the instruction percentage");
     expect(&state, cortex_m4_coverage_flags(coverage, 0x100u) == CORTEX_M4_COVERAGE_EXECUTED,
            "coverage exposes executed instructions");
     expect(&state, cortex_m4_coverage_flags(coverage, 0x106u) == CORTEX_M4_COVERAGE_SKIPPED,
@@ -83,6 +99,22 @@ int main(void) {
     expect(&state, cortex_m4_coverage_flags(coverage, 0x10cu) == CORTEX_M4_COVERAGE_EXECUTED,
            "coverage exposes the final instruction");
     cortex_m4_coverage_clear(coverage);
+    coverage_result = cortex_m4_coverage_result(coverage);
+    expect(&state, coverage_result.covered_instructions == 0u,
+           "coverage clear resets covered instructions");
+    expect(&state, coverage_result.total_instructions == 6u,
+           "coverage clear preserves defined instructions");
+    cortex_m4_set_coverage(kinetis_cpu(device), NULL);
+    cortex_m4_coverage_destroy(coverage);
+    coverage = cortex_m4_coverage_create(0x100u, 16u);
+    expect(&state, coverage != NULL, "branch coverage != NULL");
+    expect(&state, cortex_m4_coverage_define_instruction(coverage, 0x100u, true),
+           "coverage defines a narrow branch");
+    expect(&state, cortex_m4_coverage_define_instruction(coverage, 0x104u, true),
+           "coverage defines a wide branch");
+    expect(&state, cortex_m4_coverage_define_instruction(coverage, 0x10au, true),
+           "coverage defines a compare-and-branch instruction");
+    cortex_m4_set_coverage(kinetis_cpu(device), coverage);
     const uint16_t branch_program[] = {0xd100u, 0xbf00u, 0xf040u, 0x8001u,
                                        0xbf00u, 0xb100u, 0xbf00u, 0xbe00u};
     expect(&state, kinetis_load(device, 0x100u, branch_program, sizeof(branch_program)),
@@ -113,6 +145,12 @@ int main(void) {
            "coverage counts observed branch outcomes");
     expect(&state, coverage_result.branch_sites_with_both_outcomes == 3u,
            "coverage counts branches with both outcomes");
+    expect(&state, coverage_result.covered_branch_sites == 3u,
+           "coverage counts defined branch sites reached");
+    expect(&state, coverage_result.total_branch_sites == 3u,
+           "coverage counts defined branch sites");
+    expect(&state, coverage_result.branch_coverage_percent == 100.0,
+           "coverage calculates the branch percentage");
     expect(&state,
            cortex_m4_coverage_flags(coverage, 0x100u) ==
                (CORTEX_M4_COVERAGE_EXECUTED | CORTEX_M4_COVERAGE_BRANCH_TAKEN |
@@ -134,6 +172,8 @@ int main(void) {
     expect(&state, cortex_m4_coverage_create(0u, 1u) == NULL, "coverage rejects odd sizes");
     expect(&state, cortex_m4_coverage_create(UINT32_MAX - 1u, 4u) == NULL,
            "coverage rejects overflowing ranges");
+    expect(&state, !cortex_m4_coverage_define_instruction(NULL, 0u, false),
+           "coverage definition requires coverage");
     cortex_m4_coverage_clear(NULL);
     cortex_m4_coverage_destroy(NULL);
 

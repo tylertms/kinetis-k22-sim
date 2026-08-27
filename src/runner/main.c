@@ -25,7 +25,7 @@ static void print_usage(const char* program) {
             "usage: %s IMAGE --profile DEVICE --reset-address ADDRESS "
             "[--package CODE] [--binary-address ADDRESS] "
             "[--max-instructions COUNT] "
-            "[--max-cycles COUNT] [--stop-address ADDRESS]\n",
+            "[--max-cycles COUNT] [--stop-address ADDRESS] [--coverage]\n",
             program);
 }
 
@@ -40,11 +40,17 @@ int main(int argc, char** argv) {
     bool binary_image_loaded = false;
     uint64_t stop_address = 0;
     bool stop_address_set = false;
+    bool coverage_requested = false;
     KinetisProfile profile = KINETIS_PROFILE_COUNT;
     bool profile_set = false;
     KinetisPackage package = KINETIS_PACKAGE_DEFAULT;
     CortexM4RunLimits limits = {1000000, 10000000};
-    for (int argument_index = 2; argument_index < argc; argument_index += 2) {
+    for (int argument_index = 2; argument_index < argc;) {
+        if (strcmp(argv[argument_index], "--coverage") == 0) {
+            coverage_requested = true;
+            argument_index++;
+            continue;
+        }
         if (argument_index + 1 >= argc) {
             print_usage(argv[0]);
             return EXIT_FAILURE;
@@ -55,6 +61,7 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             }
             profile_set = true;
+            argument_index += 2;
             continue;
         }
 
@@ -63,6 +70,7 @@ int main(int argc, char** argv) {
                 fprintf(stderr, "unknown Kinetis package: %s\n", argv[argument_index + 1]);
                 return EXIT_FAILURE;
             }
+            argument_index += 2;
             continue;
         }
 
@@ -88,6 +96,7 @@ int main(int argc, char** argv) {
             fprintf(stderr, "unknown option: %s\n", argv[argument_index]);
             return EXIT_FAILURE;
         }
+        argument_index += 2;
     }
     if (!profile_set || !reset_address_set) {
         print_usage(argv[0]);
@@ -119,6 +128,16 @@ int main(int argc, char** argv) {
         kinetis_destroy(device);
         return EXIT_FAILURE;
     }
+    CortexM4Coverage* coverage = NULL;
+    if (coverage_requested) {
+        coverage = binary_image_loaded ? NULL : cortex_m4_coverage_create_elf(argv[1]);
+        if (coverage == NULL) {
+            fprintf(stderr, "coverage requires an ELF image with executable sections\n");
+            kinetis_destroy(device);
+            return EXIT_FAILURE;
+        }
+        cortex_m4_set_coverage(kinetis_cpu(device), coverage);
+    }
     if (stop_address_set &&
         !cortex_m4_set_breakpoint(kinetis_cpu(device), 0, (uint32_t)stop_address, true)) {
         fprintf(stderr, "the stop address is invalid\n");
@@ -135,6 +154,15 @@ int main(int argc, char** argv) {
         printf("r%u=0x%08" PRIx32 "%c", register_index,
                cortex_m4_get_register(kinetis_cpu(device), register_index),
                register_index == 15 ? '\n' : ' ');
+    }
+    if (coverage != NULL) {
+        const CortexM4CoverageResult coverage_result = cortex_m4_coverage_result(coverage);
+        printf("coverage instructions=%zu/%zu %.2f%% branches=%zu/%zu %.2f%%\n",
+               coverage_result.covered_instructions, coverage_result.total_instructions,
+               coverage_result.instruction_coverage_percent, coverage_result.covered_branch_sites,
+               coverage_result.total_branch_sites, coverage_result.branch_coverage_percent);
+        cortex_m4_set_coverage(kinetis_cpu(device), NULL);
+        cortex_m4_coverage_destroy(coverage);
     }
     kinetis_destroy(device);
     const bool failed =

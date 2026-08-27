@@ -1,7 +1,6 @@
 #include "cortex_m4.h"
 
 #include <stdlib.h>
-#include <string.h>
 
 struct CortexM4Coverage {
     uint32_t address;
@@ -16,7 +15,17 @@ struct CortexM4Coverage {
     size_t observed_branch_sites;
     size_t observed_branch_outcomes;
     size_t branch_sites_with_both_outcomes;
+    size_t covered_instructions;
+    size_t total_instructions;
+    size_t covered_branch_sites;
+    size_t total_branch_sites;
     uint8_t slots[];
+};
+
+enum {
+    COVERAGE_DEFINED = 1u << 4,
+    COVERAGE_CONDITIONAL_BRANCH = 1u << 5,
+    COVERAGE_DEFINITION_MASK = COVERAGE_DEFINED | COVERAGE_CONDITIONAL_BRANCH,
 };
 
 static size_t coverage_slot(const CortexM4Coverage* coverage, uint32_t address) {
@@ -50,11 +59,45 @@ void cortex_m4_coverage_clear(CortexM4Coverage* coverage) {
     if (coverage == NULL) {
         return;
     }
-    const uint32_t address = coverage->address;
-    const size_t size = coverage->size;
-    memset(coverage, 0, sizeof(*coverage) + size / 2u);
-    coverage->address = address;
-    coverage->size = size;
+    coverage->instructions = 0u;
+    coverage->skipped = 0u;
+    coverage->outside_range = 0u;
+    coverage->branches_taken = 0u;
+    coverage->branches_not_taken = 0u;
+    coverage->unique_instructions = 0u;
+    coverage->unique_skipped = 0u;
+    coverage->observed_branch_sites = 0u;
+    coverage->observed_branch_outcomes = 0u;
+    coverage->branch_sites_with_both_outcomes = 0u;
+    coverage->covered_instructions = 0u;
+    coverage->covered_branch_sites = 0u;
+    for (size_t slot = 0u; slot < coverage->size / 2u; slot++) {
+        coverage->slots[slot] &= COVERAGE_DEFINITION_MASK;
+    }
+}
+
+bool cortex_m4_coverage_define_instruction(CortexM4Coverage* coverage, uint32_t address,
+                                           bool conditional_branch) {
+    const size_t slot = coverage == NULL ? SIZE_MAX : coverage_slot(coverage, address);
+    if (slot == SIZE_MAX) {
+        return false;
+    }
+    if ((coverage->slots[slot] & COVERAGE_DEFINED) == 0u) {
+        coverage->slots[slot] |= COVERAGE_DEFINED;
+        coverage->total_instructions++;
+        if ((coverage->slots[slot] & CORTEX_M4_COVERAGE_EXECUTED) != 0u) {
+            coverage->covered_instructions++;
+        }
+    }
+    if (conditional_branch && (coverage->slots[slot] & COVERAGE_CONDITIONAL_BRANCH) == 0u) {
+        coverage->slots[slot] |= COVERAGE_CONDITIONAL_BRANCH;
+        coverage->total_branch_sites++;
+        if ((coverage->slots[slot] &
+             (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN)) != 0u) {
+            coverage->covered_branch_sites++;
+        }
+    }
+    return true;
 }
 
 void cortex_m4_coverage_record(CortexM4Coverage* coverage, uint32_t address, bool executed) {
@@ -67,6 +110,7 @@ void cortex_m4_coverage_record(CortexM4Coverage* coverage, uint32_t address, boo
             coverage->slots[slot] |= flag;
             if (executed) {
                 coverage->unique_instructions++;
+                coverage->covered_instructions += (coverage->slots[slot] & COVERAGE_DEFINED) != 0u;
             } else {
                 coverage->unique_skipped++;
             }
@@ -88,6 +132,8 @@ void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t addre
     if ((coverage->slots[slot] &
          (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN)) == 0u) {
         coverage->observed_branch_sites++;
+        coverage->covered_branch_sites +=
+            (coverage->slots[slot] & COVERAGE_CONDITIONAL_BRANCH) != 0u;
     }
     if ((coverage->slots[slot] & outcome) == 0u) {
         coverage->slots[slot] |= outcome;
@@ -116,6 +162,18 @@ CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverag
         .observed_branch_sites = coverage->observed_branch_sites,
         .observed_branch_outcomes = coverage->observed_branch_outcomes,
         .branch_sites_with_both_outcomes = coverage->branch_sites_with_both_outcomes,
+        .covered_instructions = coverage->covered_instructions,
+        .total_instructions = coverage->total_instructions,
+        .instruction_coverage_percent = coverage->total_instructions == 0u
+                                            ? 0.0
+                                            : 100.0 * (double)coverage->covered_instructions /
+                                                  (double)coverage->total_instructions,
+        .covered_branch_sites = coverage->covered_branch_sites,
+        .total_branch_sites = coverage->total_branch_sites,
+        .branch_coverage_percent = coverage->total_branch_sites == 0u
+                                       ? 0.0
+                                       : 100.0 * (double)coverage->covered_branch_sites /
+                                             (double)coverage->total_branch_sites,
     };
     return result;
 }
@@ -125,5 +183,5 @@ uint8_t cortex_m4_coverage_flags(const CortexM4Coverage* coverage, uint32_t addr
         return 0u;
     }
     const size_t slot = coverage_slot(coverage, address);
-    return slot == SIZE_MAX ? 0u : coverage->slots[slot];
+    return slot == SIZE_MAX ? 0u : coverage->slots[slot] & 0x0fu;
 }

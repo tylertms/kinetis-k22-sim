@@ -47,6 +47,7 @@ kinetis_firmware_runner <IMAGE> --profile <DEVICE> --reset-address <ADDRESS> [OP
 | `--stop-address <ADDR>` | Execution stop address. |
 | `--max-instructions <N>` | Maximum instruction count. |
 | `--max-cycles <N>` | Maximum clock cycle limit. |
+| `--coverage` | Print ELF instruction and conditional-branch coverage. |
 
 ## Use in Meson Projects
 

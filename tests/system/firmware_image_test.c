@@ -14,6 +14,13 @@ enum {
     SYMBOL_OFFSET = ELF_HEADER_SIZE + 3 * ELF_SECTION_SIZE,
     STRING_OFFSET = SYMBOL_OFFSET + 16,
     SYMBOL_IMAGE_SIZE = STRING_OFFSET + 6,
+    COVERAGE_SECTION_COUNT = 4,
+    COVERAGE_TABLE_OFFSET = ELF_HEADER_SIZE,
+    COVERAGE_CODE_OFFSET = COVERAGE_TABLE_OFFSET + COVERAGE_SECTION_COUNT * ELF_SECTION_SIZE,
+    COVERAGE_CODE_SIZE = 14,
+    COVERAGE_SYMBOL_OFFSET = COVERAGE_CODE_OFFSET + COVERAGE_CODE_SIZE,
+    COVERAGE_STRING_OFFSET = COVERAGE_SYMBOL_OFFSET + 3 * 16,
+    COVERAGE_IMAGE_SIZE = COVERAGE_STRING_OFFSET + 7,
 };
 
 static void write16(uint8_t* data, size_t offset, uint16_t value) {
@@ -93,6 +100,50 @@ static void initialize_symbol_image(uint8_t* image) {
     write32(image, SYMBOL_OFFSET, 1);
     write32(image, SYMBOL_OFFSET + 4, 0x12345678u);
     memcpy(image + STRING_OFFSET, "\0test", 6);
+}
+
+static void initialize_coverage_image(uint8_t* image) {
+    memset(image, 0, COVERAGE_IMAGE_SIZE);
+    image[0] = 0x7f;
+    image[1] = 'E';
+    image[2] = 'L';
+    image[3] = 'F';
+    image[4] = 1;
+    image[5] = 1;
+    write16(image, 18, 40);
+    write32(image, 32, COVERAGE_TABLE_OFFSET);
+    write16(image, 46, ELF_SECTION_SIZE);
+    write16(image, 48, COVERAGE_SECTION_COUNT);
+
+    size_t section = COVERAGE_TABLE_OFFSET + ELF_SECTION_SIZE;
+    write32(image, section + 4, 1);
+    write32(image, section + 8, 4);
+    write32(image, section + 12, 0x100u);
+    write32(image, section + 16, COVERAGE_CODE_OFFSET);
+    write32(image, section + 20, COVERAGE_CODE_SIZE);
+
+    section += ELF_SECTION_SIZE;
+    write32(image, section + 4, 2);
+    write32(image, section + 16, COVERAGE_SYMBOL_OFFSET);
+    write32(image, section + 20, 3 * 16);
+    write32(image, section + 24, 3);
+    write32(image, section + 36, 16);
+
+    section += ELF_SECTION_SIZE;
+    write32(image, section + 4, 3);
+    write32(image, section + 16, COVERAGE_STRING_OFFSET);
+    write32(image, section + 20, 7);
+
+    const uint8_t code[COVERAGE_CODE_SIZE] = {0x00u, 0xd1u, 0x00u, 0xb1u, 0x40u, 0xf0u, 0x01u,
+                                              0x80u, 0x00u, 0xbfu, 0x11u, 0x22u, 0x33u, 0x44u};
+    memcpy(image + COVERAGE_CODE_OFFSET, code, sizeof(code));
+    write32(image, COVERAGE_SYMBOL_OFFSET + 16, 1);
+    write32(image, COVERAGE_SYMBOL_OFFSET + 20, 0x100u);
+    write16(image, COVERAGE_SYMBOL_OFFSET + 30, 1);
+    write32(image, COVERAGE_SYMBOL_OFFSET + 32, 4);
+    write32(image, COVERAGE_SYMBOL_OFFSET + 36, 0x10au);
+    write16(image, COVERAGE_SYMBOL_OFFSET + 46, 1);
+    memcpy(image + COVERAGE_STRING_OFFSET, "\0$t\0$d", 7);
 }
 
 static bool write_file(const char* path, const void* data, size_t size) {
@@ -184,6 +235,24 @@ static void test_symbol(TestState* state) {
            "symbol lookup skips an out-of-range symbol name");
 }
 
+static void test_coverage(TestState* state) {
+    uint8_t image[COVERAGE_IMAGE_SIZE];
+    initialize_coverage_image(image);
+    CortexM4Coverage* coverage = cortex_m4_coverage_create_elf_data(image, sizeof(image));
+    expect(state, coverage != NULL, "ELF coverage is created");
+    const CortexM4CoverageResult result = cortex_m4_coverage_result(coverage);
+    expect(state, result.total_instructions == 4u, "ELF coverage counts instructions");
+    expect(state, result.total_branch_sites == 3u, "ELF coverage counts conditional branches");
+    expect(state, result.covered_instructions == 0u, "ELF coverage starts empty");
+    cortex_m4_coverage_destroy(coverage);
+
+    image[0] = 0u;
+    expect(state, cortex_m4_coverage_create_elf_data(image, sizeof(image)) == NULL,
+           "ELF coverage rejects invalid images");
+    expect(state, cortex_m4_coverage_create_elf_data(NULL, sizeof(image)) == NULL,
+           "ELF coverage requires image data");
+}
+
 int main(void) {
     TestState state = {0};
     Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
@@ -195,6 +264,7 @@ int main(void) {
            "initialize ELF BSS destination");
     test_binary(&state, device);
     test_symbol(&state);
+    test_coverage(&state);
     test_files(&state, device);
 
     uint32_t entry_address = 0;
