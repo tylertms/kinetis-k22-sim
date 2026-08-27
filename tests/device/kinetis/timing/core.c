@@ -343,6 +343,42 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     kinetis_timing_set_cpu_sleeping(&vlps_pll, false, false);
     expect(state, !vlps_pll.pll_locked, "VLPS wake requires PLL reacquisition");
 
+    KinetisTiming pee_stop = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &pee_stop, MCG_C1, 1u, 0u);
+    kinetis_timing_set_cpu_sleeping(&pee_stop, true, true);
+    kinetis_timing_set_cpu_sleeping(&pee_stop, false, false);
+    expect(state, (pee_stop.mcg[0] & 0xc0u) == 0x80u,
+           "normal Stop wake forces unlocked PEE into PBE");
+    expect(state, kinetis_timing_core_clock_hz(&pee_stop) == 4000000u,
+           "PBE provides a core clock for PLL reacquisition");
+    kinetis_timing_advance(&pee_stop, 1675u);
+    expect(state, pee_stop.pll_locked, "PLL reacquires after PEE Stop wake");
+
+    KinetisTiming retained_pee = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &retained_pee, MCG_C5, 1u, 0x21u);
+    kinetis_timing_test_expect_write(state, &retained_pee, MCG_C1, 1u, 0u);
+    kinetis_timing_set_cpu_sleeping(&retained_pee, true, true);
+    kinetis_timing_set_cpu_sleeping(&retained_pee, false, false);
+    expect(state, (retained_pee.mcg[0] & 0xc0u) == 0u && retained_pee.pll_locked,
+           "retained PLL preserves PEE through normal Stop");
+
+    KinetisTiming pee_vlps = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &pee_vlps, MCG_C5, 1u, 0x21u);
+    kinetis_timing_test_expect_write(state, &pee_vlps, MCG_C1, 1u, 0u);
+    kinetis_timing_test_expect_write(state, &pee_vlps, SMC_PMPROT, 1u, 0x20u);
+    kinetis_timing_test_expect_write(state, &pee_vlps, SMC_PMCTRL, 1u, 2u);
+    kinetis_timing_set_cpu_sleeping(&pee_vlps, true, true);
+    kinetis_timing_set_cpu_sleeping(&pee_vlps, false, false);
+    expect(state, (pee_vlps.mcg[0] & 0xc0u) == 0x80u, "VLPS wake forces unlocked PEE into PBE");
+
+    KinetisTiming pee_lls = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &pee_lls, MCG_C1, 1u, 0u);
+    kinetis_timing_test_expect_write(state, &pee_lls, SMC_PMPROT, 1u, 8u);
+    kinetis_timing_test_expect_write(state, &pee_lls, SMC_PMCTRL, 1u, 3u);
+    kinetis_timing_set_cpu_sleeping(&pee_lls, true, true);
+    kinetis_timing_set_cpu_sleeping(&pee_lls, false, false);
+    expect(state, (pee_lls.mcg[0] & 0xc0u) == 0x80u, "LLS wake forces unlocked PEE into PBE");
+
     KinetisTiming mcg_source = *timing;
     mcg_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
     mcg_source.sim_clkdiv1 = 0u;

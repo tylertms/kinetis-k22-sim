@@ -933,9 +933,15 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
         timing->ewm_service_deadline = timing->wdog_bus_cycles + timing->ewm_service_remaining;
         timing->ewm_service_paused = false;
     }
+    const bool pee_before_sleep =
+        (timing->mcg[0] & 0xc0u) == 0u && (timing->mcg[5] & 0x40u) != 0u && timing->pll_locked;
     timing->cpu_sleeping = sleeping;
     timing->deep_sleeping = sleeping && deep_sleep;
     if (!sleeping) {
+        if (timing->pll_wake_to_pbe) {
+            timing->mcg[0] = (timing->mcg[0] & 0x3fu) | 0x80u;
+            timing->pll_wake_to_pbe = false;
+        }
         if (timing->smc[3] != 0x40u)
             timing->smc[3] = timing->smc_run_status;
         kinetis_timing_internal_update_clocks(timing);
@@ -955,6 +961,7 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
     else if (stop_mode == 4u && (timing->smc[0] & 2u) != 0u)
         timing->smc[3] = 0x40u;
     kinetis_timing_internal_update_clocks(timing);
+    timing->pll_wake_to_pbe = pee_before_sleep && !timing->pll_locked;
 }
 
 bool kinetis_timing_set_ewm_input(KinetisTiming* timing, bool high) {

@@ -120,6 +120,49 @@ int main(void) {
     expect(&state, transmitted_value == 0x5au, "PLL-clocked LPUART transmits its data");
     kinetis_destroy(device);
 
+    device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
+    expect(&state, device != NULL, "PLL Stop-wake device is created");
+    uint32_t sleep_vectors[17] = {0u};
+    sleep_vectors[0] = 0x20001000u;
+    sleep_vectors[1] = 0x101u;
+    sleep_vectors[16] = 0x105u;
+    const uint16_t sleep_program[] = {0xbf30u, 0xbf00u, 0x4770u};
+    expect(&state, kinetis_load(device, 0u, sleep_vectors, sizeof(sleep_vectors)),
+           "PLL Stop-wake vectors load");
+    expect(&state, kinetis_load(device, 0x100u, sleep_program, sizeof(sleep_program)),
+           "PLL Stop-wake program loads");
+    expect(&state, kinetis_reset(device), "PLL Stop-wake device resets");
+    expect(&state, kinetis_test_disable_watchdog(device), "PLL Stop-wake watchdog disabled");
+    write_register(&state, device, MCG_C1, 1u, 0x80u);
+    write_register(&state, device, MCG_C5, 1u, 1u);
+    write_register(&state, device, MCG_C6, 1u, 0x40u);
+    kinetis_advance(device, 3350u);
+    write_register(&state, device, MCG_C1, 1u, 0u);
+    expect(&state, kinetis_core_clock_hz(device) == 96000000u, "Stop-wake test enters PEE");
+    expect(&state, cortex_m4_write_memory(kinetis_cpu(device), 0xe000ed10u, 4u, 4u),
+           "firmware enables deep sleep");
+    expect(&state, cortex_m4_write_memory(kinetis_cpu(device), 0xe000e100u, 4u, 1u),
+           "firmware enables its wake interrupt");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "firmware executes WFI from PEE");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_CLOCK,
+           "normal Stop disables an unretained PLL");
+    cortex_m4_set_irq(kinetis_cpu(device), 0u, true);
+    kinetis_advance(device, 1u);
+    expect(&state, kinetis_core_clock_hz(device) == 8000000u,
+           "Stop wake forces PBE to restore the core clock");
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x4cu) == 0x08u,
+           "Stop wake reports external MCG clock while PLL reacquires");
+    kinetis_advance(device, 3348u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x40u) == 0u,
+           "wake PLL remains unlocked through its penultimate cycle");
+    kinetis_advance(device, 1u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x40u) != 0u,
+           "wake PLL reacquires without deadlocking the core");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "the core services its wake interrupt");
+    kinetis_destroy(device);
+
     KinetisConfiguration mkv30_configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
     device = kinetis_create(mkv30_configuration);
     expect(&state, device != NULL, "MKV30 device is created");

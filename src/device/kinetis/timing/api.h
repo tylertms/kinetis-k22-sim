@@ -99,6 +99,7 @@ typedef struct {
     uint64_t pll_lock_attoseconds;
     uint16_t pll_configuration;
     bool pll_locked;
+    bool pll_wake_to_pbe;
     uint64_t elapsed_core_cycles;
     bool debug_halted;
     uint8_t sim_sdid_pin_id;
