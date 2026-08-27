@@ -22,6 +22,7 @@ simulator_sources = files(
   'src/architecture/cortex_m4/bus.c',
   'src/architecture/cortex_m4/constraints.c',
   'src/architecture/cortex_m4/core.c',
+  'src/architecture/cortex_m4/coverage.c',
   'src/architecture/cortex_m4/debug.c',
   'src/architecture/cortex_m4/exceptions/advanced.c',
   'src/architecture/cortex_m4/exceptions/base.c',

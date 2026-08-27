@@ -59,6 +59,41 @@ int main(void) {
     expect(&state, kinetis_reset(device), "kinetis_reset(device)");
     expect(&state, trace.count == 6, "trace.count == 6");
 
+    CortexM4Coverage* coverage = cortex_m4_coverage_create(0x100u, 16u);
+    expect(&state, coverage != NULL, "coverage != NULL");
+    cortex_m4_set_trace(kinetis_cpu(device), cortex_m4_coverage_record, coverage);
+    expect(&state, kinetis_reset(device), "coverage reset succeeds");
+    test_connect_debugger(&state, kinetis_cpu(device));
+    const CortexM4Result coverage_run =
+        cortex_m4_run(kinetis_cpu(device), (CortexM4RunLimits){16, 32});
+    expect(&state, coverage_run.stop == CORTEX_M4_STOP_BREAKPOINT,
+           "coverage run reaches the breakpoint");
+    CortexM4CoverageResult coverage_result = cortex_m4_coverage_result(coverage);
+    expect(&state, coverage_result.instructions == 5u, "coverage records executed instructions");
+    expect(&state, coverage_result.skipped == 1u, "coverage records skipped instructions");
+    expect(&state, coverage_result.outside_range == 0u, "coverage stays inside its range");
+    expect(&state, coverage_result.unique_instructions == 5u,
+           "coverage counts unique instructions");
+    expect(&state, coverage_result.unique_skipped == 1u, "coverage counts unique skips");
+    expect(&state, cortex_m4_coverage_flags(coverage, 0x100u) == CORTEX_M4_COVERAGE_EXECUTED,
+           "coverage exposes executed instructions");
+    expect(&state, cortex_m4_coverage_flags(coverage, 0x106u) == CORTEX_M4_COVERAGE_SKIPPED,
+           "coverage exposes skipped instructions");
+    expect(&state, cortex_m4_coverage_flags(coverage, 0x10cu) == CORTEX_M4_COVERAGE_EXECUTED,
+           "coverage exposes the final instruction");
+    cortex_m4_coverage_clear(coverage);
+    coverage_result = cortex_m4_coverage_result(coverage);
+    expect(&state, coverage_result.instructions == 0u, "coverage clear resets counters");
+    expect(&state, cortex_m4_coverage_flags(coverage, 0x100u) == 0u, "coverage clear resets slots");
+    cortex_m4_coverage_destroy(coverage);
+    expect(&state, cortex_m4_coverage_create(1u, 2u) == NULL, "coverage rejects odd addresses");
+    expect(&state, cortex_m4_coverage_create(0u, 1u) == NULL, "coverage rejects odd sizes");
+    expect(&state, cortex_m4_coverage_create(UINT32_MAX - 1u, 4u) == NULL,
+           "coverage rejects overflowing ranges");
+    cortex_m4_coverage_clear(NULL);
+    cortex_m4_coverage_record(NULL, 0u, 0u, true);
+    cortex_m4_coverage_destroy(NULL);
+
     kinetis_destroy(device);
     return test_finish(&state);
 }

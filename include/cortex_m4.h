@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 typedef struct CortexM4 CortexM4;
+typedef struct CortexM4Coverage CortexM4Coverage;
 
 typedef enum {
     CORTEX_M4_STOP_RUNNING,
@@ -56,6 +57,26 @@ typedef struct {
     uint32_t pc;
     uint32_t opcode;
 } CortexM4Result;
+
+typedef enum {
+    CORTEX_M4_COVERAGE_EXECUTED = 1u << 0,
+    CORTEX_M4_COVERAGE_SKIPPED = 1u << 1,
+} CortexM4CoverageFlag;
+
+typedef struct {
+    uint64_t instructions;
+    uint64_t skipped;
+    uint64_t outside_range;
+    size_t unique_instructions;
+    size_t unique_skipped;
+} CortexM4CoverageResult;
+
+CortexM4Coverage* cortex_m4_coverage_create(uint32_t address, size_t size);
+void cortex_m4_coverage_destroy(CortexM4Coverage* coverage);
+void cortex_m4_coverage_clear(CortexM4Coverage* coverage);
+void cortex_m4_coverage_record(void* context, uint32_t address, uint32_t opcode, bool executed);
+CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverage);
+uint8_t cortex_m4_coverage_flags(const CortexM4Coverage* coverage, uint32_t address);
 
 CortexM4* cortex_m4_create(CortexM4Bus bus);
 void cortex_m4_destroy(CortexM4* cpu);
