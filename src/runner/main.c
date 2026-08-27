@@ -137,9 +137,9 @@ int main(int argc, char** argv) {
                register_index == 15 ? '\n' : ' ');
     }
     kinetis_destroy(device);
-    const bool failed = fault_status != 0 || result.stop == CORTEX_M4_STOP_UNSUPPORTED ||
-                        result.stop == CORTEX_M4_STOP_BUS_FAULT ||
-                        result.stop == CORTEX_M4_STOP_USAGE_FAULT ||
-                        result.stop == CORTEX_M4_STOP_LOCKUP;
+    const bool failed =
+        fault_status != 0 || result.stop == CORTEX_M4_STOP_CLOCK ||
+        result.stop == CORTEX_M4_STOP_UNSUPPORTED || result.stop == CORTEX_M4_STOP_BUS_FAULT ||
+        result.stop == CORTEX_M4_STOP_USAGE_FAULT || result.stop == CORTEX_M4_STOP_LOCKUP;
     return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

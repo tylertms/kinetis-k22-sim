@@ -534,14 +534,17 @@ endforeach
 
 smoke_image_name = 'kinetis_firmware_runner_smoke.bin'
 fault_image_name = 'kinetis_firmware_runner_fault.bin'
+clock_image_name = 'kinetis_firmware_runner_clock.bin'
 smoke_image = meson.current_build_dir() / smoke_image_name
 fault_image = meson.current_build_dir() / fault_image_name
+clock_image = meson.current_build_dir() / clock_image_name
 fixture_generator = executable(
   'kinetis_firmware_runner_fixture',
   'system/runner_fixture_test.c',
   c_args: [
     '-DKINETIS_RUNNER_SMOKE_IMAGE="' + smoke_image + '"',
     '-DKINETIS_RUNNER_FAULT_IMAGE="' + fault_image + '"',
+    '-DKINETIS_RUNNER_CLOCK_IMAGE="' + clock_image + '"',
   ],
   include_directories: [test_include, public_include],
 )
@@ -549,7 +552,7 @@ runner_images = custom_target(
   'kinetis_firmware_runner_images',
   build_by_default: true,
   command: fixture_generator,
-  output: [smoke_image_name, fault_image_name],
+  output: [smoke_image_name, fault_image_name, clock_image_name],
 )
 
 test(
@@ -583,6 +586,23 @@ test(
     '0',
     '--max-instructions',
     '10',
+  ],
+  expected_fail: true,
+  suite: ['runner', 'system'],
+)
+test(
+  'kinetis_firmware_runner_clock_test',
+  kinetis_firmware_runner,
+  args: [
+    runner_images[2],
+    '--profile',
+    'MK22FN51212',
+    '--reset-address',
+    '0',
+    '--binary-address',
+    '0',
+    '--max-instructions',
+    '20',
   ],
   expected_fail: true,
   suite: ['runner', 'system'],
