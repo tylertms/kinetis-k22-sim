@@ -549,6 +549,32 @@ void kinetis_data_test_test_adc(TestState* state) {
            "(kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0xc0u) == 0");
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0,
            "(kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0");
+
+    kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0cu);
+    kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
+    kinetis_data_set_bus_clock(data, false, false);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) == 0u,
+           "bus-clocked ADC pauses when its clock is absent");
+    kinetis_data_set_bus_clock(data, true, false);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) != 0u,
+           "bus-clocked ADC resumes when its clock returns");
+
+    kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0fu);
+    kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
+    kinetis_data_set_bus_clock(data, false, false);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) != 0u,
+           "ADACK conversion does not depend on the bus clock");
+
+    kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0cu);
+    kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
+    kinetis_data_set_bus_clock(data, false, true);
+    kinetis_data_set_bus_clock(data, true, false);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) == 0u,
+           "Stop aborts a bus-clocked conversion");
     kinetis_data_destroy(data);
 }
 

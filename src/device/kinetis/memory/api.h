@@ -58,6 +58,7 @@ bool kinetis_data_read(KinetisData* data, uint32_t address, uint8_t byte_count,
 bool kinetis_data_write(KinetisData* data, uint32_t address, uint8_t byte_count,
                         uint32_t write_value);
 void kinetis_data_advance(KinetisData* data, uint32_t cycle_count);
+void kinetis_data_set_bus_clock(KinetisData* data, bool running, bool stop_mode);
 void kinetis_data_set_debug_halted(KinetisData* data, bool halted);
 bool kinetis_data_dma_request(KinetisData* data, uint8_t request_source);
 bool kinetis_data_dma_trigger(KinetisData* data, uint8_t channel);

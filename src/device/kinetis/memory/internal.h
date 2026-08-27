@@ -56,6 +56,7 @@ struct KinetisData {
     uint8_t dma_request_source[DMA_CHANNEL_COUNT];
     uint8_t dma_channel_count;
     uint8_t dma_last_channel;
+    bool bus_clock_running;
     bool debug_halted;
     uint8_t dmamux[DMA_CHANNEL_COUNT];
     uint8_t dmamux_count;
