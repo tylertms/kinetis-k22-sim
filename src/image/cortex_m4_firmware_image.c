@@ -87,7 +87,7 @@ bool cortex_m4_load_elf_data(Kinetis* device, const void* image_data, size_t ima
         if (memory_size > file_size) {
             uint8_t zeros[256] = {0};
             uint32_t remaining = memory_size - file_size;
-            uint32_t zero_address = load_address + file_size;
+            uint32_t zero_address = virtual_address + file_size;
             while (loaded && remaining != 0) {
                 const size_t chunk = remaining < sizeof(zeros) ? remaining : sizeof(zeros);
                 loaded = kinetis_load(device, zero_address, zeros, chunk);

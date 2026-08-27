@@ -53,6 +53,7 @@ static void initialize_image(uint8_t* image) {
     write32(image, header, 1);
     write32(image, header + 4, ELF_HEADER_SIZE + 2 * ELF_PROGRAM_HEADER_SIZE + 4);
     write32(image, header + 8, 0x20000000u);
+    write32(image, header + 12, 0x200u);
     write32(image, header + 16, 4);
     write32(image, header + 20, 8);
 
@@ -189,6 +190,9 @@ int main(void) {
     expect(&state, device != NULL, "device != NULL");
     uint8_t image[IMAGE_SIZE];
     initialize_image(image);
+    const uint32_t initialized = UINT32_MAX;
+    expect(&state, kinetis_load(device, 0x20000004u, &initialized, sizeof(initialized)),
+           "initialize ELF BSS destination");
     test_binary(&state, device);
     test_symbol(&state);
     test_files(&state, device);
@@ -205,12 +209,15 @@ int main(void) {
     expect(&state, kinetis_read(device, 0x100u, &value, sizeof(value)),
            "kinetis_read(device, 0x100u, &value, sizeof(value))");
     expect(&state, value == 0xbe00bf00u, "value == 0xbe00bf00u");
-    expect(&state, kinetis_read(device, 0x20000000u, &value, sizeof(value)),
-           "kinetis_read(device, 0x20000000u, &value, sizeof(value))");
+    expect(&state, kinetis_read(device, 0x200u, &value, sizeof(value)),
+           "kinetis_read(device, 0x200u, &value, sizeof(value))");
     expect(&state, value == 0x12345678u, "value == 0x12345678u");
     expect(&state, kinetis_read(device, 0x20000004u, &value, sizeof(value)),
            "kinetis_read(device, 0x20000004u, &value, sizeof(value))");
     expect(&state, value == 0, "value == 0");
+    expect(&state, kinetis_read(device, 0x204u, &value, sizeof(value)),
+           "kinetis_read(device, 0x204u, &value, sizeof(value))");
+    expect(&state, value == UINT32_MAX, "ELF BSS zero-fill does not overwrite flash after data");
 
     initialize_image(image);
     write32(image, ELF_HEADER_SIZE + ELF_PROGRAM_HEADER_SIZE + 4u, UINT32_MAX);
