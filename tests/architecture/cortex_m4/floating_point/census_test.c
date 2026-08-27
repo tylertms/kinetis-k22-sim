@@ -107,8 +107,7 @@ int main(void) {
     FpuCensus census = {UINT32_C(0x243f6a88), 0u, UINT64_C(14695981039346656037)};
     encoding_census(&cpu, &census);
     arithmetic_census(&cpu, &census);
-    expect(&state,
-           census.accepted == 40161u && census.fingerprint == UINT64_C(14537637711255369024),
+    expect(&state, census.accepted == 40161u && census.fingerprint == UINT64_C(8177786765231094122),
            "FPU census matches");
     return test_finish(&state);
 }

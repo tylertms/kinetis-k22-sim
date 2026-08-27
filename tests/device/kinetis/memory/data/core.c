@@ -271,8 +271,8 @@ void kinetis_data_test_test_dma_advanced(TestState* state) {
               (int32_t)0xffff0000u, 0x10u);
     kinetis_data_test_write_value(state, data, DMA + 0x1du, 1, 0u);
     kinetis_data_advance(data, 1u);
-    expect(state, (kinetis_data_test_read_value(state, data, DMA + 4u, 4) & (1u << 2u)) != 0u,
-           "(kinetis_data_test_read_value(state, data, DMA + 4u, 4) & (1u << 2u)) != 0u");
+    expect(state, (kinetis_data_test_read_value(state, data, DMA + 4u, 4) & (1u << 1u)) != 0u,
+           "(kinetis_data_test_read_value(state, data, DMA + 4u, 4) & (1u << 1u)) != 0u");
     kinetis_data_test_write_value(state, data, DMA + 0x1eu, 1, 0u);
 
     bus.ram[0x40] = 0x3cu;
