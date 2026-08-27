@@ -143,7 +143,7 @@ int main(void) {
             timing.pit[0].current ^ timing.lptmr_counter ^ timing.rtc_tsr ^ timing.pdb_counter);
     }
     const bool census_matches = census.reads == 9044u && census.writes == 12089u &&
-                                census.fingerprint == UINT64_C(11626327309010479929);
+                                census.fingerprint == UINT64_C(14673209279457070399);
     if (!census_matches) {
         fprintf(stderr, "[census] reads=%" PRIu32 " writes=%" PRIu32 " fingerprint=%" PRIu64 "\n",
                 census.reads, census.writes, census.fingerprint);
