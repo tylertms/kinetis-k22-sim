@@ -5,6 +5,7 @@
 #include "test.h"
 
 enum {
+    SIM_SCGC4 = 0x40048034u,
     UART1_C2 = 0x4006b003u,
     UART1_S1 = 0x4006b004u,
     UART1_C3 = 0x4006b006u,
@@ -30,6 +31,9 @@ int main(void) {
     Kinetis* device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
 
     expect(&state, device != NULL, "device != NULL");
+    const uint32_t uart_clock_gate = 1u << 11u;
+    expect(&state, kinetis_write(device, SIM_SCGC4, &uart_clock_gate, sizeof(uart_clock_gate)),
+           "UART1 clock is enabled");
     write_byte(&state, device, UART1_C2, 0x20u);
     write_byte(&state, device, UART1_C3, 0x08u);
     expect(&state, kinetis_uart1_receive(device, 0x5au, 0x08u),
@@ -53,6 +57,9 @@ int main(void) {
            "(read_byte(&state, device, UART1_S1) & 0x0fu) == 0u");
     write_byte(&state, device, UART1_D, 0xa5u);
     uint8_t transmitted_value = 0u;
+    expect(&state, !kinetis_uart1_transmit(device, &transmitted_value),
+           "disabled transmitter produces no frame");
+    write_byte(&state, device, UART1_C2, 0x28u);
     expect(&state, kinetis_uart1_transmit(device, &transmitted_value),
            "kinetis_uart1_transmit(device, &transmitted_value)");
     expect(&state, transmitted_value == 0xa5u, "transmitted_value == 0xa5u");

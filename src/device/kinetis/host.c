@@ -391,15 +391,9 @@ bool kinetis_uart1_transmit(Kinetis* device, uint8_t* output_value) {
     if (device == NULL || output_value == NULL) {
         return false;
     }
-    KinetisSerialFifo* fifo = &device->serial.uart[1].transmit;
-    if (fifo->count == 0) {
-        if (!kinetis_serial_transmit(device, KINETIS_SERIAL_UART1, &wide_value)) {
-            return false;
-        }
-    } else {
-        wide_value = fifo->values[fifo->read_index];
-        fifo->read_index = (uint16_t)((fifo->read_index + 1u) % KINETIS_SERIAL_FIFO_CAPACITY);
-        fifo->count--;
+    kinetis_serial_advance_endpoint(&device->serial, KINETIS_SERIAL_UART1);
+    if (!kinetis_serial_transmit(device, KINETIS_SERIAL_UART1, &wide_value)) {
+        return false;
     }
     *output_value = (uint8_t)wide_value;
     return true;
