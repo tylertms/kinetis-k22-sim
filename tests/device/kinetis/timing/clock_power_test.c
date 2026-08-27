@@ -157,6 +157,22 @@ int main(void) {
     kinetis_advance(device, 3350u);
     expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x40u) != 0u,
            "wake PLL reacquires without deadlocking the core");
+    write_register(&state, device, MCG_C1, 1u, 0u);
+    cortex_m4_set_register(kinetis_cpu(device), 15u, 0x100u);
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "firmware re-enters PEE Stop");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_CLOCK,
+           "second PEE Stop disables the PLL");
+    expect(&state, cortex_m4_write_memory(kinetis_cpu(device), 0xe000edf0u, 4u, 0xa05f0003u),
+           "debugger requests halt from Stop");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_BREAKPOINT,
+           "debug request wakes and halts the clockless core");
+    expect(&state, kinetis_core_clock_hz(device) == 8000000u,
+           "debug wake forces PBE before reporting halt");
+    expect(&state, cortex_m4_write_memory(kinetis_cpu(device), 0xe000edf0u, 4u, 0xa05f0001u),
+           "debugger resumes the core");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "core resumes execution after debug wake");
     kinetis_destroy(device);
 
     KinetisConfiguration mkv30_configuration = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);

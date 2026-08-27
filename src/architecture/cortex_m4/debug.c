@@ -239,6 +239,7 @@ static CortexM4SystemAccess debug_register_write(CortexM4* cpu, uint32_t address
         } else if ((cpu->debug.dhcsr_control & 2u) != 0) {
             cpu->debug.halted = true;
             cpu->debug.step_armed = false;
+            cpu->sleeping = false;
         } else if ((cpu->debug.dhcsr_control & 4u) != 0) {
             cpu->debug.halted = false;
             cpu->debug.step_armed = true;

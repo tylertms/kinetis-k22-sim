@@ -139,6 +139,9 @@ static void test_halt_and_step(TestState* state) {
     expect(state, !cpu.debug.halted, "!cpu.debug.halted");
     debug_write(state, &cpu, DHCSR, 4, 0xa05f0003u);
     expect(state, cpu.debug.halted, "cpu.debug.halted");
+    cpu.sleeping = true;
+    debug_write(state, &cpu, DHCSR, 4, 0xa05f0003u);
+    expect(state, !cpu.sleeping, "debug halt wakes a sleeping core");
     expect(state, !cortex_m4_debug_execution_allowed(&cpu),
            "!cortex_m4_debug_execution_allowed(&cpu)");
     expect(state, (debug_read(state, &cpu, DHCSR, 4) & 0x00030003u) == 0x00030003u,

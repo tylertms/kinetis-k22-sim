@@ -192,6 +192,7 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
     }
     cpu->instruction_faulted = false;
     if (!cortex_m4_debug_execution_allowed(cpu)) {
+        (void)cortex_m4_clock_running(cpu);
         cpu->stop = CORTEX_M4_STOP_BREAKPOINT;
         return cortex_m4_result(cpu);
     }
