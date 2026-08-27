@@ -7,13 +7,21 @@
 typedef struct {
     uint8_t memory[256];
     uint32_t reads;
+    uint32_t writes;
+    uint32_t last_read_address;
     uint32_t failed_read_address;
+    uint32_t failed_read_value;
+    uint32_t failed_write_address;
 } BusState;
 
 static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* value) {
     BusState* state = context;
-    if (address == state->failed_read_address)
+    state->last_read_address = address;
+    if (address == state->failed_read_address) {
+        state->reads++;
+        *value = state->failed_read_value;
         return false;
+    }
     if (address == UINT32_C(0x7fffffff) && size == 1u) {
         state->reads++;
         *value = 0u;
@@ -29,6 +37,9 @@ static bool bus_read(void* context, uint32_t address, uint8_t size, uint32_t* va
 
 static bool bus_write(void* context, uint32_t address, uint8_t size, uint32_t value) {
     BusState* state = context;
+    state->writes++;
+    if (address == state->failed_write_address)
+        return false;
     if (address < UINT32_C(0x20000000) ||
         address - UINT32_C(0x20000000) > sizeof(state->memory) - size)
         return false;
@@ -133,6 +144,55 @@ static void test_bus_error_progress(TestState* state, const KinetisDeviceProfile
     expect(state,
            kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000100),
            "destination fault does not advance the failed destination");
+    kinetis_data_destroy(data);
+}
+
+static void test_bus_error_pipeline(TestState* state, const KinetisDeviceProfile* profile) {
+    BusState bus = {0u};
+    KinetisData* data =
+        kinetis_data_create(profile, (KinetisDataBus){&bus, bus_read, bus_write, NULL, NULL, NULL});
+    expect(state, data != NULL, "create DMA for bus error pipeline");
+    if (data == NULL)
+        return;
+
+    bus.memory[0] = UINT8_C(0x11);
+    bus.memory[1] = UINT8_C(0x22);
+    bus.failed_read_address = UINT32_C(0x20000002);
+    bus.failed_read_value = UINT32_C(0x4433);
+    prepare_descriptor(data);
+    uint8_t* descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, 4u, 2u, 2u);
+    kinetis_data_internal_store_bytes(descriptor, 6u, 2u, UINT32_C(0x0102));
+    kinetis_data_internal_store_bytes(descriptor, 8u, 4u, 4u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x10), 4u, UINT32_C(0x20000040));
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA reports the final source read fault");
+    expect(state,
+           kinetis_data_internal_load_bytes(bus.memory, UINT32_C(0x40), 4u) == UINT32_C(0x44332211),
+           "DMA finishes the pipelined write after a source fault");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == UINT32_C(0x20000002),
+           "source fault retains the point-of-fault source address");
+    expect(state,
+           kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000040),
+           "source fault retains the point-of-fault destination address");
+
+    memset(&bus, 0, sizeof(bus));
+    bus.failed_write_address = UINT32_C(0x20000040);
+    prepare_descriptor(data);
+    descriptor = data->dma + UINT32_C(0x1000);
+    kinetis_data_internal_store_bytes(descriptor, 4u, 2u, 4u);
+    kinetis_data_internal_store_bytes(descriptor, 6u, 2u, UINT32_C(0x0202));
+    kinetis_data_internal_store_bytes(descriptor, 8u, 4u, 8u);
+    kinetis_data_internal_store_bytes(descriptor, UINT32_C(0x10), 4u, UINT32_C(0x20000040));
+    expect(state, !kinetis_data_internal_dma_service_channel(data, 0u),
+           "DMA reports the first destination write fault");
+    expect(state, bus.reads == 2u && bus.last_read_address == UINT32_C(0x20000004),
+           "DMA finishes the pipelined read after a destination fault");
+    expect(state, kinetis_data_internal_load_bytes(descriptor, 0u, 4u) == UINT32_C(0x20000004),
+           "destination fault retains the point-of-fault source address");
+    expect(state,
+           kinetis_data_internal_load_bytes(descriptor, UINT32_C(0x10), 4u) == UINT32_C(0x20000040),
+           "destination fault retains the point-of-fault destination address");
     kinetis_data_destroy(data);
 }
 
@@ -339,6 +399,7 @@ int main(void) {
         test_missing_bus_callbacks(&state, profile);
         test_error_replacement(&state, profile);
         test_bus_error_progress(&state, profile);
+        test_bus_error_pipeline(&state, profile);
         test_configuration_errors(&state, profile);
         test_minor_byte_count_formats(&state, profile);
         test_scatter_gather(&state, profile);
