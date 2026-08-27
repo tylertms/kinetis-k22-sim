@@ -96,8 +96,7 @@ typedef struct {
     uint32_t core_clock_hz;
     uint32_t bus_clock_hz;
     uint32_t flash_clock_hz;
-    uint32_t pll_lock_ticks;
-    uint64_t pll_lock_remainder;
+    uint64_t pll_lock_attoseconds;
     uint16_t pll_configuration;
     bool pll_locked;
     uint64_t elapsed_core_cycles;

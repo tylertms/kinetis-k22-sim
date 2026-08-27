@@ -21,6 +21,7 @@ enum {
     MCG_C5 = 0x40064004u,
     MCG_C6 = 0x40064005u,
     MCG_S = 0x40064006u,
+    MCG_C7 = 0x4006400cu,
     LLWU_PE1 = 0x4007c000u,
     LLWU_ME = 0x4007c004u,
     LLWU_F1 = 0x4007c005u,

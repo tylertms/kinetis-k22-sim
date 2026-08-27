@@ -268,6 +268,81 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     clock_source.smc[3] = 0x10u;
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u, "PLL stops in VLPS");
 
+    KinetisTiming peripheral_pll = *timing;
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C1, 1u, 0x80u);
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C5, 1u, 0x41u);
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C6, 1u, 0u);
+    kinetis_timing_test_disable_watchdog_fixture(&peripheral_pll);
+    kinetis_timing_advance(&peripheral_pll, 3349u);
+    expect(state, (peripheral_pll.mcg[6] & 0x60u) == 0u,
+           "peripheral-only PLL remains selected off and unlocked before its boundary");
+    kinetis_timing_advance(&peripheral_pll, 1u);
+    expect(state, (peripheral_pll.mcg[6] & 0x60u) == 0x40u,
+           "PLLCLKEN0 acquires lock without selecting PLL as the MCG output");
+    peripheral_pll.sim_sopt2 = (1u << 26u) | (1u << 16u);
+    expect(state, kinetis_timing_lpuart_clock_hz(&peripheral_pll) == 96000000u,
+           "LPUART receives the independently enabled PLL clock");
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C6, 1u, 0x40u);
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C6, 1u, 0u);
+    expect(state, peripheral_pll.pll_locked,
+           "changing PLL selection does not restart an independently enabled PLL");
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C5, 1u, 1u);
+    expect(state, !peripheral_pll.pll_locked, "disabling the peripheral PLL clears lock");
+    kinetis_timing_test_expect_write(state, &peripheral_pll, MCG_C5, 1u, 0x41u);
+    expect(state, !peripheral_pll.pll_locked, "re-enabled peripheral PLL reacquires lock");
+
+    KinetisTiming divided_acquisition = *timing;
+    kinetis_timing_test_expect_write(state, &divided_acquisition, MCG_C1, 1u, 0x80u);
+    kinetis_timing_test_expect_write(state, &divided_acquisition, MCG_C5, 1u, 1u);
+    kinetis_timing_test_expect_write(state, &divided_acquisition, MCG_C6, 1u, 0x40u);
+    kinetis_timing_test_disable_watchdog_fixture(&divided_acquisition);
+    kinetis_timing_advance(&divided_acquisition, 1u);
+    kinetis_timing_test_expect_write(state, &divided_acquisition, SIM_CLKDIV1, 4u, 0x10000000u);
+    kinetis_timing_advance(&divided_acquisition, 1674u);
+    expect(state, !divided_acquisition.pll_locked,
+           "core divider changes preserve elapsed PLL acquisition time");
+    kinetis_timing_advance(&divided_acquisition, 1u);
+    expect(state, divided_acquisition.pll_locked,
+           "PLL locks after the remaining divided-core interval");
+
+    KinetisTiming accelerated_acquisition = *timing;
+    kinetis_timing_test_expect_write(state, &accelerated_acquisition, MCG_C1, 1u, 0x80u);
+    kinetis_timing_test_expect_write(state, &accelerated_acquisition, SIM_CLKDIV1, 4u, 0x10000000u);
+    kinetis_timing_test_expect_write(state, &accelerated_acquisition, MCG_C5, 1u, 1u);
+    kinetis_timing_test_expect_write(state, &accelerated_acquisition, MCG_C6, 1u, 0x40u);
+    kinetis_timing_test_disable_watchdog_fixture(&accelerated_acquisition);
+    kinetis_timing_advance(&accelerated_acquisition, 1u);
+    kinetis_timing_test_expect_write(state, &accelerated_acquisition, SIM_CLKDIV1, 4u, 0u);
+    kinetis_timing_advance(&accelerated_acquisition, 3347u);
+    expect(state, !accelerated_acquisition.pll_locked,
+           "faster core divider preserves the remaining PLL acquisition time");
+    kinetis_timing_advance(&accelerated_acquisition, 1u);
+    expect(state, accelerated_acquisition.pll_locked,
+           "PLL locks after the accelerated remaining interval");
+
+    KinetisTiming stopped_pll = divided_acquisition;
+    kinetis_timing_set_cpu_sleeping(&stopped_pll, true, true);
+    expect(state, !stopped_pll.pll_locked, "normal Stop disables PLL without PLLSTEN0");
+    kinetis_timing_set_cpu_sleeping(&stopped_pll, false, false);
+    kinetis_timing_advance(&stopped_pll, 1674u);
+    expect(state, !stopped_pll.pll_locked, "wake restarts the full PLL acquisition interval");
+    kinetis_timing_advance(&stopped_pll, 1u);
+    expect(state, stopped_pll.pll_locked, "PLL reacquires after wake");
+
+    KinetisTiming retained_pll = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &retained_pll, MCG_C5, 1u, 0x21u);
+    kinetis_timing_set_cpu_sleeping(&retained_pll, true, true);
+    expect(state, retained_pll.pll_locked, "PLLSTEN0 retains PLL lock in normal Stop");
+
+    KinetisTiming vlps_pll = divided_acquisition;
+    kinetis_timing_test_expect_write(state, &vlps_pll, MCG_C5, 1u, 0x21u);
+    kinetis_timing_test_expect_write(state, &vlps_pll, SMC_PMPROT, 1u, 0x20u);
+    kinetis_timing_test_expect_write(state, &vlps_pll, SMC_PMCTRL, 1u, 2u);
+    kinetis_timing_set_cpu_sleeping(&vlps_pll, true, true);
+    expect(state, !vlps_pll.pll_locked, "VLPS disables PLL despite PLLSTEN0");
+    kinetis_timing_set_cpu_sleeping(&vlps_pll, false, false);
+    expect(state, !vlps_pll.pll_locked, "VLPS wake requires PLL reacquisition");
+
     KinetisTiming mcg_source = *timing;
     mcg_source.profile = kinetis_profile_get(KINETIS_PROFILE_MKV30F12810);
     mcg_source.sim_clkdiv1 = 0u;
@@ -299,6 +374,22 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     kinetis_timing_test_expect_write(state, &mcg_source, MCG_C1, 1u, mcg_source.mcg[0]);
     expect(state, kinetis_timing_core_clock_hz(&mcg_source) == 1310720u,
            "K22 RTC FLL reference uses the low-range divider");
+
+    KinetisTiming switched_rtc = *timing;
+    kinetis_timing_test_expect_write(state, &switched_rtc, RTC_CR, 4u, 0x100u);
+    kinetis_timing_test_expect_write(state, &switched_rtc, MCG_C7, 1u, 1u);
+    kinetis_timing_test_expect_write(state, &switched_rtc, MCG_C1, 1u, 0x80u);
+    expect(state, kinetis_timing_core_clock_hz(&switched_rtc) == 32768u,
+           "enabled RTC output immediately clocks the MCG");
+    kinetis_timing_test_expect_write(state, &switched_rtc, RTC_CR, 4u, 0x300u);
+    expect(state, kinetis_timing_core_clock_hz(&switched_rtc) == 0u,
+           "disabling RTC output immediately stops the selected clock");
+    kinetis_timing_test_expect_write(state, &switched_rtc, RTC_CR, 4u, 0x100u);
+    expect(state, kinetis_timing_core_clock_hz(&switched_rtc) == 32768u,
+           "restoring RTC output immediately restores the selected clock");
+    kinetis_timing_test_expect_write(state, &switched_rtc, RTC_CR, 4u, 1u);
+    expect(state, kinetis_timing_core_clock_hz(&switched_rtc) == 0u,
+           "RTC software reset immediately removes the selected clock");
 
     KinetisTiming lptmr_source = *timing;
     lptmr_source.mcg[0] &= ~2u;

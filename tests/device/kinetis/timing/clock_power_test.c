@@ -15,6 +15,7 @@ enum {
     MCG_C6 = 0x40064005u,
     MCG_S = 0x40064006u,
     MCG_C7 = 0x4006400cu,
+    RTC_CR = 0x4003d010u,
     SMC_PMPROT = 0x4007e000u,
     SMC_PMCTRL = 0x4007e001u,
     SMC_PMSTAT = 0x4007e003u,
@@ -180,6 +181,50 @@ int main(void) {
            "PLL uses its selected IRC48M reference");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) != 0u,
            "valid IRC48M PLL configuration locks");
+    kinetis_destroy(device);
+
+    device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
+    expect(&state, device != NULL, "RTC-clocked instruction device is created");
+    const uint16_t rtc_program[] = {0x4802u, 0x4903u, 0x6001u, 0xbf00u, 0xbf00u, 0xbf00u};
+    const uint32_t rtc_literals[] = {RTC_CR, 0x300u};
+    expect(&state, kinetis_load(device, 0u, vectors, sizeof(vectors)), "RTC vectors load");
+    expect(&state, kinetis_load(device, 0x100u, rtc_program, sizeof(rtc_program)),
+           "RTC clock program loads");
+    expect(&state, kinetis_load(device, 0x10cu, rtc_literals, sizeof(rtc_literals)),
+           "RTC clock literals load");
+    expect(&state, kinetis_reset(device), "RTC clock device resets");
+    expect(&state, kinetis_test_disable_watchdog(device), "RTC clock watchdog disabled");
+    write_register(&state, device, SIM_SCGC6, 4u,
+                   read_register(&state, device, SIM_SCGC6, 4u) | (1u << 29u));
+    write_register(&state, device, RTC_CR, 4u, 0x100u);
+    write_register(&state, device, MCG_C7, 1u, 1u);
+    write_register(&state, device, MCG_C1, 1u, 0x80u);
+    expect(&state, kinetis_core_clock_hz(device) == 32768u, "RTC output clocks the core");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "RTC program loads its target register");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "RTC program loads its clock-control value");
+    expect(&state,
+           cortex_m4_get_register(kinetis_cpu(device), 0u) == RTC_CR &&
+               cortex_m4_get_register(kinetis_cpu(device), 1u) == 0x300u,
+           "RTC program loaded its register address and control value");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "the RTC clock-disabling instruction retires normally");
+    expect(&state,
+           cortex_m4_get_register(kinetis_cpu(device), 15u) == 0x106u &&
+               cortex_m4_get_instruction_count(kinetis_cpu(device)) == 3u,
+           "RTC clock loss occurs after exactly one control-register write");
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_CLOCK,
+           "clockless core performs no following fetch");
+    expect(&state,
+           cortex_m4_get_register(kinetis_cpu(device), 15u) == 0x106u &&
+               cortex_m4_get_instruction_count(kinetis_cpu(device)) == 3u,
+           "clockless core state remains unchanged");
+    write_register(&state, device, RTC_CR, 4u, 0x100u);
+    expect(&state, cortex_m4_step(kinetis_cpu(device)).stop == CORTEX_M4_STOP_RUNNING,
+           "restoring RTC output resumes the pending instruction");
+    expect(&state, cortex_m4_get_instruction_count(kinetis_cpu(device)) == 4u,
+           "restored RTC clock retires the pending instruction");
     kinetis_destroy(device);
 
     device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));

@@ -239,6 +239,7 @@ static void rtc_software_reset(KinetisTiming* timing) {
     timing->rtc_remainder = 0u;
     timing->rtc_subsecond_ticks = 0u;
     kinetis_timing_internal_update_rtc_irq(timing);
+    kinetis_timing_internal_update_clocks(timing);
     kinetis_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, false);
 }
 
@@ -321,8 +322,10 @@ static bool rtc_write(KinetisTiming* timing, uint32_t offset, uint32_t write_val
         if ((timing->rtc_lr & 0x10u) != 0u) {
             if ((write_value & 1u) != 0u)
                 rtc_software_reset(timing);
-            else
+            else {
                 timing->rtc_cr = write_value & 0x3f1eu;
+                kinetis_timing_internal_update_clocks(timing);
+            }
         }
         return true;
     case 20:
@@ -935,6 +938,7 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
     if (!sleeping) {
         if (timing->smc[3] != 0x40u)
             timing->smc[3] = timing->smc_run_status;
+        kinetis_timing_internal_update_clocks(timing);
         return;
     }
     if (!deep_sleep) {
@@ -950,6 +954,7 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
         timing->smc[3] = 0x20u;
     else if (stop_mode == 4u && (timing->smc[0] & 2u) != 0u)
         timing->smc[3] = 0x40u;
+    kinetis_timing_internal_update_clocks(timing);
 }
 
 bool kinetis_timing_set_ewm_input(KinetisTiming* timing, bool high) {

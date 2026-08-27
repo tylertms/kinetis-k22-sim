@@ -121,9 +121,37 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
                : 0u;
 }
 
+static bool pll_operating(const KinetisTiming* timing) {
+    const bool enabled = ((timing->mcg[4] | timing->mcg[5]) & 0x40u) != 0u;
+    const bool retained_in_stop = timing->smc[3] == 2u && (timing->mcg[4] & 0x20u) != 0u;
+    return enabled && (!timing->deep_sleeping || retained_in_stop) &&
+           calculate_pll_clock_hz(timing) != 0u;
+}
+
 static uint16_t pll_configuration(const KinetisTiming* timing) {
-    return (uint16_t)(((timing->mcg[12] & 3u) << 12u) | ((timing->mcg[4] & 0x1fu) << 7u) |
-                      (timing->mcg[5] & 0x5fu));
+    return (uint16_t)(((timing->mcg[12] & 3u) << 11u) | ((timing->mcg[4] & 0x1fu) << 6u) |
+                      ((timing->mcg[5] & 0x1fu) << 1u) | pll_operating(timing));
+}
+
+static uint64_t pll_lock_duration_attoseconds(uint32_t reference_clock_hz) {
+    const uint64_t attoseconds_per_second = UINT64_C(1000000000000000000);
+    const uint64_t quotient = attoseconds_per_second / reference_clock_hz;
+    const uint64_t remainder = attoseconds_per_second % reference_clock_hz;
+    return UINT64_C(150000000000000) + 1075u * quotient +
+           (1075u * remainder + reference_clock_hz - 1u) / reference_clock_hz;
+}
+
+static uint64_t elapsed_attoseconds(uint32_t cycles, uint32_t clock_hz) {
+    const uint64_t attoseconds_per_second = UINT64_C(1000000000000000000);
+    if (clock_hz == 0u) {
+        return 0u;
+    }
+    if (cycles >= clock_hz) {
+        return attoseconds_per_second;
+    }
+    const uint64_t quotient = attoseconds_per_second / clock_hz;
+    const uint64_t remainder = attoseconds_per_second % clock_hz;
+    return (uint64_t)cycles * quotient + ((uint64_t)cycles * remainder + clock_hz - 1u) / clock_hz;
 }
 
 static void update_pll_lock(KinetisTiming* timing) {
@@ -132,31 +160,25 @@ static void update_pll_lock(KinetisTiming* timing) {
         return;
     }
     timing->pll_configuration = configuration;
-    timing->pll_lock_remainder = 0u;
     timing->pll_locked = false;
-    timing->pll_lock_ticks = 0u;
+    timing->pll_lock_attoseconds = 0u;
     const uint32_t reference_clock_hz =
         external_reference_clock_hz(timing) / ((timing->mcg[4] & 0x1fu) + 1u);
-    if ((timing->mcg[5] & 0x40u) != 0u && calculate_pll_clock_hz(timing) != 0u) {
-        timing->pll_lock_ticks =
-            1075u + (uint32_t)(((uint64_t)reference_clock_hz * 150u + 999999u) / 1000000u);
+    if (pll_operating(timing)) {
+        timing->pll_lock_attoseconds = pll_lock_duration_attoseconds(reference_clock_hz);
     }
 }
 
 void kinetis_timing_internal_advance_pll(KinetisTiming* timing, uint32_t core_cycles) {
-    if (timing == NULL || timing->pll_lock_ticks == 0u) {
+    if (timing == NULL || timing->pll_lock_attoseconds == 0u) {
         return;
     }
-    const uint32_t reference_clock_hz =
-        external_reference_clock_hz(timing) / ((timing->mcg[4] & 0x1fu) + 1u);
-    const uint64_t ticks = kinetis_timing_internal_clock_ticks(
-        &timing->pll_lock_remainder, core_cycles, reference_clock_hz, timing->core_clock_hz);
-    if (ticks < timing->pll_lock_ticks) {
-        timing->pll_lock_ticks -= (uint32_t)ticks;
+    const uint64_t elapsed = elapsed_attoseconds(core_cycles, timing->core_clock_hz);
+    if (elapsed < timing->pll_lock_attoseconds) {
+        timing->pll_lock_attoseconds -= elapsed;
         return;
     }
-    timing->pll_lock_ticks = 0u;
-    timing->pll_lock_remainder = 0u;
+    timing->pll_lock_attoseconds = 0u;
     timing->pll_locked = true;
     kinetis_timing_internal_update_clocks(timing);
 }
@@ -194,8 +216,7 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
 
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
-    const bool pll_enabled = (timing->mcg[5] & 0x40u) != 0u;
-    const bool pll_selected = mcg_clock_source == 0u && pll_enabled;
+    const bool pll_selected = mcg_clock_source == 0u && (timing->mcg[5] & 0x40u) != 0u;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
     update_pll_lock(timing);
@@ -222,7 +243,7 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
             mcg_status_value |= 1u << 4u;
         }
     }
-    if (pll_enabled) {
+    if ((timing->mcg[5] & 0x40u) != 0u) {
         mcg_status_value |= 1u << 5u;
     }
     if (timing->pll_locked) {
