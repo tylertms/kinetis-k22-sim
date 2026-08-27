@@ -487,7 +487,12 @@ test_definitions = [
   },
 ]
 
+allocation_failure_tests = cc.has_link_argument('-Wl,--wrap=realloc')
+
 foreach definition : test_definitions
+  if definition.get('allocation_failure', false) and not allocation_failure_tests
+    continue
+  endif
   name = 'kinetis_' + definition['name'] + '_test'
   sources = definition['sources']
   suites = definition['suite']
@@ -506,7 +511,12 @@ foreach definition : test_definitions
     ]
   endif
   if host_machine.system() == 'windows' and definition['name'] == 'device_data_complete'
-    link_args += ['-Wl,--stack,33554432']
+    link_args += cc.get_supported_link_arguments(
+      [
+        '-Wl,--stack,33554432',
+        '/STACK:33554432',
+      ],
+    )
   endif
   target = executable(
     name,

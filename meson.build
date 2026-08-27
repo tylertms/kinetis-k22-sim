@@ -11,9 +11,6 @@ project(
 )
 
 cc = meson.get_compiler('c')
-if cc.get_id() != 'gcc'
-  error('GCC is required')
-endif
 public_include = include_directories('include')
 private_include = include_directories('src')
 build_by_default = not meson.is_subproject()
@@ -73,7 +70,7 @@ simulator = static_library(
   'kinetis_simulator',
   simulator_sources,
   build_by_default: build_by_default,
-  c_args: ['-fno-strict-aliasing'],
+  c_args: cc.get_supported_arguments('-fno-strict-aliasing'),
   include_directories: [public_include, private_include],
 )
 kinetis_simulator_dependency = declare_dependency(

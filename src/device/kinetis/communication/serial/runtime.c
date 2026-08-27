@@ -84,7 +84,7 @@ static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint64_t cycle
             break;
         cycles -= elapsed;
         if (uart->receive_cycles != 0) {
-            uart->receive_cycles -= elapsed;
+            uart->receive_cycles -= (uint32_t)elapsed;
             if (uart->receive_cycles == 0) {
                 uint16_t value = 0;
                 uint16_t errors = 0;
@@ -111,7 +111,7 @@ static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint64_t cycle
             }
         }
         if (uart->transmit_cycles != 0) {
-            uart->transmit_cycles -= elapsed;
+            uart->transmit_cycles -= (uint32_t)elapsed;
             if (uart->transmit_cycles == 0) {
                 uint16_t value = 0;
                 kinetis_serial_internal_fifo_pop(&uart->transmit, &value, NULL);
@@ -143,7 +143,7 @@ static void advance_spi(KinetisSerialSpi* spi, uint64_t cycles) {
             spi->transfer_cycles = spi_frame_cycles(spi);
         uint64_t elapsed = cycles < spi->transfer_cycles ? cycles : spi->transfer_cycles;
         cycles -= elapsed;
-        spi->transfer_cycles -= elapsed;
+        spi->transfer_cycles -= (uint32_t)elapsed;
         if (spi->transfer_cycles == 0) {
             uint16_t transmitted;
             uint16_t received = 0xffffu;
@@ -181,7 +181,7 @@ static void advance_i2c(KinetisSerialI2c* i2c, uint64_t cycles) {
     if (i2c->transfer_cycles == 0)
         i2c->transfer_cycles = i2c_transfer_cycles(i2c);
     if (cycles < i2c->transfer_cycles) {
-        i2c->transfer_cycles -= cycles;
+        i2c->transfer_cycles -= (uint32_t)cycles;
         return;
     }
     i2c->transfer_cycles = 0;
