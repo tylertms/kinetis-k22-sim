@@ -810,6 +810,7 @@ void kinetis_timing_advance(KinetisTiming* timing, uint32_t core_cycles) {
         return;
     }
     timing->elapsed_core_cycles += core_cycles;
+    kinetis_timing_internal_advance_pll(timing, core_cycles);
     kinetis_timing_internal_advance_wdog(timing, core_cycles);
     kinetis_timing_internal_advance_ewm(timing, core_cycles);
     kinetis_timing_internal_advance_pit(timing, core_cycles);

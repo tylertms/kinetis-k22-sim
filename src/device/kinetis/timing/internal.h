@@ -110,6 +110,7 @@ void kinetis_timing_internal_trigger_dma(const KinetisTiming* timing, uint8_t dm
 void kinetis_timing_internal_trigger(KinetisTiming* timing, KinetisTimingTrigger trigger_type,
                                      uint8_t peripheral_instance, uint8_t peripheral_channel);
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing);
+void kinetis_timing_internal_advance_pll(KinetisTiming* timing, uint32_t core_cycles);
 void kinetis_timing_internal_update_ftm_irq(const KinetisTiming* timing, uint8_t instance);
 void kinetis_timing_internal_update_llwu_irq(const KinetisTiming* timing);
 void kinetis_timing_internal_update_pmc_irq(const KinetisTiming* timing);

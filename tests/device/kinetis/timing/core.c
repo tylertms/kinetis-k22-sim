@@ -262,6 +262,7 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
            "PLL stops without PLLSTEN0");
     clock_source.mcg[4] |= 0x20u;
+    clock_source.pll_locked = true;
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 96000000u,
            "PLLSTEN0 keeps the PLL active in normal Stop");
     clock_source.smc[3] = 0x10u;
@@ -368,6 +369,11 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
            "kinetis_timing_bus_clock_hz(timing) == 8000000u / 3u");
     kinetis_timing_test_expect_write(state, timing, MCG_C5, 1, 1u);
     kinetis_timing_test_expect_write(state, timing, MCG_C6, 1, 0x40u);
+    kinetis_timing_test_disable_watchdog_fixture(timing);
+    kinetis_timing_advance(timing, 1674u);
+    kinetis_timing_test_expect_read(state, timing, MCG_S, 1, 0x28u);
+    kinetis_timing_advance(timing, 1u);
+    kinetis_timing_test_expect_read(state, timing, MCG_S, 1, 0x68u);
     kinetis_timing_test_expect_write(state, timing, MCG_C1, 1, 0);
     expect(state, kinetis_timing_core_clock_hz(timing) == 96000000u / 2u,
            "kinetis_timing_core_clock_hz(timing) == 96000000u / 2u");

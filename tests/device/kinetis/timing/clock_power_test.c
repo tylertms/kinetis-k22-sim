@@ -92,8 +92,18 @@ int main(void) {
     device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
     expect(&state, device != NULL, "PLL-clocked LPUART device is created");
     expect(&state, kinetis_test_disable_watchdog(device), "PLL-clocked LPUART watchdog disabled");
+    write_register(&state, device, MCG_C1, 1u, 0x80u);
     write_register(&state, device, MCG_C5, 1u, 1u);
     write_register(&state, device, MCG_C6, 1u, 0x40u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & 0x60u) == 0x20u,
+           "PLL is enabled but unlocked during acquisition");
+    kinetis_advance(device, 3349u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
+           "PLL remains unlocked through its penultimate reference clock");
+    kinetis_advance(device, 1u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) != 0u,
+           "PLL locks after its acquisition interval");
+    write_register(&state, device, MCG_C1, 1u, 0u);
     write_register(&state, device, SIM_SOPT2, 4u, (1u << 26u) | (1u << 16u));
     write_register(&state, device, SIM_SCGC6, 4u,
                    read_register(&state, device, SIM_SCGC6, 4u) | (1u << 10u));
@@ -140,9 +150,15 @@ int main(void) {
 
     device = kinetis_create(missing_oscillator);
     expect(&state, device != NULL, "IRC48M PLL device is created");
+    expect(&state, kinetis_test_disable_watchdog(device), "IRC48M PLL watchdog disabled");
     write_register(&state, device, MCG_C7, 1u, 2u);
+    write_register(&state, device, MCG_C1, 1u, 0x80u);
     write_register(&state, device, MCG_C5, 1u, 23u);
     write_register(&state, device, MCG_C6, 1u, 0x58u);
+    kinetis_advance(device, 32999u);
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
+           "IRC48M PLL observes its full acquisition interval");
+    kinetis_advance(device, 1u);
     write_register(&state, device, MCG_C1, 1u, 0u);
     expect(&state, kinetis_core_clock_hz(device) == 96000000u,
            "PLL uses its selected IRC48M reference");

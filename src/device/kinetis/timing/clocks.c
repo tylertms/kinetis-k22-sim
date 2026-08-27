@@ -121,6 +121,46 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
                : 0u;
 }
 
+static uint16_t pll_configuration(const KinetisTiming* timing) {
+    return (uint16_t)(((timing->mcg[12] & 3u) << 12u) | ((timing->mcg[4] & 0x1fu) << 7u) |
+                      (timing->mcg[5] & 0x5fu));
+}
+
+static void update_pll_lock(KinetisTiming* timing) {
+    const uint16_t configuration = pll_configuration(timing);
+    if (timing->pll_configuration == configuration) {
+        return;
+    }
+    timing->pll_configuration = configuration;
+    timing->pll_lock_remainder = 0u;
+    timing->pll_locked = false;
+    timing->pll_lock_ticks = 0u;
+    const uint32_t reference_clock_hz =
+        external_reference_clock_hz(timing) / ((timing->mcg[4] & 0x1fu) + 1u);
+    if ((timing->mcg[5] & 0x40u) != 0u && calculate_pll_clock_hz(timing) != 0u) {
+        timing->pll_lock_ticks =
+            1075u + (uint32_t)(((uint64_t)reference_clock_hz * 150u + 999999u) / 1000000u);
+    }
+}
+
+void kinetis_timing_internal_advance_pll(KinetisTiming* timing, uint32_t core_cycles) {
+    if (timing == NULL || timing->pll_lock_ticks == 0u) {
+        return;
+    }
+    const uint32_t reference_clock_hz =
+        external_reference_clock_hz(timing) / ((timing->mcg[4] & 0x1fu) + 1u);
+    const uint64_t ticks = kinetis_timing_internal_clock_ticks(
+        &timing->pll_lock_remainder, core_cycles, reference_clock_hz, timing->core_clock_hz);
+    if (ticks < timing->pll_lock_ticks) {
+        timing->pll_lock_ticks -= (uint32_t)ticks;
+        return;
+    }
+    timing->pll_lock_ticks = 0u;
+    timing->pll_lock_remainder = 0u;
+    timing->pll_locked = true;
+    kinetis_timing_internal_update_clocks(timing);
+}
+
 uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
     if (timing == NULL ||
         (timing->deep_sleeping && timing->smc[3] != 2u && timing->smc[3] != 0x10u))
@@ -134,7 +174,7 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
                        ? calculate_fll_clock_hz(timing)
                        : 0u;
         case 1u:
-            if (((timing->mcg[4] | timing->mcg[5]) & 0x40u) == 0u ||
+            if (((timing->mcg[4] | timing->mcg[5]) & 0x40u) == 0u || !timing->pll_locked ||
                 (timing->deep_sleeping && (timing->smc[3] != 2u || (timing->mcg[4] & 0x20u) == 0u)))
                 return 0u;
             return calculate_pll_clock_hz(timing);
@@ -154,9 +194,11 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
 
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
-    const bool pll_selected = mcg_clock_source == 0u && (timing->mcg[5] & 0x40u) != 0u;
+    const bool pll_enabled = (timing->mcg[5] & 0x40u) != 0u;
+    const bool pll_selected = mcg_clock_source == 0u && pll_enabled;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
+    update_pll_lock(timing);
     if ((timing->mcg[12] & 3u) == 0u && timing->external_oscillator_hz != 0u &&
         (timing->mcg[1] & 4u) != 0u) {
         mcg_status_value |= 2u;
@@ -170,16 +212,21 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
         mcg_output_clock_hz = external_reference_clock_hz(timing);
         mcg_status_value |= 2u << 2u;
     } else if (pll_selected) {
-        mcg_output_clock_hz = calculate_pll_clock_hz(timing);
-        mcg_status_value |= 3u << 2u;
-        mcg_status_value |= 1u << 5u;
-        if (mcg_output_clock_hz != 0u)
-            mcg_status_value |= 1u << 6u;
+        if (timing->pll_locked) {
+            mcg_output_clock_hz = calculate_pll_clock_hz(timing);
+            mcg_status_value |= 3u << 2u;
+        }
     } else {
         mcg_output_clock_hz = calculate_fll_clock_hz(timing);
         if ((timing->mcg[0] & 4u) != 0) {
             mcg_status_value |= 1u << 4u;
         }
+    }
+    if (pll_enabled) {
+        mcg_status_value |= 1u << 5u;
+    }
+    if (timing->pll_locked) {
+        mcg_status_value |= 1u << 6u;
     }
     timing->mcg[6] = mcg_status_value;
 
