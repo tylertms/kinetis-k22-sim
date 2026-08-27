@@ -256,7 +256,7 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
            "IRC48M stops in low-power modes");
     clock_source.sim_sopt2 = (1u << 26u) | (1u << 16u);
-    clock_source.mcg[4] = 0x40u;
+    clock_source.mcg[4] = 0x41u;
     clock_source.mcg[5] = 0u;
     clock_source.smc[3] = 2u;
     expect(state, kinetis_timing_lpuart_clock_hz(&clock_source) == 0u,
@@ -366,7 +366,7 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
            "kinetis_timing_core_clock_hz(timing) == 4000000u");
     expect(state, kinetis_timing_bus_clock_hz(timing) == 8000000u / 3u,
            "kinetis_timing_bus_clock_hz(timing) == 8000000u / 3u");
-    kinetis_timing_test_expect_write(state, timing, MCG_C5, 1, 0);
+    kinetis_timing_test_expect_write(state, timing, MCG_C5, 1, 1u);
     kinetis_timing_test_expect_write(state, timing, MCG_C6, 1, 0x40u);
     kinetis_timing_test_expect_write(state, timing, MCG_C1, 1, 0);
     expect(state, kinetis_timing_core_clock_hz(timing) == 96000000u / 2u,

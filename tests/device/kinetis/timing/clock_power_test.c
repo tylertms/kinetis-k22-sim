@@ -127,8 +127,10 @@ int main(void) {
     expect(&state, kinetis_core_clock_hz(device) == 32768u * 640u,
            "external-reference FLL falls back to the slow internal clock");
     write_register(&state, device, MCG_C6, 1u, 0x40u);
-    expect(&state, kinetis_core_clock_hz(device) == 32768u,
-           "PLL without an external oscillator falls back to the slow internal clock");
+    expect(&state, kinetis_core_clock_hz(device) == 1u,
+           "PLL without an external oscillator has no usable output");
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
+           "PLL without an external oscillator remains unlocked");
     kinetis_destroy(device);
     return test_finish(&state);
 }

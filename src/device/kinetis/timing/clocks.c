@@ -114,8 +114,7 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
     }
     const uint32_t pll_divider = (timing->mcg[4] & 0x1fu) + 1u;
     const uint32_t pll_multiplier = (timing->mcg[5] & 0x1fu) + 24u;
-    return (uint32_t)(((uint64_t)timing->external_oscillator_hz * pll_multiplier) /
-                      (pll_divider * 2u));
+    return (uint32_t)(((uint64_t)timing->external_oscillator_hz * pll_multiplier) / pll_divider);
 }
 
 uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
@@ -151,6 +150,7 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
 
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
+    const bool pll_selected = mcg_clock_source == 0u && (timing->mcg[5] & 0x40u) != 0u;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
     if ((timing->mcg[12] & 3u) == 0u && timing->external_oscillator_hz != 0u &&
@@ -165,17 +165,19 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     } else if (mcg_clock_source == 2u) {
         mcg_output_clock_hz = external_reference_clock_hz(timing);
         mcg_status_value |= 2u << 2u;
-    } else if ((timing->mcg[5] & 0x40u) != 0) {
+    } else if (pll_selected) {
         mcg_output_clock_hz = calculate_pll_clock_hz(timing);
         mcg_status_value |= 3u << 2u;
-        mcg_status_value |= (1u << 5u) | (1u << 6u);
+        mcg_status_value |= 1u << 5u;
+        if (mcg_output_clock_hz != 0u)
+            mcg_status_value |= 1u << 6u;
     } else {
         mcg_output_clock_hz = calculate_fll_clock_hz(timing);
         if ((timing->mcg[0] & 4u) != 0) {
             mcg_status_value |= 1u << 4u;
         }
     }
-    if (mcg_output_clock_hz == 0) {
+    if (mcg_output_clock_hz == 0u && !pll_selected) {
         mcg_output_clock_hz = timing->slow_irc_hz;
     }
     timing->mcg[6] = mcg_status_value;
