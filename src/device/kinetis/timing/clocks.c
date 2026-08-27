@@ -108,12 +108,17 @@ uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
 }
 
 static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
-    if (timing->external_oscillator_hz == 0) {
-        return 0;
-    }
     const uint32_t pll_divider = (timing->mcg[4] & 0x1fu) + 1u;
     const uint32_t pll_multiplier = (timing->mcg[5] & 0x1fu) + 24u;
-    return (uint32_t)(((uint64_t)timing->external_oscillator_hz * pll_multiplier) / pll_divider);
+    const uint32_t reference_clock_hz = external_reference_clock_hz(timing) / pll_divider;
+    if (reference_clock_hz < 2000000u || reference_clock_hz > 4000000u) {
+        return 0u;
+    }
+    const uint32_t output_clock_hz = reference_clock_hz * pll_multiplier;
+    return output_clock_hz >= 48000000u &&
+                   output_clock_hz <= timing->profile->cpu.maximum_core_clock_hz
+               ? output_clock_hz
+               : 0u;
 }
 
 uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {

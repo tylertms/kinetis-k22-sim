@@ -14,6 +14,7 @@ enum {
     MCG_C5 = 0x40064004u,
     MCG_C6 = 0x40064005u,
     MCG_S = 0x40064006u,
+    MCG_C7 = 0x4006400cu,
     SMC_PMPROT = 0x4007e000u,
     SMC_PMCTRL = 0x4007e001u,
     SMC_PMSTAT = 0x4007e003u,
@@ -135,6 +136,28 @@ int main(void) {
            "PLL without an external oscillator has no usable output");
     expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
            "PLL without an external oscillator remains unlocked");
+    kinetis_destroy(device);
+
+    device = kinetis_create(missing_oscillator);
+    expect(&state, device != NULL, "IRC48M PLL device is created");
+    write_register(&state, device, MCG_C7, 1u, 2u);
+    write_register(&state, device, MCG_C5, 1u, 23u);
+    write_register(&state, device, MCG_C6, 1u, 0x58u);
+    write_register(&state, device, MCG_C1, 1u, 0u);
+    expect(&state, kinetis_core_clock_hz(device) == 96000000u,
+           "PLL uses its selected IRC48M reference");
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) != 0u,
+           "valid IRC48M PLL configuration locks");
+    kinetis_destroy(device);
+
+    device = kinetis_create(kinetis_configuration(KINETIS_PROFILE_MK22FN51212));
+    expect(&state, device != NULL, "invalid PLL device is created");
+    write_register(&state, device, MCG_C5, 1u, 1u);
+    write_register(&state, device, MCG_C6, 1u, 0x5fu);
+    write_register(&state, device, MCG_C1, 1u, 0u);
+    expect(&state, kinetis_core_clock_hz(device) == 1u, "out-of-range PLL has no usable output");
+    expect(&state, (read_register(&state, device, MCG_S, 1u) & (1u << 6u)) == 0u,
+           "out-of-range PLL remains unlocked");
     kinetis_destroy(device);
     return test_finish(&state);
 }
