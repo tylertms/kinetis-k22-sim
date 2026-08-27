@@ -387,9 +387,6 @@ int main(void) {
     kinetis_data_test_test_flash_controller_geometry(&state);
     kinetis_data_test_test_flash_commands_and_failures(&state);
     kinetis_data_test_test_flash_command_semantics(&state);
-    kinetis_data_test_test_flash_command_census(&state);
-    kinetis_data_test_test_flash_state_census(&state);
-    kinetis_data_test_test_state_census(&state);
     test_flash_command_guards(&state);
     test_flash_swap_lifecycle(&state);
     test_flash_swap_indicator_failures(&state);

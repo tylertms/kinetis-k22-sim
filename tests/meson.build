@@ -261,11 +261,20 @@ test_definitions = [
       'device/kinetis/memory/data/flash.c',
       'device/kinetis/memory/data/swap.c',
       'device/kinetis/memory/data/boundary.c',
+    ],
+    'suite': ['device', 'integration'],
+  },
+  {
+    'name': 'device_data_census',
+    'sources': [
+      'device/kinetis/memory/data/census_test.c',
+      'device/kinetis/memory/data/core.c',
+      'device/kinetis/memory/data/flash.c',
       'device/kinetis/memory/data/command_census.c',
       'device/kinetis/memory/data/flash_state_census.c',
       'device/kinetis/memory/data/state_census.c',
     ],
-    'suite': ['device', 'integration'],
+    'suite': ['device', 'unit'],
   },
   {
     'name': 'device_fmc_complete',
@@ -323,10 +332,18 @@ test_definitions = [
       'device/kinetis/timing/ftm.c',
       'device/kinetis/timing/surface.c',
       'device/kinetis/timing/boundaries.c',
+    ],
+    'suite': ['device', 'integration'],
+  },
+  {
+    'name': 'device_timing_census',
+    'sources': [
+      'device/kinetis/timing/census_test.c',
+      'device/kinetis/timing/core.c',
       'device/kinetis/timing/ftm_census.c',
       'device/kinetis/timing/state_census.c',
     ],
-    'suite': ['device', 'integration'],
+    'suite': ['device', 'unit'],
   },
   {
     'name': 'device_watchdog_complete',

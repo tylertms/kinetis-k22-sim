@@ -407,8 +407,6 @@ int main(void) {
     kinetis_timing_test_test_pdb(&state, &timing, &observations);
     kinetis_timing_test_test_ftm(&state, &timing, &observations);
     kinetis_timing_test_test_ftm_clock_sources(&state, profile);
-    kinetis_timing_test_test_ftm_census(&state, &timing);
-    kinetis_timing_test_test_state_census(&state, &timing);
     kinetis_timing_test_test_ftm_input_capture(&state, profile);
     kinetis_timing_test_test_ftm_output(&state, profile);
     kinetis_timing_reset(&timing, 0x82u, 0);
