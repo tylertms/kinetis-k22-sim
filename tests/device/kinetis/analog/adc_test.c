@@ -17,6 +17,7 @@ enum {
     ADC0_IRQ = 39,
     MCG_C1 = 0x40064000u,
     SIM_SCGC6 = 0x4004803cu,
+    SIM_CLKDIV1 = 0x40048044u,
 };
 
 static uint32_t read32(TestState* state, Kinetis* device, uint32_t address) {
@@ -64,6 +65,17 @@ int main(void) {
     kinetis_advance(device, 18u);
     expect(&state, read32(&state, device, ADC0_RA) == 0x678u,
            "read32(&state, device, ADC0_RA) == 0x678u");
+
+    write32(&state, device, SIM_CLKDIV1, 3u << 24u);
+    write32(&state, device, ADC0_CFG1, 0x24u);
+    write32(&state, device, ADC0_CFG2, 0u);
+    write32(&state, device, ADC0_SC1A, 7u);
+    kinetis_advance(device, 111u);
+    expect(&state, (read32(&state, device, ADC0_SC1A) & 0x80u) == 0u,
+           "divided bus-clocked conversion waits for its ADC clocks");
+    kinetis_advance(device, 1u);
+    expect(&state, read32(&state, device, ADC0_RA) == 0x345u,
+           "divided bus-clocked conversion completes on time");
 
     KinetisConfiguration missing_oscillator = kinetis_configuration(KINETIS_PROFILE_MKV30F12810);
     missing_oscillator.package = KINETIS_PACKAGE_FM_32_QFN;

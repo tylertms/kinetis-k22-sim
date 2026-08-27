@@ -24,6 +24,20 @@ static void adc_schedule(KinetisAdc* adc, uint8_t conversion_slot, bool clear_co
     adc->converting = true;
 }
 
+uint32_t kinetis_data_internal_adc_elapsed_cycles(KinetisData* data, KinetisAdc* adc,
+                                                  uint32_t core_cycles) {
+    if ((adc->registers[8] & 3u) != 0u)
+        return core_cycles;
+    if (!data->bus_clock_running || data->core_clock_hz == 0u || data->bus_clock_hz == 0u)
+        return 0u;
+    const uint32_t divider = 1u << ((adc->registers[8] >> 5u) & 3u);
+    const uint64_t denominator = (uint64_t)data->core_clock_hz * divider;
+    const uint64_t accumulated = adc->clock_remainder + (uint64_t)core_cycles * data->bus_clock_hz;
+    adc->clock_remainder = accumulated % denominator;
+    const uint64_t elapsed_cycles = accumulated / denominator;
+    return elapsed_cycles > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed_cycles;
+}
+
 void kinetis_data_internal_adc_start(KinetisAdc* adc, uint8_t slot) {
     adc_schedule(adc, slot, true);
 }
@@ -127,6 +141,8 @@ bool kinetis_data_internal_adc_write(KinetisData* data, uint8_t instance, uint32
         return true;
     }
     kinetis_data_internal_store_bytes(adc->registers, register_offset, byte_count, write_value);
+    if (register_offset <= 8u && register_offset + byte_count > 8u)
+        adc->clock_remainder = 0u;
     return true;
 }
 

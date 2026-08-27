@@ -29,6 +29,7 @@ enum {
 typedef struct {
     uint8_t registers[ADC_REGISTER_SIZE];
     uint16_t inputs[KINETIS_ADC_MUX_COUNT][32];
+    uint64_t clock_remainder;
     uint32_t remaining_cycles;
     uint8_t active_slot;
     bool converting;
@@ -56,6 +57,8 @@ struct KinetisData {
     uint8_t dma_request_source[DMA_CHANNEL_COUNT];
     uint8_t dma_channel_count;
     uint8_t dma_last_channel;
+    uint32_t core_clock_hz;
+    uint32_t bus_clock_hz;
     bool bus_clock_running;
     bool debug_halted;
     uint8_t dmamux[DMA_CHANNEL_COUNT];
@@ -146,6 +149,8 @@ uint32_t kinetis_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t b
 uint32_t kinetis_data_internal_rng_next(uint32_t seed_value);
 uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data);
 void kinetis_data_internal_adc_complete(KinetisData* data, uint8_t instance);
+uint32_t kinetis_data_internal_adc_elapsed_cycles(KinetisData* data, KinetisAdc* adc,
+                                                  uint32_t core_cycles);
 void kinetis_data_internal_adc_reset_registers(KinetisAdc* adc);
 void kinetis_data_internal_adc_start(KinetisAdc* adc, uint8_t slot);
 void kinetis_data_internal_cmp_evaluate(KinetisData* data, uint8_t instance);

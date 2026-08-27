@@ -119,7 +119,7 @@ void kinetis_data_test_test_state_census(TestState* state) {
     }
     expect(state,
            census.reads == 19524u && census.writes == 19097u && census.signals == 66372u &&
-               census.fingerprint == UINT64_C(1131582871870430636),
+               census.fingerprint == UINT64_C(8595398675578996704),
            "data state census matches");
     kinetis_data_destroy(data);
 }

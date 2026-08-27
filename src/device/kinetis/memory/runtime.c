@@ -167,6 +167,8 @@ void kinetis_data_reset(KinetisData* data) {
     data->dma_half = 0;
     memset(data->dma_request_source, UINT8_MAX, sizeof(data->dma_request_source));
     data->dma_last_channel = (uint8_t)(data->dma_channel_count - 1u);
+    data->core_clock_hz = 1u;
+    data->bus_clock_hz = 1u;
     data->bus_clock_running = true;
     data->debug_halted = false;
     for (uint8_t channel = 0u; channel < data->dma_channel_count; channel++)
@@ -539,13 +541,15 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
     }
     for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++) {
         KinetisAdc* adc = &data->adc[adc_index];
-        if (!adc->converting || (!data->bus_clock_running && (adc->registers[8] & 3u) == 0u))
+        if (!adc->converting)
             continue;
-        if (cycle_count >= adc->remaining_cycles) {
+        const uint32_t elapsed_cycles =
+            kinetis_data_internal_adc_elapsed_cycles(data, adc, cycle_count);
+        if (elapsed_cycles >= adc->remaining_cycles) {
             adc->remaining_cycles = 0;
             kinetis_data_internal_adc_complete(data, adc_index);
         } else {
-            adc->remaining_cycles -= cycle_count;
+            adc->remaining_cycles -= elapsed_cycles;
         }
     }
     if (data->vref_cycles != 0) {
@@ -582,10 +586,13 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
     }
 }
 
-void kinetis_data_set_bus_clock(KinetisData* data, bool running, bool stop_mode) {
+void kinetis_data_set_clocks(KinetisData* data, uint32_t core_clock_hz, uint32_t bus_clock_hz,
+                             bool bus_clock_running, bool stop_mode) {
     if (data == NULL)
         return;
-    data->bus_clock_running = running;
+    data->core_clock_hz = core_clock_hz;
+    data->bus_clock_hz = bus_clock_hz;
+    data->bus_clock_running = bus_clock_running;
     if (!stop_mode)
         return;
     for (uint8_t adc_index = 0u; adc_index < data->adc_count; adc_index++) {
