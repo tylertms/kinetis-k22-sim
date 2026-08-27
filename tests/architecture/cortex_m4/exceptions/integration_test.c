@@ -60,6 +60,10 @@ static void write_word(ExceptionBus* bus, uint32_t address, uint32_t value) {
     memcpy(bus->memory + address, &value, sizeof(value));
 }
 
+static void write_halfword(ExceptionBus* bus, uint32_t address, uint16_t value) {
+    memcpy(bus->memory + address, &value, sizeof(value));
+}
+
 static uint32_t read_word(const ExceptionBus* bus, uint32_t address) {
     uint32_t value = 0u;
     memcpy(&value, bus->memory + address, sizeof(value));
@@ -145,6 +149,28 @@ static void test_entry_failures(TestState* state) {
     bus.reject_reads = true;
     expect(state, !cortex_m4_take_pending_exception(cpu), "!cortex_m4_take_pending_exception(cpu)");
     expect(state, (cpu->hfsr & (1u << 1)) != 0u, "(cpu->hfsr & (1u << 1)) != 0u");
+    cortex_m4_destroy(cpu);
+}
+
+static void test_step_entry_failure(TestState* state) {
+    ExceptionBus bus = {0};
+    CortexM4* cpu = create_cpu(state, &bus);
+    cpu->irq_enabled[0] = 1u;
+    cpu->irq_pending[0] = 1u;
+    write_halfword(&bus, 0x100u, 0x2001u);
+    write_vector(&bus, 16u, 0x301u);
+    bus.fail_write = 1u;
+
+    const CortexM4Result result = cortex_m4_step(cpu);
+
+    expect(state, result.stop == CORTEX_M4_STOP_RUNNING,
+           "stacking fault leaves the escalated HardFault runnable");
+    expect(state, result.instructions == 0u && result.pc == 0x100u && cpu->registers[0] == 0u,
+           "failed exception entry does not retire the interrupted instruction");
+    expect(state,
+           (cpu->cfsr & (1u << 12u)) != 0u && (cpu->hfsr & (1u << 30u)) != 0u &&
+               (cpu->system_pending & (1u << 3u)) != 0u,
+           "failed exception entry escalates its stacking fault");
     cortex_m4_destroy(cpu);
 }
 
@@ -460,6 +486,7 @@ int main(void) {
     test_fault_lockup(&state);
     test_psp_lifecycle(&state);
     test_entry_failures(&state);
+    test_step_entry_failure(&state);
     test_core_entry_write_failures(&state);
     test_fp_entry_write_failures(&state);
     test_mpu_entry_failures(&state);

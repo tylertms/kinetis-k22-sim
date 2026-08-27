@@ -30,6 +30,7 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     uint32_t exception_return = 0;
     if (!cortex_m4_system_stack_exception_frame(cpu, &stack_pointer, &exception_return)) {
         cortex_m4_timing_abort(cpu);
+        cpu->instruction_faulted = true;
         cortex_m4_exception_advanced_entry_fault(cpu, exception, CORTEX_M4_FAULT_STACKING,
                                                  cpu->exception_frame_memory_management_fault);
         return false;

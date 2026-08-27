@@ -188,7 +188,9 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         }
         return cortex_m4_result(cpu);
     }
-    if (cortex_m4_take_pending_exception(cpu)) {
+    cortex_m4_take_pending_exception(cpu);
+    if (cpu->instruction_faulted || cpu->stop != CORTEX_M4_STOP_RUNNING) {
+        return cortex_m4_result(cpu);
     }
     if (cpu->sleeping) {
         cortex_m4_timing_sleep(cpu, 1);
