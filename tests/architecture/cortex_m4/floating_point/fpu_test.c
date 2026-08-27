@@ -57,6 +57,23 @@ int main(void) {
     expect(&state, cortex_m4_get_fp_register(cpu, 14) == 0x40600000u,
            "cortex_m4_get_fp_register(cpu, 14) == 0x40600000u");
 
+    load_instruction(&state, device, 0xee37u, 0x7a27u);
+    expect(&state, cortex_m4_write_memory(cpu, 0xe000ed88u, 4, 0x00500000u),
+           "cortex_m4_write_memory(cpu, 0xe000ed88u, 4, 0x00500000u)");
+    cortex_m4_set_fp_register(cpu, 14, 0x3fc00000u);
+    cortex_m4_set_fp_register(cpu, 15, 0x40000000u);
+    execute(&state, device);
+    expect(&state, cortex_m4_get_fp_register(cpu, 14) == 0x40600000u,
+           "cortex_m4_get_fp_register(cpu, 14) == 0x40600000u");
+
+    load_instruction(&state, device, 0xee37u, 0x7a27u);
+    expect(&state, cortex_m4_write_memory(cpu, 0xe000ed88u, 4, 0x00500000u),
+           "cortex_m4_write_memory(cpu, 0xe000ed88u, 4, 0x00500000u)");
+    cortex_m4_set_control(cpu, 1u);
+    cortex_m4_step(cpu);
+    expect(&state, (cortex_m4_get_fault_status(cpu) & (1u << 19)) != 0,
+           "(cortex_m4_get_fault_status(cpu) & (1u << 19)) != 0");
+
     load_instruction(&state, device, 0xee37u, 0x7a67u);
     cortex_m4_set_fp_register(cpu, 14, 0x3fc00000u);
     cortex_m4_set_fp_register(cpu, 15, 0x40000000u);

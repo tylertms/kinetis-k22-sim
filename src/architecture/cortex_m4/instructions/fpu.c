@@ -62,7 +62,10 @@ static uint8_t double_m_register(uint16_t second) {
 }
 
 static bool ensure_fpu_enabled(CortexM4* cpu) {
-    if ((cpu->cpacr & 0x00f00000u) == 0x00f00000u) {
+    const uint32_t access = (cpu->cpacr >> 20u) & 15u;
+    const bool privileged =
+        (cpu->xpsr & 0x1ffu) != 0u || (cpu->control & CORTEX_M4_CONTROL_NPRIV) == 0u;
+    if (access == 15u || (access == 5u && privileged)) {
         return true;
     }
     cpu->cfsr |= 1u << 19;
