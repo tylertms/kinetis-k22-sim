@@ -131,9 +131,18 @@ static uint32_t next_float(uint32_t bits, bool upward) {
 }
 
 static uint32_t rounded_float(CortexM4* cpu, double exact) {
-    float nearest = (float)exact;
+    if ((cpu->fpscr & FPSCR_FZ) != 0u && exact != 0 && isfinite(exact) && fabs(exact) < FLT_MIN) {
+        cpu->fpscr |= FPSCR_UFC;
+        return signbit(exact) ? FLOAT_SIGN : 0u;
+    }
+    fenv_t environment;
+    const bool restore_environment = fegetenv(&environment) == 0;
+    if (restore_environment)
+        fesetround(FE_TONEAREST);
+    volatile float nearest = (float)exact;
+    if (restore_environment)
+        fesetenv(&environment);
     uint32_t bits = float_to_bits(nearest);
-    const bool overflow = isfinite(exact) && fabs(exact) > FLT_MAX;
     const uint8_t rounding = (uint8_t)(cpu->fpscr >> FPSCR_RMODE_SHIFT) & 3u;
     const double nearest_value = (double)nearest;
     if (rounding == 1 && nearest_value < exact) {
@@ -144,6 +153,8 @@ static uint32_t rounded_float(CortexM4* cpu, double exact) {
                ((exact > 0 && nearest_value > exact) || (exact < 0 && nearest_value < exact))) {
         bits = next_float(bits, exact < 0);
     }
+    const bool overflow =
+        isfinite(exact) && (float_is_infinity(bits) || fabs(exact) >= ldexp(1.0, 128));
     if (overflow) {
         cpu->fpscr |= FPSCR_OFC | FPSCR_IXC;
     } else if (isfinite(exact) && (double)bits_to_float(bits) != exact) {
@@ -154,10 +165,6 @@ static uint32_t rounded_float(CortexM4* cpu, double exact) {
         cpu->fpscr |= FPSCR_UFC;
     }
     if (float_is_subnormal(bits)) {
-        if ((cpu->fpscr & FPSCR_FZ) != 0) {
-            cpu->fpscr |= FPSCR_UFC | FPSCR_IXC;
-            return bits & FLOAT_SIGN;
-        }
         if ((double)bits_to_float(bits) != exact) {
             cpu->fpscr |= FPSCR_UFC;
         }
@@ -224,6 +231,16 @@ static uint32_t fused_float(CortexM4* cpu, float left, float right, float accumu
         return rounding == 2u ? FLOAT_SIGN : 0u;
     }
 
+    const int zero_comparison = exact_sum_compare(rounded, error, 0);
+    const bool tiny = zero_comparison > 0 ? exact_sum_compare(rounded, error, FLT_MIN) < 0
+                                          : exact_sum_compare(rounded, error, -FLT_MIN) > 0;
+    if ((cpu->fpscr & FPSCR_FZ) != 0u && tiny) {
+        if (restore_environment)
+            fesetenv(&environment);
+        cpu->fpscr |= FPSCR_UFC;
+        return zero_comparison < 0 ? FLOAT_SIGN : 0u;
+    }
+
     volatile float converted = (float)rounded;
     if (restore_environment)
         fesetenv(&environment);
@@ -253,21 +270,15 @@ static uint32_t fused_float(CortexM4* cpu, float left, float right, float accumu
         result = exact_sum_compare(rounded, error, 0) < 0 ? upper : lower;
 
     const bool inexact = lower != upper;
-    const bool overflow = exact_sum_compare(rounded, error, FLT_MAX) > 0 ||
-                          exact_sum_compare(rounded, error, -FLT_MAX) < 0;
-    const bool tiny = exact_sum_compare(rounded, error, 0) > 0
-                          ? exact_sum_compare(rounded, error, FLT_MIN) < 0
-                          : exact_sum_compare(rounded, error, -FLT_MIN) > 0;
+    const bool overflow = float_is_infinity(result) ||
+                          exact_sum_compare(rounded, error, ldexp(1.0, 128)) >= 0 ||
+                          exact_sum_compare(rounded, error, -ldexp(1.0, 128)) <= 0;
     if (overflow)
         cpu->fpscr |= FPSCR_OFC | FPSCR_IXC;
     else if (inexact)
         cpu->fpscr |= FPSCR_IXC;
     if (tiny && inexact)
         cpu->fpscr |= FPSCR_UFC;
-    if ((cpu->fpscr & FPSCR_FZ) != 0u && float_is_subnormal(result)) {
-        cpu->fpscr |= FPSCR_UFC | FPSCR_IXC;
-        return result & FLOAT_SIGN;
-    }
     return result;
 }
 
@@ -518,10 +529,10 @@ static uint32_t binary_result(CortexM4* cpu, uint32_t left, uint32_t right, uint
         return rounded_float(cpu, -(left_value * right_value));
     }
     if (operation == 2) {
-        return rounded_float(cpu, left_value + right_value);
+        return fused_float(cpu, bits_to_float(left), 1.0f, bits_to_float(right));
     }
     if (operation == 3) {
-        return rounded_float(cpu, left_value - right_value);
+        return fused_float(cpu, bits_to_float(left), 1.0f, -bits_to_float(right));
     }
     return rounded_float(cpu, left_value / right_value);
 }

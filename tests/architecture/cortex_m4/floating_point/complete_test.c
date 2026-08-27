@@ -158,8 +158,8 @@ static void test_arithmetic_and_status(TestState* state, Kinetis* device) {
     run(state, cpu);
     expect(state, cortex_m4_get_fp_register(cpu, 14) == 0,
            "cortex_m4_get_fp_register(cpu, 14) == 0");
-    expect(state, (cortex_m4_get_fpscr(cpu) & (FPSCR_UFC | FPSCR_IXC)) == (FPSCR_UFC | FPSCR_IXC),
-           "(cortex_m4_get_fpscr(cpu) & (FPSCR_UFC | FPSCR_IXC)) == (FPSCR_UFC | FPSCR_IXC)");
+    expect(state, (cortex_m4_get_fpscr(cpu) & (FPSCR_UFC | FPSCR_IXC)) == FPSCR_UFC,
+           "flush-to-zero sets underflow without inexact");
 }
 
 static void test_accumulate(TestState* state, Kinetis* device) {

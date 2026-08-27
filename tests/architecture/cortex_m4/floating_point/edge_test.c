@@ -1,5 +1,6 @@
 #include "kinetis.h"
 
+#include <fenv.h>
 #include <stdint.h>
 
 #include "architecture/cortex_m4/internal.h"
@@ -218,6 +219,45 @@ static void test_float_rounding(TestState* state, Kinetis* device) {
     add(state, device, 0x3f800000u, 0x33c00000u, FPSCR_ROUND_MINUS_INFINITY, 0x3f800000u);
     add(state, device, 0xbf800000u, 0xb3c00000u, FPSCR_ROUND_ZERO, 0xbf800000u);
     fused_multiply_add(state, device, 0x00000001u, 0x3f800800u, 0x3f800800u, 0u, 0x3f801001u);
+
+    fenv_t environment;
+    const bool environment_saved = fegetenv(&environment) == 0;
+    if (environment_saved)
+        fesetround(FE_UPWARD);
+    add(state, device, 0x3f800000u, 0x33000000u, 0u, 0x3f800000u);
+    expect(state, !environment_saved || fegetround() == FE_UPWARD,
+           "floating-point execution restores the host rounding mode");
+    if (environment_saved)
+        fesetenv(&environment);
+
+    CortexM4* cpu = prepare(state, device, 0xee37u, 0x7a27u);
+    cortex_m4_set_fp_register(cpu, 14u, 0x3f800000u);
+    cortex_m4_set_fp_register(cpu, 15u, 0x00000001u);
+    cortex_m4_set_fpscr(cpu, FPSCR_ROUND_PLUS_INFINITY);
+    run(state, cpu);
+    expect(state,
+           cortex_m4_get_fp_register(cpu, 14u) == 0x3f800001u &&
+               (cortex_m4_get_fpscr(cpu) & FPSCR_IXC) != 0u,
+           "directed addition preserves a residual below binary64 precision");
+
+    cpu = prepare(state, device, 0xee37u, 0x7a27u);
+    cortex_m4_set_fp_register(cpu, 14u, 0x7f7fffffu);
+    cortex_m4_set_fp_register(cpu, 15u, 0x72800000u);
+    run(state, cpu);
+    expect(state,
+           cortex_m4_get_fp_register(cpu, 14u) == 0x7f7fffffu &&
+               (cortex_m4_get_fpscr(cpu) & (FPSCR_OFC | FPSCR_IXC)) == FPSCR_IXC,
+           "finite rounded exponent does not report overflow");
+
+    cpu = prepare(state, device, 0xee27u, 0x7a27u);
+    cortex_m4_set_fp_register(cpu, 14u, 0x00800000u);
+    cortex_m4_set_fp_register(cpu, 15u, 0x3f7fffffu);
+    cortex_m4_set_fpscr(cpu, FPSCR_FZ);
+    run(state, cpu);
+    expect(state,
+           cortex_m4_get_fp_register(cpu, 14u) == 0u &&
+               (cortex_m4_get_fpscr(cpu) & (FPSCR_UFC | FPSCR_IXC)) == FPSCR_UFC,
+           "flush-to-zero uses the exact pre-rounding exponent");
 }
 
 static void test_invalid_arithmetic(TestState* state, Kinetis* device) {
