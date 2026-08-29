@@ -10,6 +10,7 @@ enum {
     I2C0_BASE = 0x40066000u,
     I2C2_BASE = 0x400e6000u,
     UART0_BASE = 0x4006a000u,
+    UART1_BASE = 0x4006b000u,
     UART_S1 = 4u,
 };
 
@@ -263,7 +264,7 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x12abu, 0)");
     write_register(state, &serial, SPI0_BASE + 0x34, 1, 0x5au);
-    kinetis_serial_advance(&serial, 64);
+    kinetis_serial_advance(&serial, 66);
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 1) == 0xabu,
            "read_register(state, &serial, SPI0_BASE + 0x38, 1) == 0xabu");
     uint16_t transmitted_value;
@@ -286,10 +287,15 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
            "byte_transfer.clock_and_transfer_attributes == 1u");
     expect(state, byte_transfer.continuous_chip_select, "byte_transfer.continuous_chip_select");
     expect(state, byte_transfer.end_of_queue, "byte_transfer.end_of_queue");
+    expect(state, serial.spi[0].transmit.count == 1u,
+           "EOQ leaves the following transfer queued");
+    write_register(state, &serial, SPI0_BASE + 0x2c, 4, 1u << 28);
+    kinetis_serial_advance(&serial, 1024);
     expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer),
            "kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &byte_transfer)");
     expect(state, byte_transfer.data == 0x6bu, "byte_transfer.data == 0x6bu");
     expect(state, byte_transfer.chip_selects == 3u, "byte_transfer.chip_selects == 3u");
+    write_register(state, &serial, SPI0_BASE + 0x2c, 4, 1u << 28);
     expect(state, read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006bu,
            "read_register(state, &serial, SPI0_BASE + 0x34, 4) == 0x9803006bu");
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0xffffu,
@@ -299,7 +305,7 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x1234u, 0)");
     write_register(state, &serial, SPI0_BASE + 0x34, 4, 0xabcdu);
-    kinetis_serial_advance(&serial, 63);
+    kinetis_serial_advance(&serial, 67);
     expect(state, (read_register(state, &serial, SPI0_BASE + 0x2c, 4) & (1u << 17)) == 0,
            "(read_register(state, &serial, SPI0_BASE + 0x2c, 4) & (1u << 17)) == 0");
     kinetis_serial_advance(&serial, 1);
@@ -317,7 +323,7 @@ static void test_spi_transfer_fifo_interrupt_dma_and_errors(TestState* state) {
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x5678u, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x5678u, 0)");
     write_register(state, &serial, SPI0_BASE + 0x34, 4, 0x90030011u);
-    kinetis_serial_advance(&serial, 64);
+    kinetis_serial_advance(&serial, 70);
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_SPI0),
            "kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_SPI0)");
     expect(state, read_register(state, &serial, SPI0_BASE + 0x38, 4) == 0x5678u,
@@ -433,13 +439,13 @@ static void test_clock_domains(TestState* state) {
 
     uint16_t transmitted_value = 0u;
     KinetisSerialSpiTransfer spi_transfer;
-    kinetis_serial_advance(&serial, 127u);
+    kinetis_serial_advance(&serial, 131u);
     expect(state, !kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &spi_transfer),
-           "SPI waits for 64 bus clocks");
+           "SPI waits for its final bus clock");
     kinetis_serial_advance(&serial, 1u);
     expect(state, kinetis_serial_pop_spi_transfer(&serial, KINETIS_SERIAL_SPI0, &spi_transfer),
-           "SPI completes after 128 core clocks");
-    kinetis_serial_advance(&serial, 31u);
+           "SPI completes after 132 core clocks");
+    kinetis_serial_advance(&serial, 27u);
     expect(state, !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_UART0, &transmitted_value),
            "system-clocked UART waits for its final core clock");
     kinetis_serial_advance(&serial, 1u);
@@ -535,16 +541,16 @@ static void test_i2c_start_stop_detection(TestState* state) {
            "clearing STARTF before IICIF clears the interrupt");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
     expect_event(state, &serial, KINETIS_SERIAL_I2C0, KINETIS_SERIAL_EVENT_I2C_STOP, 0);
-    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
-           "master stop latches STOPF");
-    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "master stop requests an enabled detection interrupt");
-    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x6au);
-    expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "clearing master STOPF leaves IICIF pending");
-    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "master stop does not latch slave STOPF");
     expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
-           "clearing master IICIF removes the interrupt");
+           "master stop does not request a slave detection interrupt");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc4u);
+    expect(state,
+           (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x32u) == 0x12u &&
+               (read_register(state, &serial, I2C0_BASE + 2u, 1u) & 0x24u) == 0u,
+           "repeated start outside master mode loses arbitration and self-clears");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 0x12u);
 
     expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
            "kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0)");
@@ -566,8 +572,24 @@ static void test_i2c_start_stop_detection(TestState* state) {
 
     expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0),
            "kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0)");
+    expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x2au,
+           "unmatched slave stop does not latch STOPF");
+    expect(state, !kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
+           "unmatched slave stop does not request an interrupt");
+    write_register(state, &serial, I2C0_BASE, 1u, 0x52u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u, true),
+           "slave address match starts STOPF eligibility");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0xc0u);
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0),
+           "matched slave stop is detected");
     expect(state, read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au,
-           "read_register(state, &serial, I2C0_BASE + 6u, 1u) == 0x6au");
+           "matched slave stop latches STOPF");
+    write_register(state, &serial, I2C0_BASE + 4u, 1u, 0x77u);
+    uint16_t stopped_slave_value;
+    expect(state,
+           !kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_I2C0, &stopped_slave_value),
+           "matched slave stop clears the previous transfer direction");
     expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 2u) != 0u,
            "stop detection latches IICIF");
     expect(state, kinetis_serial_irq(&serial, KINETIS_SERIAL_IRQ_I2C0),
@@ -699,7 +721,7 @@ static void test_register_edge_paths(TestState* state) {
                "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, receive_value, 0)");
         write_register(state, &serial, SPI0_BASE + 0x34, 4,
                        receive_value == 4u ? (1u << 27) | receive_value : receive_value);
-        kinetis_serial_advance(&serial, 16);
+        kinetis_serial_advance(&serial, receive_value == 0u ? 18u : 22u);
     }
     uint32_t spi_status = read_register(state, &serial, SPI0_BASE + 0x2c, 4);
     expect(state, (spi_status & (1u << 19)) != 0, "(spi_status & (1u << 19)) != 0");
@@ -918,6 +940,245 @@ static void test_invalid_operations(TestState* state) {
         "unavailable_serial I2C rejects bus events");
 }
 
+static void test_mkv10_clock_domains(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MKV10Z1287);
+    kinetis_serial_set_clocks(&serial, 8000000u, 4000000u, 0u);
+    kinetis_serial_set_clock_domains(&serial, true, true);
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART0, true) &&
+                      kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_UART1, true) &&
+                      kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_SPI0, true),
+           "MKV10 communication clocks are enabled");
+    write_register(state, &serial, UART0_BASE + 3u, 1u, 8u);
+    write_register(state, &serial, UART1_BASE + 3u, 1u, 8u);
+    write_register(state, &serial, UART0_BASE + 7u, 1u, 0x10u);
+    write_register(state, &serial, UART1_BASE + 7u, 1u, 0x11u);
+    write_register(state, &serial, SPI0_BASE, 4u, 0u);
+    write_register(state, &serial, SPI0_BASE + 0x34u, 4u, 0x12u);
+    serial.uart[0].transmit_cycles = 8u;
+    serial.uart[1].transmit_cycles = 8u;
+    serial.spi[0].transfer_cycles = 8u;
+    kinetis_serial_advance(&serial, 4u);
+    expect(state, serial.uart[0].transmit_cycles == 4u,
+           "MKV10 UART0 advances from the system clock");
+    expect(state, serial.uart[1].transmit_cycles == 6u,
+           "MKV10 UART1 advances from the bus clock");
+    expect(state, serial.spi[0].transfer_cycles == 4u,
+           "MKV10 SPI0 advances from the system clock");
+}
+
+static void test_mkv10_spi_fifo_disable_and_running_state(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MKV10Z1287);
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_SPI0, true),
+           "MKV10 SPI0 clock is enabled");
+
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80003001));
+    write_register(state, &serial, SPI0_BASE + 0x30u, 4u, 3u << 24u);
+    expect(state, kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_SPI0_TRANSMIT),
+           "disabled transmit FIFO requests DMA while empty");
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x11u);
+    expect(state, !kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_SPI0_TRANSMIT),
+           "disabled transmit FIFO removes DMA request at one entry");
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x22u);
+    uint32_t status = read_register(state, &serial, SPI0_BASE + 0x2cu, 4u);
+    expect(state, ((status >> 12u) & 15u) == 1u && (status & (1u << 27u)) != 0u,
+           "disabled transmit FIFO rejects a second entry");
+
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80003c01));
+    write_register(state, &serial, SPI0_BASE + 0x2cu, 4u, UINT32_MAX);
+    write_register(state, &serial, SPI0_BASE + 0x30u, 4u, 3u << 16u);
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80003000));
+    expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x31u, 0u),
+           "first disabled-FIFO receive value is available");
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x41u);
+    kinetis_serial_advance(&serial, 1024u);
+    expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_SPI0, 0x32u, 0u),
+           "second disabled-FIFO receive value is available");
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x42u);
+    kinetis_serial_advance(&serial, 1024u);
+    status = read_register(state, &serial, SPI0_BASE + 0x2cu, 4u);
+    expect(state,
+           ((status >> 4u) & 15u) == 1u && (status & (1u << 19u)) != 0u &&
+               kinetis_serial_dma_request(&serial, KINETIS_SERIAL_DMA_SPI0_RECEIVE),
+           "disabled receive FIFO reports one entry and overflow with DMA pacing");
+    uint16_t transmitted;
+    expect(state,
+           kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted) &&
+               kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_SPI0, &transmitted),
+           "disabled-FIFO transfers reach the wire");
+
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80000c01));
+    write_register(state, &serial, SPI0_BASE + 0x2cu, 4u, UINT32_MAX);
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80000000));
+    write_register(state, &serial, SPI0_BASE + 0x34u, 4u, 0x08000051u);
+    write_register(state, &serial, SPI0_BASE + 0x34u, 4u, 0x00000052u);
+    kinetis_serial_advance(&serial, 1024u);
+    status = read_register(state, &serial, SPI0_BASE + 0x2cu, 4u);
+    expect(state,
+           serial.spi[0].transmit.count == 1u && serial.spi[0].wire_transmit.count == 1u &&
+               (status & (1u << 28u)) != 0u && (status & (1u << 30u)) == 0u,
+           "EOQ stops before the next queued frame and exits Running state");
+    write_register(state, &serial, SPI0_BASE + 0x2cu, 4u, 1u << 28u);
+    expect(state,
+           (read_register(state, &serial, SPI0_BASE + 0x2cu, 4u) & (1u << 30u)) != 0u,
+           "clearing EOQF resumes Running state");
+    kinetis_serial_advance(&serial, 1024u);
+    expect(state, serial.spi[0].transmit.count == 0u && serial.spi[0].wire_transmit.count == 2u,
+           "clearing EOQF releases the queued frame");
+
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x88000c01));
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x88000000));
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x61u);
+    kinetis_serial_set_debug_halted(&serial, true);
+    kinetis_serial_advance(&serial, 1024u);
+    expect(state,
+           serial.spi[0].transmit.count == 1u &&
+               (read_register(state, &serial, SPI0_BASE + 0x2cu, 4u) & (1u << 30u)) == 0u,
+           "FRZ stops SPI in debug state");
+    kinetis_serial_set_debug_halted(&serial, false);
+    kinetis_serial_advance(&serial, 1024u);
+    expect(state, serial.spi[0].transmit.count == 0u, "SPI resumes after debug state");
+}
+
+static void test_mkv10_spi_ctar_delays(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MKV10Z1287);
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_SPI0, true),
+           "MKV10 delayed SPI0 clock is enabled");
+    write_register(state, &serial, SPI0_BASE + 0x0cu, 4u, UINT32_C(0x3a514204));
+    write_register(state, &serial, SPI0_BASE, 4u, UINT32_C(0x80000000));
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x71u);
+    write_register(state, &serial, SPI0_BASE + 0x34u, 1u, 0x72u);
+    kinetis_serial_advance(&serial, 479u);
+    expect(state, serial.spi[0].wire_transmit.count == 0u,
+           "firmware CTAR waits through tCSC and seven bits");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, serial.spi[0].wire_transmit.count == 1u,
+           "firmware CTAR completes its first frame at 480 clocks");
+    kinetis_serial_advance(&serial, 505u);
+    expect(state, serial.spi[0].wire_transmit.count == 1u,
+           "non-continuous transfer waits through tASC, tDT, tCSC and seven bits");
+    kinetis_serial_advance(&serial, 1u);
+    expect(state, serial.spi[0].wire_transmit.count == 2u,
+           "later firmware CTAR frames complete every 506 clocks");
+}
+
+static void test_mkv10_i2c_slave_matching(TestState* state) {
+    KinetisSerial serial = create_serial(state, KINETIS_PROFILE_MKV10Z1287);
+    expect(state, kinetis_serial_set_clock_gate(&serial, KINETIS_PERIPHERAL_I2C0, true),
+           "MKV10 I2C0 clock is enabled for slave matching");
+    expect(state,
+           read_register(state, &serial, I2C0_BASE + 8u, 1u) == 0u &&
+               read_register(state, &serial, I2C0_BASE + 9u, 1u) == 0xc2u,
+           "MKV10 I2C SMB and secondary address reset to official values");
+    write_register(state, &serial, I2C0_BASE, 1u, 0xf0u);
+    write_register(state, &serial, I2C0_BASE + 1u, 1u, 0x27u);
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0x40u);
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x24u);
+    expect(state,
+           kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x78u, false) &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x78u &&
+               !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0u, false),
+           "MKV10 I2C matches the official motor extended address without general call");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0u);
+    write_register(state, &serial, I2C0_BASE, 1u, 0x53u);
+    write_register(state, &serial, I2C0_BASE + 7u, 1u, 0x61u);
+    write_register(state, &serial, I2C0_BASE + 9u, 1u, 0xc3u);
+    expect(state,
+           read_register(state, &serial, I2C0_BASE, 1u) == 0x52u &&
+               read_register(state, &serial, I2C0_BASE + 7u, 1u) == 0x60u &&
+               read_register(state, &serial, I2C0_BASE + 9u, 1u) == 0xc2u,
+           "I2C slave address registers keep their reserved low bits clear");
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0xc2u);
+    expect(state, read_register(state, &serial, I2C0_BASE + 8u, 1u) == 0xc0u,
+           "I2C motor SMB configuration clears write-one timeout status");
+    serial.i2c[0].registers[8] = 0x0eu;
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0u);
+    expect(state, read_register(state, &serial, I2C0_BASE + 8u, 1u) == 0x0eu,
+           "I2C SMB write preserves read-only and uncleared timeout status");
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0x0au);
+    expect(state, read_register(state, &serial, I2C0_BASE + 8u, 1u) == 4u,
+           "I2C SMB timeout status clears on writes of one");
+    write_register(state, &serial, I2C0_BASE, 1u, 0x52u);
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u, false),
+           "I2C primary slave address always matches");
+    expect(state,
+           (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0xeau) == 0xe2u &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x52u,
+           "I2C address completion reports status and calling address");
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) == 0u,
+           "I2C receive data read clears transfer complete");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x48u) == 0u,
+           "every I2C control write clears address and range match flags");
+    expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_I2C0, 0x5au, 0u),
+           "I2C slave receive accepts the first data byte after address handling");
+    expect(state,
+           (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0xc2u) == 0x82u &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x5au,
+           "I2C slave receive follows the SDK handler status and data sequence");
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) == 0u,
+           "I2C slave receive data read clears transfer complete");
+    expect(state, !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x61u, false),
+           "I2C secondary address is disabled at reset");
+
+    write_register(state, &serial, I2C0_BASE + 9u, 1u, 0x60u);
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0x20u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x30u, false),
+           "I2C secondary address matches when enabled");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0x80u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0u, false),
+           "I2C general call matches when enabled");
+    expect(state, !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0u, true),
+           "I2C general call rejects read direction");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0u);
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0x40u);
+    expect(state, !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x0cu, false) &&
+                      kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x0cu, true) &&
+                      read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x19u,
+           "I2C alert response address requires read direction and latches seven-bit address");
+
+    write_register(state, &serial, I2C0_BASE, 1u, 0x40u);
+    write_register(state, &serial, I2C0_BASE + 7u, 1u, 0x60u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 8u);
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x21u, false) &&
+                      (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 8u) != 0u,
+           "I2C range matching excludes A1 and reports RAM");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x30u, false) &&
+                      !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x31u, false),
+           "I2C range matching includes RA and excludes addresses above it");
+
+    write_register(state, &serial, I2C0_BASE, 1u, 0x52u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 3u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u, false),
+           "I2C high address bits are ignored without ADEXT");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0x43u);
+    write_register(state, &serial, I2C0_BASE + 9u, 1u, 0x60u);
+    write_register(state, &serial, I2C0_BASE + 8u, 1u, 0x20u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x30u, true) &&
+                      read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x61u,
+           "I2C secondary address remains seven-bit while primary addressing is extended");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    expect(state,
+           !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u, true) &&
+               kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, true) &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xf3u,
+           "I2C extended primary address completes the 10-bit read sequence");
+    write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x90u);
+    expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, true) &&
+                      (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) != 0u,
+           "I2C transmit address completes before its first data byte");
+    write_register(state, &serial, I2C0_BASE + 4u, 1u, 0x5au);
+    expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) == 0u,
+           "I2C transmit data write clears transfer complete");
+}
+
 int main(void) {
     TestState state = {0};
     test_profiles_and_gates(&state);
@@ -935,6 +1196,10 @@ int main(void) {
     test_register_edge_paths(&state);
     test_event_capacity(&state);
     test_signal_and_overflow_matrix(&state);
+    test_mkv10_clock_domains(&state);
+    test_mkv10_spi_fifo_disable_and_running_state(&state);
+    test_mkv10_spi_ctar_delays(&state);
+    test_mkv10_i2c_slave_matching(&state);
     test_invalid_operations(&state);
     return test_finish(&state);
 }

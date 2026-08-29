@@ -2,10 +2,11 @@
 
 #include <string.h>
 
-static uint8_t dma_transfer_size(uint8_t transfer_width_code) {
+static uint8_t dma_transfer_size(const KinetisData* data, uint8_t transfer_width_code) {
     if (transfer_width_code <= 2u)
         return (uint8_t)(1u << transfer_width_code);
-    if (transfer_width_code == 4u || transfer_width_code == 5u)
+    if (transfer_width_code == 4u ||
+        (transfer_width_code == 5u && data->profile->id != KINETIS_PROFILE_MKV10Z1287))
         return (uint8_t)(1u << transfer_width_code);
     return 0u;
 }
@@ -31,19 +32,21 @@ bool kinetis_data_internal_dma_priorities_valid(const KinetisData* data) {
     return true;
 }
 
-uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data) {
+uint8_t kinetis_data_internal_dma_select_channel_from_mask(const KinetisData* data,
+                                                           uint16_t request_mask) {
+    request_mask &= data->dma_requests;
     if ((kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 4u) != 0u) {
         for (uint8_t channel_step = 1u; channel_step <= data->dma_channel_count; channel_step++) {
             const uint8_t channel =
                 (uint8_t)((data->dma_last_channel + channel_step) % data->dma_channel_count);
-            if ((data->dma_requests & (1u << channel)) != 0u)
+            if ((request_mask & (1u << channel)) != 0u)
                 return channel;
         }
     } else {
         uint8_t selected_channel = UINT8_MAX;
         uint8_t selected_priority = 0u;
         for (uint8_t channel = 0u; channel < data->dma_channel_count; channel++) {
-            if ((data->dma_requests & (1u << channel)) == 0u)
+            if ((request_mask & (1u << channel)) == 0u)
                 continue;
             const uint8_t priority =
                 data->dma[kinetis_data_internal_dma_priority_offset(channel)] & 15u;
@@ -55,6 +58,10 @@ uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data) {
         return selected_channel;
     }
     return UINT8_MAX;
+}
+
+uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data) {
+    return kinetis_data_internal_dma_select_channel_from_mask(data, UINT16_MAX);
 }
 
 static uint16_t dma_iteration_count(uint16_t encoded_count) {
@@ -158,6 +165,8 @@ static void dma_queue_channel(KinetisData* data, uint8_t channel) {
 
 bool kinetis_data_internal_dma_source_always_enabled(const KinetisData* data,
                                                      uint8_t request_source) {
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return request_source >= 58u;
     const bool has_extended_source_map = data->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
                                          data->profile->id == KINETIS_PROFILE_MK22FX51212;
     return request_source >= (has_extended_source_map ? 54u : 60u);
@@ -166,6 +175,8 @@ bool kinetis_data_internal_dma_source_always_enabled(const KinetisData* data,
 static uint64_t dma_source_mask(const KinetisData* data) {
     if (data->profile->id == KINETIS_PROFILE_MKV30F12810)
         return UINT64_C(0xf03f2f00f3f4c03c);
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return UINT64_C(0xffffafffff43003c);
     if (data->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
         data->profile->id == KINETIS_PROFILE_MK22FX51212)
         return UINT64_C(0xfffffffffffffffc);
@@ -262,6 +273,64 @@ static void dma_complete_major(KinetisData* data, uint8_t channel, uint8_t* desc
     }
 }
 
+bool kinetis_data_internal_dma_service_request(KinetisData* data, uint8_t channel) {
+    data->dma_requests &= (uint16_t)~(1u << channel);
+    data->dma_hardware_requests &= (uint16_t)~(1u << channel);
+    data->dma_last_channel = channel;
+    const uint8_t request_source = data->dma_request_source[channel];
+    data->dma_request_source[channel] = UINT8_MAX;
+    const bool completed = kinetis_data_internal_dma_service_channel(data, channel);
+    if (completed && request_source != UINT8_MAX)
+        kinetis_data_internal_dac_dma_complete(data, request_source);
+    if (completed && request_source != UINT8_MAX && data->bus.dma_complete != NULL)
+        data->bus.dma_complete(data->bus.context, channel, request_source);
+    if (completed && request_source != UINT8_MAX &&
+        kinetis_data_internal_dma_source_always_enabled(data, request_source))
+        kinetis_data_internal_dma_queue_always_enabled(data, channel);
+    return completed;
+}
+
+static uint8_t dma_preempting_channel(const KinetisData* data, uint8_t active_channel) {
+    const uint8_t active_priority =
+        data->dma[kinetis_data_internal_dma_priority_offset(active_channel)];
+    if ((active_priority & 0x80u) == 0u)
+        return UINT8_MAX;
+    uint16_t eligible_requests = data->dma_requests;
+    if (data->stop_mode != KINETIS_DATA_STOP_NONE)
+        eligible_requests &=
+            (uint16_t)kinetis_data_internal_load_bytes(data->dma, 0x44u, 2u);
+    uint8_t selected_channel = UINT8_MAX;
+    uint8_t selected_priority = active_priority & 15u;
+    for (uint8_t channel = 0u; channel < data->dma_channel_count; channel++) {
+        if ((eligible_requests & (1u << channel)) == 0u)
+            continue;
+        const uint8_t priority = data->dma[kinetis_data_internal_dma_priority_offset(channel)];
+        if ((priority & 0x40u) == 0u && (priority & 15u) > selected_priority) {
+            selected_channel = channel;
+            selected_priority = priority & 15u;
+        }
+    }
+    return selected_channel;
+}
+
+static bool dma_cancelled(KinetisData* data, uint8_t channel, uint8_t* descriptor,
+                          uint16_t running_control, bool* retire_minor_loop) {
+    const uint32_t control = kinetis_data_internal_load_bytes(data->dma, 0u, 4u);
+    const uint32_t cancellation = control & 0x00030000u;
+    if (cancellation == 0u)
+        return false;
+    kinetis_data_internal_store_bytes(data->dma, 0u, 4u, control & ~cancellation);
+    if ((cancellation & 0x00020000u) != 0u) {
+        data->dma_active &= (uint16_t)~(1u << channel);
+        kinetis_data_internal_store_bytes(descriptor, 0x1cu, 2u, running_control);
+        kinetis_data_internal_dma_error(data, channel, 1u << 16u);
+        kinetis_data_internal_dma_update_interrupts(data);
+        return true;
+    }
+    *retire_minor_loop = true;
+    return false;
+}
+
 bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channel) {
     uint8_t* transfer_descriptor = data->dma + 0x1000u + (uint32_t)channel * DMA_TCD_SIZE;
     uint16_t encoded_iteration =
@@ -292,9 +361,9 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
     const uint16_t transfer_attributes =
         (uint16_t)kinetis_data_internal_load_bytes(transfer_descriptor, 6u, 2u);
     const uint8_t source_transfer_size =
-        dma_transfer_size((uint8_t)((transfer_attributes >> 8u) & 7u));
+        dma_transfer_size(data, (uint8_t)((transfer_attributes >> 8u) & 7u));
     const uint8_t destination_transfer_size =
-        dma_transfer_size((uint8_t)(transfer_attributes & 7u));
+        dma_transfer_size(data, (uint8_t)(transfer_attributes & 7u));
     uint32_t source_address = kinetis_data_internal_load_bytes(transfer_descriptor, 0u, 4u);
     uint32_t destination_address = kinetis_data_internal_load_bytes(transfer_descriptor, 0x10u, 4u);
     const int16_t source_address_delta =
@@ -335,7 +404,8 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
     uint8_t buffered_bytes = 0u;
     uint64_t source_bytes = 0u;
     uint64_t destination_bytes = 0u;
-    while (destination_bytes < transfer_byte_count) {
+    bool retire_minor_loop = false;
+    while (destination_bytes < transfer_byte_count && !retire_minor_loop) {
         while (buffered_bytes < destination_transfer_size && source_bytes < transfer_byte_count) {
             if (!dma_bus_read_transfer(data, source_address, source_transfer_size,
                                        transfer_buffer + buffered_bytes)) {
@@ -373,6 +443,19 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         destination_bytes += destination_transfer_size;
         buffered_bytes = (uint8_t)(buffered_bytes - destination_transfer_size);
         memmove(transfer_buffer, transfer_buffer + destination_transfer_size, buffered_bytes);
+        if (dma_cancelled(data, channel, transfer_descriptor, running_control,
+                          &retire_minor_loop))
+            return false;
+        const uint8_t preempting_channel = dma_preempting_channel(data, channel);
+        if (preempting_channel != UINT8_MAX) {
+            if (!kinetis_data_internal_dma_priorities_valid(data)) {
+                kinetis_data_internal_dma_error(data, preempting_channel, 1u << 14u);
+                data->dma_requests &= (uint16_t)~(1u << preempting_channel);
+                data->dma_hardware_requests &= (uint16_t)~(1u << preempting_channel);
+            } else {
+                kinetis_data_internal_dma_service_request(data, preempting_channel);
+            }
+        }
     }
     if (source_minor_offset)
         source_address = (uint32_t)((int64_t)source_address + minor_loop_offset);
@@ -384,7 +467,11 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
     kinetis_data_internal_store_bytes(transfer_descriptor, 0x10u, 4u, destination_address);
     iteration_count--;
     dma_set_iteration_count(transfer_descriptor, 0x16u, iteration_count);
-    if ((encoded_iteration & 0x8000u) != 0u)
+    const bool continuous_self_link =
+        (encoded_iteration & 0x8000u) != 0u && dma_link_channel(encoded_iteration) == channel &&
+        (kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 0x40u) != 0u &&
+        iteration_count != 0u;
+    if ((encoded_iteration & 0x8000u) != 0u && !continuous_self_link)
         dma_queue_channel(data, dma_link_channel(encoded_iteration));
     const uint16_t control_flags =
         (uint16_t)kinetis_data_internal_load_bytes(transfer_descriptor, 0x1cu, 2u);
@@ -401,6 +488,8 @@ bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channe
         dma_complete_major(data, channel, transfer_descriptor);
     }
     kinetis_data_internal_dma_update_interrupts(data);
+    if (continuous_self_link)
+        return kinetis_data_internal_dma_service_channel(data, channel);
     return true;
 }
 
@@ -531,6 +620,10 @@ bool kinetis_data_internal_dmamux_read(KinetisData* data, uint32_t address, uint
     if (!kinetis_data_internal_valid_access(register_offset, byte_count, data->dmamux_count))
         return false;
     *output_value = kinetis_data_internal_load_bytes(data->dmamux, register_offset, byte_count);
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        *output_value &= byte_count == 4u   ? 0xbfbfbfbfu
+                         : byte_count == 2u ? 0xbfbfu
+                                           : 0xbfu;
     return true;
 }
 
@@ -539,6 +632,10 @@ bool kinetis_data_internal_dmamux_write(KinetisData* data, uint32_t address, uin
     const uint32_t register_offset = address - DMAMUX_BASE;
     if (!kinetis_data_internal_valid_access(register_offset, byte_count, data->dmamux_count))
         return false;
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        write_value &= byte_count == 4u   ? 0xbfbfbfbfu
+                       : byte_count == 2u ? 0xbfbfu
+                                         : 0xbfu;
     kinetis_data_internal_store_bytes(data->dmamux, register_offset, byte_count, write_value);
     for (uint8_t channel = (uint8_t)register_offset; channel < register_offset + byte_count;
          channel++) {

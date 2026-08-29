@@ -45,6 +45,8 @@ static const ExpectedPackage expected_packages[] = {
 };
 
 static const ExpectedSelection expected_selections[] = {
+    EXPECTED(KINETIS_PROFILE_MKV10Z1287, KINETIS_PACKAGE_LH_64_LQFP, 0x001c303fu, 0x000f000fu,
+             0x00000fffu, 0x000000ffu, 0xe3ff0003u, false, false),
     EXPECTED(KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_FM_32_QFN, 0x000c001fu, 0x00000003u,
              0x000000feu, 0x000000f0u, 0x030f0000u, false, false),
     EXPECTED(KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_LF_48_LQFP, 0x000c001fu, 0x0003000fu,
@@ -340,6 +342,27 @@ static void expect_kv30_adc_inputs(TestState* state) {
     }
 }
 
+static void expect_kv10_adc_inputs(TestState* state) {
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MKV10Z1287);
+    const KinetisPackageSelection* lh = kinetis_package_select(profile, KINETIS_PACKAGE_LH_64_LQFP);
+    for (uint8_t channel = 0u; channel <= 14u; channel++)
+        expect(state, kinetis_package_adc_input_exists(lh, 0u, KINETIS_ADC_MUX_A, channel),
+               "MKV10 LH ADC0 external channel exists");
+    for (uint8_t channel = 0u; channel <= 17u; channel++)
+        expect(state, kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_A, channel),
+               "MKV10 LH ADC1 external channel exists");
+    for (uint8_t channel = 25u; channel <= 27u; channel++) {
+        expect(state, kinetis_package_adc_input_exists(lh, 0u, KINETIS_ADC_MUX_A, channel),
+               "MKV10 ADC0 internal channel exists");
+        expect(state, kinetis_package_adc_input_exists(lh, 1u, KINETIS_ADC_MUX_A, channel),
+               "MKV10 ADC1 internal channel exists");
+    }
+    expect(state, !kinetis_package_adc_input_exists(lh, 0u, KINETIS_ADC_MUX_B, 4u),
+           "MKV10 ADC has no mux B");
+    expect(state, !kinetis_package_adc_input_exists(lh, 0u, KINETIS_ADC_MUX_A, 29u),
+           "MKV10 ADC channel 29 is absent");
+}
+
 static void expect_k22_adc_inputs(TestState* state) {
     const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MK22FN51212);
     const KinetisPackageSelection* lh = kinetis_package_select(profile, KINETIS_PACKAGE_LH_64_LQFP);
@@ -399,6 +422,7 @@ int main(void) {
     expect_defaults(&state);
     expect_fail_closed(&state);
     expect_kv30_adc_inputs(&state);
+    expect_kv10_adc_inputs(&state);
     expect_k22_adc_inputs(&state);
     return test_finish(&state);
 }

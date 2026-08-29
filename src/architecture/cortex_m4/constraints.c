@@ -380,11 +380,54 @@ static CortexM4InstructionDisposition check_thumb32(const CortexM4* cpu, uint16_
     return CORTEX_M4_INSTRUCTION_EXECUTE;
 }
 
+static bool armv6_m_special_register(uint8_t selector) {
+    return selector <= 3u || (selector >= 5u && selector <= 9u) || selector == 16u ||
+           selector == 20u;
+}
+
+static bool armv6_m_wide_instruction(uint16_t first, uint16_t second) {
+    if ((first & 0xf800u) == 0xf000u && (second & 0xd000u) == 0xd000u) {
+        return true;
+    }
+    if (first == 0xf3efu && (second & 0xf000u) == 0x8000u) {
+        return armv6_m_special_register((uint8_t)second);
+    }
+    if ((first & 0xfff0u) == 0xf380u && (second & 0xff00u) == 0x8800u) {
+        return armv6_m_special_register((uint8_t)second);
+    }
+    if (first == 0xf3bfu && (second & 0xff0fu) == 0x8f0fu) {
+        const uint8_t operation = (uint8_t)((second >> 4u) & 15u);
+        return operation >= 4u && operation <= 6u;
+    }
+    return false;
+}
+
+static CortexM4InstructionDisposition check_armv6_m(const CortexM4* cpu, uint16_t first,
+                                                     uint16_t second, bool wide) {
+    if (wide) {
+        return armv6_m_wide_instruction(first, second) ? CORTEX_M4_INSTRUCTION_EXECUTE
+                                                       : CORTEX_M4_INSTRUCTION_UNDEFINED;
+    }
+    if ((first & 0xff00u) == 0xbf00u && (first & 15u) != 0u) {
+        return CORTEX_M4_INSTRUCTION_UNDEFINED;
+    }
+    if ((first & 0xf500u) == 0xb100u) {
+        return CORTEX_M4_INSTRUCTION_UNDEFINED;
+    }
+    if ((first & 0xffe0u) == 0xb660u && (first & 7u) != 2u) {
+        return CORTEX_M4_INSTRUCTION_UNDEFINED;
+    }
+    return check_thumb16(cpu, first);
+}
+
 CortexM4InstructionDisposition cortex_m4_check_instruction_constraints(const CortexM4* cpu,
                                                                        uint16_t first,
                                                                        uint16_t second, bool wide) {
     if (cpu == NULL) {
         return CORTEX_M4_INSTRUCTION_UNDEFINED;
+    }
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+        return check_armv6_m(cpu, first, second, wide);
     }
     return wide ? check_thumb32(cpu, first, second) : check_thumb16(cpu, first);
 }

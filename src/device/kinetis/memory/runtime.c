@@ -194,6 +194,19 @@ void kinetis_data_reset(KinetisData* data) {
     memcpy(data->flash + 0x10, data->flash_config + 8, 4);
     data->flash[0x16] = data->flash_config[0x0e];
     data->flash[0x17] = data->flash_config[0x0f];
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        for (uint8_t index = 0u; index < 4u; index++) {
+            data->flash[0x1fu - index] = data->flash_program_ifr[0xa7u - index] &
+                                         data->flash_program_ifr[0xafu - index];
+            data->flash[0x27u - index] = data->flash_program_ifr[0xb7u - index] &
+                                         data->flash_program_ifr[0xbfu - index];
+        }
+        data->flash[0x28] = 4u;
+        data->flash[0x2b] = 0x20u;
+    }
+    data->flash_access_control_disabled = false;
+    data->flash_execute_access_programmed = false;
+    data->vlp_mode = false;
     if (data->flexram != NULL) {
         const uint8_t partition_code = data->flash_data_ifr[0x3fcu] & 0x0fu;
         const bool eeprom_partitioned = partition_code != 0xffu && partition_code != 0x00u &&
@@ -217,8 +230,10 @@ void kinetis_data_reset(KinetisData* data) {
     for (uint8_t adc_index = 0; adc_index < data->adc_count; adc_index++)
         kinetis_data_internal_adc_reset_registers(&data->adc[adc_index]);
     for (uint8_t dac_index = 0; dac_index < data->dac_count; dac_index++) {
-        data->dac[dac_index].registers[0x20] = 0x02u;
-        data->dac[dac_index].registers[0x23] = 0x0fu;
+        data->dac[dac_index].registers[0x20] =
+            data->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x06u : 0x02u;
+        data->dac[dac_index].registers[0x23] =
+            data->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x01u : 0x0fu;
     }
     for (uint8_t line = 0; line < KINETIS_DATA_INTERRUPT_COUNT; line++)
         kinetis_data_internal_interrupt(data, (KinetisDataInterrupt)line, false);
@@ -370,7 +385,8 @@ bool kinetis_data_dma_request(KinetisData* data, uint8_t request_source) {
         const uint8_t mux_configuration = data->dmamux[channel];
         if ((mux_configuration & 0x80u) != 0 && (mux_configuration & 0x3fu) == request_source &&
             (enabled & (1u << channel)) != 0) {
-            if (channel < 4u && (mux_configuration & 0x40u) != 0u)
+            if (data->profile->id != KINETIS_PROFILE_MKV10Z1287 && channel < 4u &&
+                (mux_configuration & 0x40u) != 0u)
                 data->dma_trigger_waiting |= (uint16_t)(1u << channel);
             else
                 kinetis_data_internal_dma_queue_hardware_channel(data, channel, request_source);
@@ -380,8 +396,28 @@ bool kinetis_data_dma_request(KinetisData* data, uint8_t request_source) {
     return request_accepted;
 }
 
+bool kinetis_data_dma_busy(const KinetisData* data) {
+    return data != NULL && (data->dma_requests != 0u || data->dma_active != 0u);
+}
+
+bool kinetis_data_flash_access_allowed(const KinetisData* data, uint32_t address,
+                                       bool instruction, bool unprivileged) {
+    if (data == NULL)
+        return false;
+    if (data->profile->id != KINETIS_PROFILE_MKV10Z1287 ||
+        data->flash_access_control_disabled || address >= data->profile->program_flash_size)
+        return true;
+    const uint8_t segment = (uint8_t)(address >> 12u);
+    const uint8_t access_bit = (uint8_t)(1u << (segment & 7u));
+    const uint8_t xacc = data->flash[0x1fu - (segment >> 3u)];
+    const uint8_t sacc = data->flash[0x27u - (segment >> 3u)];
+    return (instruction || (xacc & access_bit) != 0u) &&
+           (!unprivileged || (sacc & access_bit) != 0u);
+}
+
 bool kinetis_data_dma_trigger(KinetisData* data, uint8_t channel) {
-    if (data == NULL || channel >= 4u || channel >= data->dma_channel_count)
+    if (data == NULL || data->profile->id == KINETIS_PROFILE_MKV10Z1287 || channel >= 4u ||
+        channel >= data->dma_channel_count)
         return false;
     const uint8_t mux_configuration = data->dmamux[channel];
     const uint8_t request_source = mux_configuration & 0x3fu;
@@ -402,7 +438,7 @@ void kinetis_data_adc_trigger(KinetisData* data, uint8_t instance) {
 void kinetis_data_adc_pretrigger(KinetisData* data, uint8_t instance, uint8_t pretrigger) {
     if (data != NULL && instance < data->adc_count && pretrigger < 2u &&
         (data->adc[instance].registers[0x20] & 0x40u) != 0)
-        kinetis_data_internal_adc_start(&data->adc[instance], pretrigger);
+        kinetis_data_internal_adc_start(data, &data->adc[instance], pretrigger);
 }
 
 bool kinetis_data_set_adc_input(KinetisData* data, uint8_t instance, KinetisAdcMux mux,
@@ -423,6 +459,13 @@ bool kinetis_data_set_cmp_input(KinetisData* data, uint8_t instance, uint8_t inp
     return true;
 }
 
+bool kinetis_data_set_cmp_sample(KinetisData* data, uint8_t instance, bool high) {
+    if (data == NULL || instance >= data->cmp_count)
+        return false;
+    kinetis_data_internal_cmp_set_sample(data, instance, high);
+    return true;
+}
+
 bool kinetis_data_get_cmp_output(const KinetisData* data, uint8_t instance, bool* output_high) {
     if (data == NULL || output_high == NULL || instance >= data->cmp_count)
         return false;
@@ -438,15 +481,36 @@ bool kinetis_data_get_dac_output(const KinetisData* data, uint8_t instance,
     return true;
 }
 
-void kinetis_data_dac_trigger(KinetisData* data, uint8_t instance) {
+void kinetis_data_internal_dac_trigger(KinetisData* data, uint8_t instance,
+                                       bool software_trigger) {
     if (data == NULL || instance >= data->dac_count)
         return;
     KinetisDac* dac = &data->dac[instance];
-    if ((dac->registers[0x21] & 0x80u) == 0 || (dac->registers[0x22] & 0x80u) == 0)
+    const bool mkv10 = data->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    if (mkv10 && data->stop_mode != KINETIS_DATA_STOP_NONE)
+        return;
+    if ((dac->registers[0x21] & 0x80u) == 0 ||
+        (mkv10 ? (dac->registers[0x22] & 1u) == 0u ||
+                     (((dac->registers[0x21] & 0x20u) != 0u) != software_trigger)
+               : (dac->registers[0x22] & 0x80u) == 0u))
         return;
     uint8_t buffer_index = (dac->registers[0x23] >> 4) & 15u;
     const uint8_t upper_buffer_index = dac->registers[0x23] & 15u;
     uint8_t status_flags = 0;
+    if (data->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        if ((dac->registers[0x22] & 4u) == 0u)
+            buffer_index = buffer_index >= upper_buffer_index ? 0u : (uint8_t)(buffer_index + 1u);
+        else if (buffer_index < upper_buffer_index)
+            buffer_index++;
+        if (buffer_index == upper_buffer_index)
+            status_flags |= 1u;
+        if (buffer_index == 0u)
+            status_flags |= 2u;
+        dac->registers[0x23] = (uint8_t)((buffer_index << 4u) | upper_buffer_index);
+        kinetis_data_internal_dac_update_output(data, instance);
+        kinetis_data_internal_dac_flags(data, instance, status_flags);
+        return;
+    }
     if ((dac->registers[0x22] & 3u) == 1u) {
         if (buffer_index == 0) {
             status_flags |= 2u;
@@ -466,6 +530,20 @@ void kinetis_data_dac_trigger(KinetisData* data, uint8_t instance) {
     dac->registers[0x23] = (uint8_t)((buffer_index << 4) | upper_buffer_index);
     kinetis_data_internal_dac_update_output(data, instance);
     kinetis_data_internal_dac_flags(data, instance, status_flags);
+}
+
+void kinetis_data_dac_trigger(KinetisData* data, uint8_t instance) {
+    kinetis_data_internal_dac_trigger(data, instance, false);
+}
+
+void kinetis_data_internal_dac_dma_complete(KinetisData* data, uint8_t request_source) {
+    if (data == NULL || request_source < 45u || request_source >= 45u + data->dac_count)
+        return;
+    const uint8_t instance = (uint8_t)(request_source - 45u);
+    if ((data->dac[instance].registers[0x22] & 0x80u) == 0u)
+        return;
+    data->dac[instance].registers[0x20] &= 0xf8u;
+    kinetis_data_internal_dac_flags(data, instance, 0u);
 }
 
 void kinetis_data_rng_seed(KinetisData* data, uint32_t seed_value) {
@@ -514,7 +592,12 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
         data->dma_requests != 0u &&
         (kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 0x20u) == 0u &&
         !((kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 2u) != 0u && data->debug_halted)) {
-        const uint8_t channel = kinetis_data_internal_dma_select_channel(data);
+        uint16_t eligible_requests = data->dma_requests;
+        if (data->stop_mode != KINETIS_DATA_STOP_NONE)
+            eligible_requests &=
+                (uint16_t)kinetis_data_internal_load_bytes(data->dma, 0x44u, 2u);
+        const uint8_t channel =
+            kinetis_data_internal_dma_select_channel_from_mask(data, eligible_requests);
         if (channel == UINT8_MAX)
             break;
         if ((kinetis_data_internal_load_bytes(data->dma, 0u, 4u) & 4u) == 0u &&
@@ -524,17 +607,10 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
             data->dma_hardware_requests &= (uint16_t)~(1u << channel);
             break;
         }
-        data->dma_requests &= (uint16_t)~(1u << channel);
-        data->dma_hardware_requests &= (uint16_t)~(1u << channel);
-        data->dma_last_channel = channel;
+        const bool completed = kinetis_data_internal_dma_service_request(data, channel);
         const uint8_t request_source = data->dma_request_source[channel];
-        data->dma_request_source[channel] = UINT8_MAX;
-        const bool completed = kinetis_data_internal_dma_service_channel(data, channel);
-        if (completed && request_source != UINT8_MAX && data->bus.dma_complete != NULL)
-            data->bus.dma_complete(data->bus.context, request_source);
         if (completed && request_source != UINT8_MAX &&
             kinetis_data_internal_dma_source_always_enabled(data, request_source)) {
-            kinetis_data_internal_dma_queue_always_enabled(data, channel);
             if ((data->dma_requests & (1u << channel)) != 0u && --always_enabled_budget == 0u)
                 break;
         }
@@ -543,15 +619,19 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
         KinetisAdc* adc = &data->adc[adc_index];
         if (!adc->converting)
             continue;
-        const uint32_t elapsed_cycles =
+        uint32_t elapsed_cycles =
             kinetis_data_internal_adc_elapsed_cycles(data, adc, cycle_count);
-        if (elapsed_cycles >= adc->remaining_cycles) {
-            adc->remaining_cycles = 0;
+        while (adc->converting && elapsed_cycles >= adc->remaining_cycles &&
+               adc->remaining_cycles != 0u) {
+            elapsed_cycles -= adc->remaining_cycles;
+            adc->remaining_cycles = 0u;
             kinetis_data_internal_adc_complete(data, adc_index);
-        } else {
-            adc->remaining_cycles -= elapsed_cycles;
         }
+        if (adc->converting)
+            adc->remaining_cycles -= elapsed_cycles;
     }
+    for (uint8_t comparator_index = 0u; comparator_index < data->cmp_count; comparator_index++)
+        kinetis_data_internal_cmp_advance(data, comparator_index, cycle_count);
     if (data->vref_cycles != 0) {
         if (cycle_count >= data->vref_cycles) {
             data->vref_cycles = 0;
@@ -587,22 +667,48 @@ void kinetis_data_advance(KinetisData* data, uint32_t cycle_count) {
 }
 
 void kinetis_data_set_clocks(KinetisData* data, uint32_t core_clock_hz, uint32_t bus_clock_hz,
-                             bool bus_clock_running, bool stop_mode) {
+                             uint32_t adc0_alt_clock_hz, uint32_t adc1_alt_clock_hz,
+                             bool bus_clock_running, KinetisDataStopMode stop_mode) {
     if (data == NULL)
         return;
     data->core_clock_hz = core_clock_hz;
     data->bus_clock_hz = bus_clock_hz;
+    data->adc_alt_clock_hz[0] = adc0_alt_clock_hz;
+    data->adc_alt_clock_hz[1] = adc1_alt_clock_hz;
     data->bus_clock_running = bus_clock_running;
-    if (!stop_mode)
+    const KinetisDataStopMode previous_stop_mode = data->stop_mode;
+    data->stop_mode = stop_mode;
+    if (previous_stop_mode != stop_mode)
+        for (uint8_t dac_index = 0u; dac_index < data->dac_count; dac_index++)
+            kinetis_data_internal_dac_update_output(data, dac_index);
+    if (stop_mode == KINETIS_DATA_STOP_NONE)
         return;
     for (uint8_t adc_index = 0u; adc_index < data->adc_count; adc_index++) {
         KinetisAdc* adc = &data->adc[adc_index];
-        if ((adc->registers[8] & 3u) == 0u)
+        if (adc->calibrating) {
             adc->converting = false;
+            adc->calibrating = false;
+            adc->remaining_cycles = 0u;
+            adc->registers[0x24] = (adc->registers[0x24] & 0x3fu) | 0x40u;
+        } else if (stop_mode > KINETIS_DATA_STOP_NORMAL ||
+                   (adc->registers[8] & 3u) <= 1u) {
+            adc->converting = false;
+            adc->remaining_cycles = 0u;
+            adc->registers[0x20] &= 0x7fu;
+            if (stop_mode > KINETIS_DATA_STOP_NORMAL) {
+                kinetis_data_internal_store_bytes(adc->registers, 0x10u, 4u, 0u);
+                kinetis_data_internal_store_bytes(adc->registers, 0x14u, 4u, 0u);
+            }
+        }
     }
 }
 
 void kinetis_data_set_debug_halted(KinetisData* data, bool halted) {
     if (data != NULL)
         data->debug_halted = halted;
+}
+
+void kinetis_data_set_vlp_mode(KinetisData* data, bool enabled) {
+    if (data != NULL)
+        data->vlp_mode = enabled;
 }

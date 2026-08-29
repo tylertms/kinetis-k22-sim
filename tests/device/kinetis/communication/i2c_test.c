@@ -129,8 +129,8 @@ int main(void) {
            "read_register8(&state, device, I2C0_FLT) == 0x2au");
     expect(&state, kinetis_i2c_detect_stop(device, KINETIS_SERIAL_I2C0),
            "kinetis_i2c_detect_stop(device, KINETIS_SERIAL_I2C0)");
-    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x6au,
-           "read_register8(&state, device, I2C0_FLT) == 0x6au");
+    expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,
+           "unmatched slave stop does not latch STOPF");
     write_register8(&state, device, I2C0_FLT, 0x6au);
     write_register8(&state, device, I2C0_S, 2u);
     expect(&state, read_register8(&state, device, I2C0_FLT) == 0x2au,

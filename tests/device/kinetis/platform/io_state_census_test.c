@@ -1,5 +1,8 @@
 #include "device/kinetis/gpio/io.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 #include "test.h"
 
 enum {
@@ -156,9 +159,16 @@ int main(void) {
         mix_fingerprint(&census, kinetis_io_pin_input(&io, port));
         mix_fingerprint(&census, kinetis_io_irq_asserted(&io, (uint8_t)(random_value >> 24u)));
     }
-    expect(&state,
-           census.read_successes == 7833u && census.write_successes == 6818u &&
-               census.event_count == 744342u && census.fingerprint == UINT64_C(8816404939693753862),
-           "I/O state census matches");
+    const bool census_matches = census.read_successes == 8261u && census.write_successes == 6818u &&
+                                census.event_count == 744342u &&
+                                census.fingerprint == UINT64_C(16460004044130928402);
+    if (!census_matches) {
+        fprintf(stderr,
+                "[census] reads=%" PRIu32 " writes=%" PRIu32 " events=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.read_successes, census.write_successes, census.event_count,
+                census.fingerprint);
+    }
+    expect(&state, census_matches, "I/O state census matches");
     return test_finish(&state);
 }

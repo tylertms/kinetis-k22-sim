@@ -1,12 +1,45 @@
 #include "internal.h"
 
-static uint8_t ftm_irq_for_instance(uint8_t instance) {
+static uint8_t ftm_irq_for_instance(const KinetisTiming* timing, uint8_t instance) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        static const uint8_t interrupts[KINETIS_FTM_COUNT] = {17u, 18u, 19u, 22u, 24u, 26u};
+        return interrupts[instance];
+    }
     return instance == 3u ? IRQ_FTM3 : IRQ_FTM0 + instance;
 }
 
-static uint8_t ftm_dma_source_for_channel(uint8_t module, uint8_t channel) {
+static uint32_t ftm_system_clock_hz(const KinetisTiming* timing) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return kinetis_timing_system_clock_running(timing) ? timing->core_clock_hz : 0u;
+    return kinetis_timing_bus_clock_running(timing) ? timing->bus_clock_hz : 0u;
+}
+
+static uint8_t ftm_dma_source_for_channel(const KinetisTiming* timing, uint8_t module,
+                                          uint8_t channel) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        static const uint8_t bases[KINETIS_FTM_COUNT] = {24u, 32u, 34u, 36u, 30u, 56u};
+        if (module == 3u && channel >= 4u)
+            return (uint8_t)(50u + channel);
+        return bases[module] + channel;
+    }
     static const uint8_t bases[4] = {20u, 28u, 30u, 32u};
     return bases[module] + channel;
+}
+
+void kinetis_timing_internal_ftm_dma_complete(KinetisTiming* timing, uint8_t request_source) {
+    for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
+        KinetisFtmState* ftm = &timing->ftm[instance];
+        const uint8_t channels = kinetis_timing_internal_ftm_channel_count(timing, instance);
+        for (uint8_t channel = 0u; channel < channels; channel++) {
+            if (ftm_dma_source_for_channel(timing, instance, channel) == request_source &&
+                (ftm->channel_sc[channel] & 1u) != 0u) {
+                ftm->channel_sc[channel] &= ~0x80u;
+                ftm->channel_flag_read[channel] = false;
+                kinetis_timing_internal_update_ftm_irq(timing, instance);
+                return;
+            }
+        }
+    }
 }
 
 static uint8_t ftm_trigger_bit_for_channel(uint8_t channel) {
@@ -14,9 +47,19 @@ static uint8_t ftm_trigger_bit_for_channel(uint8_t channel) {
     return channel < 6u ? bits[channel] : UINT8_MAX;
 }
 
+KinetisPeripheralId kinetis_timing_internal_ftm_peripheral(uint8_t instance) {
+    static const KinetisPeripheralId peripherals[KINETIS_FTM_COUNT] = {
+        KINETIS_PERIPHERAL_FTM0, KINETIS_PERIPHERAL_FTM1, KINETIS_PERIPHERAL_FTM2,
+        KINETIS_PERIPHERAL_FTM3, KINETIS_PERIPHERAL_FTM4, KINETIS_PERIPHERAL_FTM5,
+    };
+    return instance < KINETIS_FTM_COUNT ? peripherals[instance] : KINETIS_PERIPHERAL_COUNT;
+}
+
 uint8_t kinetis_timing_internal_ftm_channel_count(const KinetisTiming* timing, uint8_t instance) {
-    if (timing == NULL || timing->profile == NULL || instance >= 4u)
+    if (timing == NULL || timing->profile == NULL || instance >= KINETIS_FTM_COUNT)
         return 0u;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return instance == 0u || instance == 3u ? 6u : 2u;
     if (instance == 0u)
         return timing->profile->id == KINETIS_PROFILE_MKV30F12810 ? 6u : 8u;
     return instance == 3u ? 8u : 2u;
@@ -24,6 +67,27 @@ uint8_t kinetis_timing_internal_ftm_channel_count(const KinetisTiming* timing, u
 
 static bool is_ftm_quadrature_enabled(const KinetisFtmState* ftm) {
     return ftm->quadrature_capable && (ftm->registers[11] & 1u) != 0u;
+}
+
+static uint8_t ftm_debug_mode(const KinetisFtmState* ftm) {
+    return (uint8_t)((ftm->registers[12] >> 6u) & 3u);
+}
+
+static bool ftm_stopped_by_debug(const KinetisTiming* timing, const KinetisFtmState* ftm) {
+    return timing->debug_halted && ftm_debug_mode(ftm) != 3u;
+}
+
+static bool ftm_global_time_base_running(const KinetisTiming* timing, uint8_t instance) {
+    if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287 ||
+        (timing->ftm[instance].registers[12] & (1u << 9u)) == 0u)
+        return true;
+    const uint8_t source = instance < 3u ? 0u : 3u;
+    return (timing->ftm[source].registers[12] & (1u << 10u)) != 0u;
+}
+
+bool kinetis_timing_internal_ftm_bypass_buffers(const KinetisTiming* timing,
+                                                const KinetisFtmState* ftm) {
+    return (ftm->sc & 0x18u) == 0u || ftm_stopped_by_debug(timing, ftm);
 }
 
 static bool is_ftm_combine_mode(const KinetisFtmState* ftm, uint8_t channel) {
@@ -43,46 +107,109 @@ static bool is_ftm_complementary_mode(const KinetisFtmState* ftm, uint8_t channe
            !output_compare;
 }
 
-bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
-                                  bool input_high) {
-    if (timing == NULL || timing->profile == NULL || instance >= 4u ||
-        channel >= kinetis_timing_internal_ftm_channel_count(timing, instance))
-        return false;
-    const KinetisPeripheralId peripheral =
-        (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
-    if (!kinetis_timing_internal_has(timing, peripheral))
-        return false;
+void kinetis_timing_internal_set_ftm_routed_input(KinetisTiming* timing, uint8_t instance,
+                                                  uint8_t channel, bool input_high) {
     KinetisFtmState* ftm = &timing->ftm[instance];
     if (ftm->channel_input[channel] != input_high) {
         ftm->channel_input[channel] = input_high;
         ftm->channel_input_age[channel] = 0u;
     }
-    return true;
 }
 
-bool kinetis_timing_set_ftm_fault(KinetisTiming* timing, uint8_t instance, uint8_t input_index,
-                                  bool input_high) {
-    if (timing == NULL || timing->profile == NULL || instance >= 4u || input_index >= 4u)
-        return false;
-    const KinetisPeripheralId peripheral =
-        (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
-    if (!kinetis_timing_internal_has(timing, peripheral))
-        return false;
+void kinetis_timing_internal_set_ftm_routed_fault(KinetisTiming* timing, uint8_t instance,
+                                                  uint8_t input_index, bool input_high) {
     KinetisFtmState* ftm = &timing->ftm[instance];
     if (ftm->fault_input[input_index] != input_high) {
         ftm->fault_input[input_index] = input_high;
         ftm->fault_input_age[input_index] = 0u;
     }
+}
+
+static uint32_t ftm_mux_register(const KinetisTiming* timing, uint8_t instance) {
+    return instance < 3u ? timing->sim_sopt4 : timing->sim_sopt6;
+}
+
+void kinetis_timing_internal_refresh_ftm_pin_routes(KinetisTiming* timing) {
+    for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
+        const uint8_t channels = kinetis_timing_internal_ftm_channel_count(timing, instance);
+        for (uint8_t channel = 0u; channel < channels; channel++) {
+            bool pin_route = true;
+            if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && channel == 0u &&
+                (instance == 1u || instance == 2u || instance == 4u || instance == 5u)) {
+                const uint8_t shift = instance == 1u || instance == 4u ? 18u : 20u;
+                pin_route = ((ftm_mux_register(timing, instance) >> shift) & 3u) == 0u;
+            }
+            if (pin_route)
+                kinetis_timing_internal_set_ftm_routed_input(
+                    timing, instance, channel, timing->ftm_pin_input[instance][channel]);
+        }
+    }
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+        (timing->sim_sopt4 & (1u << 22u)) != 0u) {
+        const bool input = timing->ftm_pin_input[2][1] != timing->ftm_pin_input[2][0] !=
+                           timing->ftm_pin_input[1][1];
+        kinetis_timing_internal_set_ftm_routed_input(timing, 1u, 1u, false);
+        kinetis_timing_internal_set_ftm_routed_input(timing, 2u, 1u, input);
+    }
+    for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
+        for (uint8_t input = 0u; input < 4u; input++) {
+            bool pin_route = true;
+            if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && input == 0u) {
+                const uint8_t bit = instance % 3u == 0u ? 0u : (uint8_t)(instance % 3u + 1u);
+                pin_route = (ftm_mux_register(timing, instance) & (1u << bit)) == 0u;
+            } else if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && instance == 0u &&
+                       input == 1u) {
+                pin_route = (timing->sim_sopt4 & 2u) == 0u;
+            }
+            if (pin_route)
+                kinetis_timing_internal_set_ftm_routed_fault(
+                    timing, instance, input, timing->ftm_fault_pin[instance][input]);
+        }
+    }
+}
+
+bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
+                                  bool input_high) {
+    if (timing == NULL || timing->profile == NULL || instance >= KINETIS_FTM_COUNT ||
+        channel >= kinetis_timing_internal_ftm_channel_count(timing, instance))
+        return false;
+    const KinetisPeripheralId peripheral = kinetis_timing_internal_ftm_peripheral(instance);
+    if (!kinetis_timing_internal_has(timing, peripheral))
+        return false;
+    timing->ftm_pin_input[instance][channel] = input_high;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        kinetis_timing_internal_refresh_ftm_pin_routes(timing);
+    else
+        kinetis_timing_internal_set_ftm_routed_input(timing, instance, channel, input_high);
+    return true;
+}
+
+bool kinetis_timing_set_ftm_fault(KinetisTiming* timing, uint8_t instance, uint8_t input_index,
+                                  bool input_high) {
+    if (timing == NULL || timing->profile == NULL || instance >= KINETIS_FTM_COUNT ||
+        input_index >= 4u)
+        return false;
+    const KinetisPeripheralId peripheral = kinetis_timing_internal_ftm_peripheral(instance);
+    if (!kinetis_timing_internal_has(timing, peripheral))
+        return false;
+    timing->ftm_fault_pin[instance][input_index] = input_high;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        kinetis_timing_internal_refresh_ftm_pin_routes(timing);
+    else
+        kinetis_timing_internal_set_ftm_routed_fault(timing, instance, input_index, input_high);
     return true;
 }
 
 bool kinetis_timing_trigger_ftm_hardware(KinetisTiming* timing, uint8_t instance, uint8_t trigger) {
-    if (timing == NULL || timing->profile == NULL || instance >= 4u || trigger >= 3u)
+    if (timing == NULL || timing->profile == NULL || instance >= KINETIS_FTM_COUNT ||
+        trigger >= 3u)
         return false;
-    const KinetisPeripheralId peripheral =
-        (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
+    const KinetisPeripheralId peripheral = kinetis_timing_internal_ftm_peripheral(instance);
     if (!kinetis_timing_internal_has(timing, peripheral))
         return false;
+    if (trigger == 0u && timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+        (timing->sim_sopt8 & (1u << instance)) != 0u)
+        return true;
     timing->ftm[instance].hardware_trigger_pending_mask |= (uint8_t)(1u << trigger);
     return true;
 }
@@ -131,20 +258,14 @@ static bool ftm_fault_channel_enabled(const KinetisFtmState* ftm, uint8_t channe
            (mode != 1u || (channel & 1u) == 0u);
 }
 
-bool kinetis_timing_get_ftm_output(const KinetisTiming* timing, uint8_t instance, uint8_t channel,
-                                   bool* output_high) {
-    if (timing == NULL || output_high == NULL || timing->profile == NULL || instance >= 4u ||
-        channel >= kinetis_timing_internal_ftm_channel_count(timing, instance))
-        return false;
-    const KinetisPeripheralId peripheral =
-        (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
-    if (!kinetis_timing_internal_has(timing, peripheral))
-        return false;
+static bool ftm_pin_output(const KinetisTiming* timing, uint8_t instance, uint8_t channel) {
     const KinetisFtmState* ftm = &timing->ftm[instance];
-    if (is_ftm_quadrature_enabled(ftm)) {
-        *output_high = false;
-        return true;
-    }
+    if (timing->debug_halted && ftm_debug_mode(ftm) == 1u)
+        return (ftm->registers[7] & (1u << channel)) != 0u;
+    if (timing->debug_halted && ftm_debug_mode(ftm) == 2u)
+        return ftm->debug_output[channel];
+    if (is_ftm_quadrature_enabled(ftm))
+        return false;
     bool output = is_ftm_deadtime_enabled(ftm, channel) ? ftm->channel_deadtime_output[channel]
                                                         : ftm_output_before_deadtime(ftm, channel);
     if ((ftm->registers[3] & (1u << channel)) != 0u)
@@ -153,8 +274,49 @@ bool kinetis_timing_get_ftm_output(const KinetisTiming* timing, uint8_t instance
         output = false;
     if ((ftm->registers[7] & (1u << channel)) != 0u)
         output = !output;
+    return output;
+}
+
+static bool ftm_carrier_output(const KinetisTiming* timing, uint32_t option) {
+    const uint8_t selection = (uint8_t)((option >> 8u) & 3u);
+    if (selection == 0u)
+        return ftm_pin_output(timing, 1u, 1u);
+    if (selection == 1u)
+        return (timing->lptmr_csr & 1u) != 0u && timing->lptmr_prescaler_output;
+    if (selection == 2u)
+        return ftm_pin_output(timing, 5u, 1u);
+    return false;
+}
+
+bool kinetis_timing_get_ftm_output(const KinetisTiming* timing, uint8_t instance, uint8_t channel,
+                                   bool* output_high) {
+    if (timing == NULL || output_high == NULL || timing->profile == NULL ||
+        instance >= KINETIS_FTM_COUNT ||
+        channel >= kinetis_timing_internal_ftm_channel_count(timing, instance))
+        return false;
+    const KinetisPeripheralId peripheral = kinetis_timing_internal_ftm_peripheral(instance);
+    if (!kinetis_timing_internal_has(timing, peripheral))
+        return false;
+    bool output = ftm_pin_output(timing, instance, channel);
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        const uint32_t option = instance < 3u ? timing->sim_sopt8 : timing->sim_sopt9;
+        const bool modulatable = instance == 0u || instance == 3u || instance == 2u || instance == 4u;
+        const uint8_t output_bit = instance == 0u || instance == 3u ? channel
+                                                                    : (uint8_t)(channel + 6u);
+        if (modulatable && (option & (1u << (16u + output_bit))) != 0u)
+            output = output && ftm_carrier_output(timing, option);
+    }
     *output_high = output;
     return true;
+}
+
+void kinetis_timing_internal_ftm_capture_debug_outputs(KinetisTiming* timing) {
+    for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
+        KinetisFtmState* ftm = &timing->ftm[instance];
+        const uint8_t channels = kinetis_timing_internal_ftm_channel_count(timing, instance);
+        for (uint8_t channel = 0u; channel < channels; channel++)
+            kinetis_timing_get_ftm_output(timing, instance, channel, &ftm->debug_output[channel]);
+    }
 }
 
 void kinetis_timing_internal_update_ftm_irq(const KinetisTiming* timing, uint8_t instance) {
@@ -164,17 +326,24 @@ void kinetis_timing_internal_update_ftm_irq(const KinetisTiming* timing, uint8_t
     for (uint8_t channel = 0u; channel < channels; channel++)
         asserted = asserted || (ftm->channel_sc[channel] & 0xc0u) == 0xc0u;
     asserted = asserted || ((ftm->registers[0] & 0x80u) != 0u && (ftm->registers[8] & 0x80u) != 0u);
-    kinetis_timing_internal_set_irq(timing, ftm_irq_for_instance(instance), asserted);
+    kinetis_timing_internal_set_irq(timing, ftm_irq_for_instance(timing, instance), asserted);
 }
 
 void kinetis_timing_internal_ftm_trigger(KinetisTiming* timing, uint8_t instance) {
     KinetisFtmState* ftm = &timing->ftm[instance];
     ftm->registers[6] |= 0x80u;
     ftm->trigger_flag_read = false;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        kinetis_timing_internal_trigger(timing, KINETIS_TIMING_TRIGGER_FTM_OUTPUT, instance, 0u,
+                                        instance);
     kinetis_timing_internal_trigger_adc_alternate(timing, (uint8_t)(8u + instance));
+    kinetis_timing_internal_trigger_pdb_input(timing, (uint8_t)(8u + instance));
 }
 
 static bool ftm_gate(const KinetisTiming* timing, uint8_t instance) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return (timing->sim_scgc6 & (1u << (instance < 3u ? 24u + instance : 3u + instance))) !=
+               0u;
     if (instance == 3u) {
         if (timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
             timing->profile->id == KINETIS_PROFILE_MK22FX51212)
@@ -227,8 +396,9 @@ static void ftm_advance_fault_inputs(KinetisTiming* timing, uint8_t instance, ui
     KinetisFtmState* ftm = &timing->ftm[instance];
     if (!ftm_gate(timing, instance))
         return;
-    const uint64_t filter_ticks = kinetis_timing_internal_clock_ticks(
-        &ftm->fault_remainder, cycles, timing->bus_clock_hz, timing->core_clock_hz);
+    const uint64_t filter_ticks =
+        kinetis_timing_internal_clock_ticks(&ftm->fault_remainder, cycles,
+                                            ftm_system_clock_hz(timing), timing->core_clock_hz);
     const uint8_t enabled_fault_mask = kinetis_timing_internal_ftm_fault_mode(ftm) == 0u
                                            ? 0u
                                            : (uint8_t)ftm->registers[10] & 0x0fu;
@@ -291,10 +461,14 @@ static uint64_t ftm_phase_crossing_count(uint32_t current_phase, uint64_t elapse
 
 static void ftm_channel_event(KinetisTiming* timing, uint8_t instance, uint8_t channel) {
     KinetisFtmState* ftm = &timing->ftm[instance];
+    const uint8_t debug_mode = ftm_debug_mode(ftm);
+    if (timing->debug_halted && (debug_mode == 1u || debug_mode == 2u))
+        return;
     ftm->channel_sc[channel] |= 1u << 7u;
     ftm->channel_flag_read[channel] = false;
     if ((ftm->channel_sc[channel] & 1u) != 0)
-        kinetis_timing_internal_request_dma(timing, ftm_dma_source_for_channel(instance, channel));
+        kinetis_timing_internal_request_dma(
+            timing, ftm_dma_source_for_channel(timing, instance, channel));
     const uint8_t trigger_bit = ftm_trigger_bit_for_channel(channel);
     if (trigger_bit != UINT8_MAX && (ftm->registers[6] & (1u << trigger_bit)) != 0u)
         kinetis_timing_internal_ftm_trigger(timing, instance);
@@ -563,11 +737,10 @@ static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_
         return;
     const uint8_t clock_select = (uint8_t)((ftm->sc >> 3u) & 3u);
     if (!ftm_gate(timing, instance) || clock_select == 0u || clock_select == 3u ||
-        timing->debug_halted)
+        ftm_stopped_by_debug(timing, ftm) || !ftm_global_time_base_running(timing, instance))
         return;
-    uint32_t source_hz =
-        clock_select == 1u ? (kinetis_timing_bus_clock_running(timing) ? timing->bus_clock_hz : 0u)
-                           : kinetis_timing_internal_fixed_clock_hz(timing);
+    uint32_t source_hz = clock_select == 1u ? ftm_system_clock_hz(timing)
+                                            : kinetis_timing_internal_fixed_clock_hz(timing);
     source_hz >>= ftm->sc & 7u;
     const uint64_t ticks = kinetis_timing_internal_clock_ticks(&ftm->remainder, cycles, source_hz,
                                                                timing->core_clock_hz);
@@ -576,20 +749,27 @@ static void advance_ftm_counter(KinetisTiming* timing, uint8_t instance, uint32_
 
 bool kinetis_timing_set_ftm_clock_input(KinetisTiming* timing, uint8_t input_index,
                                         bool input_high) {
-    if (timing == NULL || timing->profile == NULL || input_index >= 2u)
+    if (timing == NULL || timing->profile == NULL ||
+        input_index >= (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 3u : 2u))
         return false;
     const bool previous = timing->ftm_clock_input[input_index];
     timing->ftm_clock_input[input_index] = input_high;
     if (previous || !input_high)
         return true;
-    for (uint8_t instance = 0u; instance < 4u; instance++) {
+    for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
         KinetisFtmState* ftm = &timing->ftm[instance];
-        const KinetisPeripheralId peripheral =
-            (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
-        const uint8_t selected_input = (uint8_t)((timing->sim_sopt4 >> (24u + instance)) & 1u);
+        const KinetisPeripheralId peripheral = kinetis_timing_internal_ftm_peripheral(instance);
+        uint8_t selected_input =
+            (uint8_t)((timing->sim_sopt4 >> (24u + instance)) & 1u);
+        if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+            const uint32_t options = instance < 3u ? timing->sim_sopt4 : timing->sim_sopt6;
+            selected_input =
+                (uint8_t)((options >> (24u + 2u * (instance % 3u))) & 3u);
+        }
         if (selected_input != input_index || !kinetis_timing_internal_has(timing, peripheral) ||
             !ftm_gate(timing, instance) || ((ftm->sc >> 3u) & 3u) != 3u ||
-            is_ftm_quadrature_enabled(ftm) || timing->debug_halted)
+            is_ftm_quadrature_enabled(ftm) || ftm_stopped_by_debug(timing, ftm) ||
+            !ftm_global_time_base_running(timing, instance))
             continue;
         ftm->external_clock_edges++;
         const uint8_t divider = (uint8_t)(1u << (ftm->sc & 7u));
@@ -619,9 +799,52 @@ bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisFtmState* ftm, 
            (pair & 5u) == 0u;
 }
 
+static bool ftm_dual_capture_mode(const KinetisFtmState* ftm, uint8_t channel) {
+    const uint8_t shift = (uint8_t)((channel / 2u) * 8u);
+    return (ftm->sc & (1u << 5u)) == 0u && ((ftm->registers[4] >> shift) & 5u) == 4u;
+}
+
+static bool ftm_dual_capture_edge(uint32_t channel_sc, bool current) {
+    const uint8_t edge = (uint8_t)((channel_sc >> 2u) & 3u);
+    return edge == (current ? 1u : 2u);
+}
+
+static void ftm_dual_capture_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
+                                   bool previous, bool current) {
+    KinetisFtmState* ftm = &timing->ftm[instance];
+    const uint8_t first = channel & 0xfeu;
+    const uint8_t pair = first / 2u;
+    const uint8_t shift = (uint8_t)(pair * 8u);
+    if ((channel & 1u) != 0u || previous == current ||
+        (ftm->registers[4] & (1u << (shift + 3u))) == 0u)
+        return;
+    const bool continuous = (ftm->channel_sc[first] & (1u << 4u)) != 0u;
+    if (!ftm->dual_capture_waiting_final[pair]) {
+        if (!continuous &&
+            ((ftm->channel_sc[first] | ftm->channel_sc[first + 1u]) & 0x80u) != 0u)
+            return;
+        if (!ftm_dual_capture_edge(ftm->channel_sc[first], current))
+            return;
+        ftm->dual_capture_first[pair] = ftm->counter;
+        ftm->dual_capture_waiting_final[pair] = true;
+        ftm_channel_event(timing, instance, first);
+    } else {
+        if (!ftm_dual_capture_edge(ftm->channel_sc[first + 1u], current))
+            return;
+        ftm->channel_value[first] = ftm->dual_capture_first[pair];
+        ftm->dual_capture_second[pair] = ftm->counter;
+        ftm->dual_capture_waiting_final[pair] = false;
+        ftm_channel_event(timing, instance, first + 1u);
+        if (!continuous)
+            ftm->registers[4] &= ~(1u << (shift + 3u));
+    }
+    kinetis_timing_internal_update_ftm_irq(timing, instance);
+}
+
 static void ftm_quadrature_step(KinetisTiming* timing, uint8_t instance, bool increment) {
     KinetisFtmState* ftm = &timing->ftm[instance];
-    if ((ftm->sc & 0x18u) == 0u || timing->debug_halted)
+    if ((ftm->sc & 0x18u) == 0u || ftm_stopped_by_debug(timing, ftm) ||
+        !ftm_global_time_base_running(timing, instance))
         return;
     const uint16_t first = ftm->initial;
     const uint16_t last = ftm->modulo >= first ? ftm->modulo : UINT16_MAX;
@@ -679,6 +902,10 @@ static void ftm_capture_input(KinetisTiming* timing, uint8_t instance, uint8_t c
     KinetisFtmState* ftm = &timing->ftm[instance];
     if (is_ftm_quadrature_enabled(ftm) && channel < 2u) {
         ftm_quadrature_transition(timing, instance, channel, previous, current);
+        return;
+    }
+    if (ftm_dual_capture_mode(ftm, channel)) {
+        ftm_dual_capture_input(timing, instance, channel, previous, current);
         return;
     }
     const uint8_t edges = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
@@ -755,6 +982,25 @@ static void ftm_apply_synchronized_write_buffers(KinetisFtmState* ftm, bool enha
         if (ftm_pair_synchronization_enabled(ftm, channel))
             ftm_apply_channel_value(ftm, channel);
     }
+}
+
+void kinetis_timing_internal_ftm_sync_bit(KinetisTiming* timing, uint8_t instance) {
+    KinetisFtmState* ftm = &timing->ftm[instance];
+    if ((ftm->registers[1] & (1u << 4u)) == 0u)
+        return;
+    ftm_apply_modulo(ftm);
+    ftm_apply_initial(ftm);
+    for (uint8_t channel = 0u; channel < 8u; channel++)
+        ftm_apply_channel_value(ftm, channel);
+    ftm_apply_outmask(ftm);
+    ftm_apply_invctrl(ftm);
+    ftm_apply_swoctrl(ftm);
+    ftm->counter = ftm->initial;
+    ftm->counting_down = false;
+    ftm->overflow_count = 0u;
+    ftm->remainder = 0u;
+    ftm->hardware_sync_pending = false;
+    ftm->hardware_trigger_pending_mask &= 0xfeu;
 }
 
 static void ftm_apply_intermediate_load(KinetisFtmState* ftm) {
@@ -901,7 +1147,8 @@ static void ftm_advance_deadtime(KinetisTiming* timing, uint8_t instance, uint32
     const uint8_t divider = (uint8_t)(ftm->registers[5] >> 6u);
     const uint8_t shift = divider < 2u ? 0u : divider == 2u ? 2u : 4u;
     const uint64_t ticks = kinetis_timing_internal_clock_ticks(
-        &ftm->deadtime_remainder, cycles, timing->bus_clock_hz >> shift, timing->core_clock_hz);
+        &ftm->deadtime_remainder, cycles, ftm_system_clock_hz(timing) >> shift,
+        timing->core_clock_hz);
     for (uint8_t channel = 0u; channel < channels; channel++) {
         const bool raw = ftm_output_before_deadtime(ftm, channel);
         if (!is_ftm_deadtime_enabled(ftm, channel)) {

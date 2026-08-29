@@ -24,7 +24,10 @@ uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycle
 }
 
 static uint32_t external_reference_clock_hz(const KinetisTiming* timing) {
-    switch (timing->mcg[12] & 3u) {
+    const uint8_t selection = timing->profile->id == KINETIS_PROFILE_MKV10Z1287
+                                  ? 0u
+                                  : timing->mcg[12] & 3u;
+    switch (selection) {
     case 0u:
         return timing->external_oscillator_hz;
     case 1u:
@@ -66,10 +69,21 @@ static uint32_t calculate_fll_clock_hz(const KinetisTiming* timing) {
 uint32_t kinetis_timing_internal_mcgir_clock_hz(const KinetisTiming* timing) {
     if (timing == NULL || (timing->mcg[0] & 2u) == 0u ||
         (timing->deep_sleeping &&
-         ((timing->mcg[0] & 1u) == 0u || (timing->smc[3] != 2u && timing->smc[3] != 0x10u))))
+         ((timing->mcg[0] & 1u) == 0u ||
+          (kinetis_timing_power_status(timing) != 2u &&
+           kinetis_timing_power_status(timing) != 0x10u))))
         return 0u;
     return (timing->mcg[1] & 1u) != 0u ? timing->fast_irc_hz >> ((timing->mcg[8] >> 1u) & 7u)
                                        : timing->slow_irc_hz;
+}
+
+uint32_t kinetis_timing_internal_lpo_clock_hz(const KinetisTiming* timing) {
+    if (timing == NULL)
+        return 0u;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && timing->deep_sleeping &&
+        kinetis_timing_power_status(timing) == 0x40u && (timing->smc[2] & 7u) == 0u)
+        return 0u;
+    return timing->lpo_hz;
 }
 
 uint32_t kinetis_timing_internal_oscer_clock_hz(const KinetisTiming* timing) {
@@ -97,7 +111,16 @@ uint32_t kinetis_timing_internal_erclk32k_hz(const KinetisTiming* timing) {
 }
 
 uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
-    if (timing == NULL || (timing->mcg[1] & 2u) != 0u || timing->deep_sleeping)
+    if (timing == NULL)
+        return 0u;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        const uint8_t selection = (uint8_t)((timing->sim_sopt2 >> 24u) & 3u);
+        if (selection == 1u)
+            return kinetis_timing_internal_mcgir_clock_hz(timing);
+        if (selection == 2u)
+            return kinetis_timing_internal_oscer_clock_hz(timing);
+    }
+    if ((timing->mcg[1] & 2u) != 0u || timing->deep_sleeping)
         return 0u;
     const uint32_t reference_clock_hz = calculate_fll_reference_clock_hz(timing);
     const uint32_t core_divider = ((timing->sim_clkdiv1 >> 28u) & 15u) + 1u;
@@ -108,6 +131,8 @@ uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing) {
 }
 
 static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return 0u;
     const uint32_t pll_divider = (timing->mcg[4] & 0x1fu) + 1u;
     const uint32_t pll_multiplier = (timing->mcg[5] & 0x1fu) + 24u;
     const uint32_t reference_clock_hz = external_reference_clock_hz(timing) / pll_divider;
@@ -123,7 +148,8 @@ static uint32_t calculate_pll_clock_hz(const KinetisTiming* timing) {
 
 static bool pll_operating(const KinetisTiming* timing) {
     const bool enabled = ((timing->mcg[4] | timing->mcg[5]) & 0x40u) != 0u;
-    const bool retained_in_stop = timing->smc[3] == 2u && (timing->mcg[4] & 0x20u) != 0u;
+    const bool retained_in_stop = kinetis_timing_power_status(timing) == 2u &&
+                                  (timing->mcg[4] & 0x20u) != 0u;
     return enabled && (!timing->deep_sleeping || retained_in_stop) &&
            calculate_pll_clock_hz(timing) != 0u;
 }
@@ -155,6 +181,12 @@ static uint64_t elapsed_attoseconds(uint32_t cycles, uint32_t clock_hz) {
 }
 
 static void update_pll_lock(KinetisTiming* timing) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        timing->pll_configuration = 0u;
+        timing->pll_locked = false;
+        timing->pll_lock_attoseconds = 0u;
+        return;
+    }
     const uint16_t configuration = pll_configuration(timing);
     if (timing->pll_configuration == configuration) {
         return;
@@ -183,9 +215,68 @@ void kinetis_timing_internal_advance_pll(KinetisTiming* timing, uint32_t core_cy
     kinetis_timing_internal_update_clocks(timing);
 }
 
+void kinetis_timing_internal_abort_mcg_trim(KinetisTiming* timing) {
+    if (timing == NULL || (timing->mcg[8] & 0x80u) == 0u)
+        return;
+    timing->mcg[8] = (timing->mcg[8] & 0x7fu) | 0x20u;
+    timing->mcg_trim_remaining_bus_cycles = 0u;
+    timing->mcg_trim_remainder = 0u;
+    timing->mcg_trim_target_hz = 0u;
+    timing->mcg_trim_valid = false;
+}
+
+void kinetis_timing_internal_start_mcg_trim(KinetisTiming* timing) {
+    if (timing == NULL || timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+        return;
+    const bool fast = (timing->mcg[8] & 0x40u) != 0u;
+    const uint32_t multiplier = fast ? 128u : 1u;
+    const uint32_t factor = 21u * multiplier;
+    const uint32_t compare = ((uint32_t)timing->mcg[10] << 8u) | timing->mcg[11];
+    const uint32_t ratio = factor == 0u ? 0u : compare / factor;
+    const uint32_t target_hz = ratio == 0u ? 0u : timing->bus_clock_hz / ratio;
+    const uint32_t minimum_hz = fast ? 3000000u : 31250u;
+    const uint32_t maximum_hz = fast ? 5000000u : 39063u;
+    timing->mcg_trim_valid = timing->bus_clock_hz >= 8000000u &&
+                             timing->bus_clock_hz <= 16000000u &&
+                             (timing->mcg[0] & 4u) == 0u &&
+                             ((timing->mcg[0] >> 6u) & 3u) != 1u &&
+                             external_reference_clock_hz(timing) != 0u && ratio != 0u &&
+                             compare % factor == 0u && target_hz >= minimum_hz &&
+                             target_hz <= maximum_hz;
+    timing->mcg_trim_target_hz = target_hz;
+    timing->mcg_trim_remaining_bus_cycles = (uint64_t)(compare == 0u ? 1u : compare) *
+                                             (fast ? 4u : 9u);
+    timing->mcg_trim_remainder = 0u;
+    timing->mcg[8] |= 0x80u;
+}
+
+void kinetis_timing_internal_advance_mcg_trim(KinetisTiming* timing, uint32_t core_cycles) {
+    if (timing == NULL || (timing->mcg[8] & 0x80u) == 0u)
+        return;
+    const uint64_t elapsed = kinetis_timing_internal_clock_ticks(
+        &timing->mcg_trim_remainder, core_cycles, timing->bus_clock_hz, timing->core_clock_hz);
+    if (elapsed < timing->mcg_trim_remaining_bus_cycles) {
+        timing->mcg_trim_remaining_bus_cycles -= elapsed;
+        return;
+    }
+    timing->mcg_trim_remaining_bus_cycles = 0u;
+    timing->mcg_trim_remainder = 0u;
+    timing->mcg[8] &= 0x7fu;
+    if (!timing->mcg_trim_valid) {
+        timing->mcg[8] |= 0x20u;
+    } else if ((timing->mcg[8] & 0x40u) != 0u) {
+        timing->fast_irc_hz = timing->mcg_trim_target_hz;
+    } else {
+        timing->slow_irc_hz = timing->mcg_trim_target_hz;
+    }
+    timing->mcg_trim_target_hz = 0u;
+    timing->mcg_trim_valid = false;
+}
+
 uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
     if (timing == NULL ||
-        (timing->deep_sleeping && timing->smc[3] != 2u && timing->smc[3] != 0x10u))
+        (timing->deep_sleeping && kinetis_timing_power_status(timing) != 2u &&
+         kinetis_timing_power_status(timing) != 0x10u))
         return 0u;
     switch ((timing->sim_sopt2 >> 26u) & 3u) {
     case 1u:
@@ -197,7 +288,9 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
                        : 0u;
         case 1u:
             if (((timing->mcg[4] | timing->mcg[5]) & 0x40u) == 0u || !timing->pll_locked ||
-                (timing->deep_sleeping && (timing->smc[3] != 2u || (timing->mcg[4] & 0x20u) == 0u)))
+                (timing->deep_sleeping &&
+                 (kinetis_timing_power_status(timing) != 2u ||
+                  (timing->mcg[4] & 0x20u) == 0u)))
                 return 0u;
             return calculate_pll_clock_hz(timing);
         case 3u:
@@ -216,11 +309,13 @@ uint32_t kinetis_timing_lpuart_clock_hz(const KinetisTiming* timing) {
 
 void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
     const uint8_t mcg_clock_source = (timing->mcg[0] >> 6u) & 3u;
-    const bool pll_selected = mcg_clock_source == 0u && (timing->mcg[5] & 0x40u) != 0u;
+    const bool fll_only = timing->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    const bool pll_selected =
+        !fll_only && mcg_clock_source == 0u && (timing->mcg[5] & 0x40u) != 0u;
     uint32_t mcg_output_clock_hz = 0;
     uint8_t mcg_status_value = timing->mcg[6] & 1u;
     update_pll_lock(timing);
-    if ((timing->mcg[12] & 3u) == 0u && timing->external_oscillator_hz != 0u &&
+    if ((fll_only || (timing->mcg[12] & 3u) == 0u) && timing->external_oscillator_hz != 0u &&
         (timing->mcg[1] & 4u) != 0u) {
         mcg_status_value |= 2u;
     }
@@ -243,23 +338,44 @@ void kinetis_timing_internal_update_clocks(KinetisTiming* timing) {
             mcg_status_value |= 1u << 4u;
         }
     }
-    if ((timing->mcg[5] & 0x40u) != 0u) {
+    if (!fll_only && (timing->mcg[5] & 0x40u) != 0u) {
         mcg_status_value |= 1u << 5u;
     }
-    if (timing->pll_locked) {
+    if (!fll_only && timing->pll_locked) {
         mcg_status_value |= 1u << 6u;
     }
     timing->mcg[6] = mcg_status_value;
 
+    if (fll_only && (timing->mcg[5] & 0x20u) != 0u && (timing->mcg[0] & 4u) == 0u &&
+        external_reference_clock_hz(timing) == 0u) {
+        timing->mcg[8] |= 1u;
+        if ((timing->mcg[1] & 0x80u) != 0u) {
+            kinetis_timing_internal_signal_reset(timing, 4u, 0u);
+            return;
+        } else {
+            kinetis_timing_internal_set_irq(timing, 27u, true);
+        }
+    } else if (fll_only) {
+        kinetis_timing_internal_set_irq(timing, 27u, false);
+    }
+
     const uint32_t core_divider = ((timing->sim_clkdiv1 >> 28u) & 15u) + 1u;
-    const uint32_t bus_divider = ((timing->sim_clkdiv1 >> 24u) & 15u) + 1u;
-    const uint32_t flash_divider = ((timing->sim_clkdiv1 >> 16u) & 15u) + 1u;
     timing->core_clock_hz = mcg_output_clock_hz / core_divider;
-    timing->bus_clock_hz = mcg_output_clock_hz / bus_divider;
-    timing->flash_clock_hz = mcg_output_clock_hz / flash_divider;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        const uint32_t peripheral_divider = ((timing->sim_clkdiv1 >> 16u) & 7u) + 1u;
+        timing->bus_clock_hz = timing->core_clock_hz / peripheral_divider;
+        timing->flash_clock_hz = timing->bus_clock_hz;
+    } else {
+        const uint32_t bus_divider = ((timing->sim_clkdiv1 >> 24u) & 15u) + 1u;
+        const uint32_t flash_divider = ((timing->sim_clkdiv1 >> 16u) & 15u) + 1u;
+        timing->bus_clock_hz = mcg_output_clock_hz / bus_divider;
+        timing->flash_clock_hz = mcg_output_clock_hz / flash_divider;
+    }
 }
 
 static uint32_t sim_fcfg1_value(const KinetisTiming* timing) {
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return 0x07000000u | timing->sim_fcfg1;
     if (timing->profile->id == KINETIS_PROFILE_MK22FN256CAP12)
         return 0x090f0f00u;
     return timing->profile->program_flash_size >= 1024u * 1024u ||
@@ -279,6 +395,7 @@ static uint32_t sim_fcfg2_value(const KinetisTiming* timing) {
     else if (profile->program_flash_block_count > 1)
         max_address_1 = program_block_size >> 13u;
     const uint32_t program_flash = (profile->id == KINETIS_PROFILE_MKV30F12810 ||
+                                    profile->id == KINETIS_PROFILE_MKV10Z1287 ||
                                     (profile->sim_fcfg2_has_pflsh && profile->flexnvm_size == 0))
                                        ? 1u << 23u
                                        : 0u;
@@ -306,11 +423,19 @@ bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t addr
     case SIM_SOPT5:
         *output_value = timing->sim_sopt5;
         return true;
+    case SIM_SOPT6:
+        *output_value = timing->sim_sopt6;
+        return true;
     case SIM_SOPT7:
         *output_value = timing->sim_sopt7;
         return true;
     case SIM_SOPT8:
         *output_value = timing->sim_sopt8;
+        return true;
+    case SIM_SOPT9:
+        if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+            return false;
+        *output_value = timing->sim_sopt9;
         return true;
     case SIM_SDID:
         *output_value = (timing->profile->sim_sdid_reset & ~15u) | timing->sim_sdid_pin_id;
@@ -345,6 +470,11 @@ bool kinetis_timing_internal_read_sim(const KinetisTiming* timing, uint32_t addr
     case SIM_FCFG2:
         *output_value = sim_fcfg2_value(timing);
         return true;
+    case SIM_WDOGC:
+        if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+            return false;
+        *output_value = timing->sim_wdogc;
+        return true;
     default:
         return false;
     }
@@ -366,16 +496,42 @@ bool kinetis_timing_internal_write_sim(KinetisTiming* timing, uint32_t address, 
         timing->sim_sopt2 = write_value;
         return true;
     case SIM_SOPT4:
-        timing->sim_sopt4 = write_value;
+        timing->sim_sopt4 =
+            write_value & (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x3f7cff8fu
+                                                                             : UINT32_MAX);
         return true;
     case SIM_SOPT5:
-        timing->sim_sopt5 = write_value;
+        timing->sim_sopt5 =
+            write_value & (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x000300ffu
+                                                                             : UINT32_MAX);
+        return true;
+    case SIM_SOPT6:
+        timing->sim_sopt6 =
+            write_value & (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x3f3cff8du
+                                                                             : UINT32_MAX);
         return true;
     case SIM_SOPT7:
-        timing->sim_sopt7 = write_value & 0x00009f9fu;
+        timing->sim_sopt7 =
+            write_value & (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x0f00dfdfu
+                                                                             : 0x00009f9fu);
         return true;
     case SIM_SOPT8:
-        timing->sim_sopt8 = write_value;
+        if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+            const uint32_t previous = timing->sim_sopt8;
+            timing->sim_sopt8 = write_value & 0x00ff033fu;
+            const uint32_t rising = timing->sim_sopt8 & ~previous & 0x3fu;
+            for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
+                if ((rising & (1u << instance)) != 0u)
+                    kinetis_timing_internal_ftm_sync_bit(timing, instance);
+            }
+        } else {
+            timing->sim_sopt8 = write_value;
+        }
+        return true;
+    case SIM_SOPT9:
+        if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+            return false;
+        timing->sim_sopt9 = write_value & 0x00ff0300u;
         return true;
     case SIM_SCGC3:
         if (timing->profile->id != KINETIS_PROFILE_MK22FN1M012 &&
@@ -396,11 +552,25 @@ bool kinetis_timing_internal_write_sim(KinetisTiming* timing, uint32_t address, 
         timing->sim_scgc7 = write_value;
         return true;
     case SIM_CLKDIV1:
-        timing->sim_clkdiv1 = write_value;
+        if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && timing->smc[3] == 4u)
+            return true;
+        timing->sim_clkdiv1 = timing->profile->id == KINETIS_PROFILE_MKV10Z1287
+                                  ? write_value & 0xf007f000u
+                                  : write_value;
         kinetis_timing_internal_update_clocks(timing);
         return true;
     case SIM_CLKDIV2:
         timing->sim_clkdiv2 = write_value;
+        return true;
+    case SIM_FCFG1:
+        if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+            return false;
+        timing->sim_fcfg1 = write_value & 3u;
+        return true;
+    case SIM_WDOGC:
+        if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+            return false;
+        timing->sim_wdogc = write_value & 2u;
         return true;
     default:
         return false;

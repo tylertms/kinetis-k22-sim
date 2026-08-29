@@ -76,6 +76,8 @@ bool kinetis_io_internal_pin_exists(const KinetisIo* io, uint8_t port, uint8_t p
 static uint8_t port_index(KinetisPeripheralId id) {
     if (id >= KINETIS_PERIPHERAL_PORTA && id <= KINETIS_PERIPHERAL_PORTE)
         return (uint8_t)(id - KINETIS_PERIPHERAL_PORTA);
+    if (id >= KINETIS_PERIPHERAL_FGPIOA && id <= KINETIS_PERIPHERAL_FGPIOE)
+        return (uint8_t)(id - KINETIS_PERIPHERAL_FGPIOA);
     return (uint8_t)(id - KINETIS_PERIPHERAL_GPIOA);
 }
 
@@ -84,7 +86,8 @@ bool kinetis_io_internal_is_port(KinetisPeripheralId id) {
 }
 
 bool kinetis_io_internal_is_gpio(KinetisPeripheralId id) {
-    return id >= KINETIS_PERIPHERAL_GPIOA && id <= KINETIS_PERIPHERAL_GPIOE;
+    return (id >= KINETIS_PERIPHERAL_GPIOA && id <= KINETIS_PERIPHERAL_GPIOE) ||
+           (id >= KINETIS_PERIPHERAL_FGPIOA && id <= KINETIS_PERIPHERAL_FGPIOE);
 }
 
 uint32_t kinetis_io_internal_pin_level_unfiltered(const KinetisIo* io, uint8_t port) {
@@ -142,7 +145,11 @@ static void update_pin_event(KinetisIo* io, uint8_t port, uint8_t pin, bool prev
         kinetis_io_internal_emit(io, KINETIS_IO_EVENT_DMA, (uint32_t)port * 32u + pin, current,
                                  interrupt_config);
     else
-        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_IRQ, 59u + port, bit, interrupt_config);
+        kinetis_io_internal_emit(io, KINETIS_IO_EVENT_IRQ,
+                                 io->configuration.profile->id == KINETIS_PROFILE_MKV10Z1287
+                                     ? (port == 0u ? 30u : 31u)
+                                     : 59u + port,
+                                 bit, interrupt_config);
 }
 
 static void update_output_events(KinetisIo* io, uint8_t port, uint32_t previous_pin_level) {
@@ -171,6 +178,9 @@ void kinetis_io_internal_commit_pin_level(KinetisIo* io, uint8_t port, uint8_t p
 
 bool kinetis_io_internal_module_clocked(const KinetisIo* io, KinetisPeripheralId id) {
     if (id == KINETIS_PERIPHERAL_FLASH_CONFIG || id == KINETIS_PERIPHERAL_MCM)
+        return true;
+    if (kinetis_io_internal_is_gpio(id) &&
+        io->configuration.profile->id == KINETIS_PROFILE_MKV10Z1287)
         return true;
     return io->clock_enabled[id];
 }
@@ -267,10 +277,13 @@ void kinetis_io_set_clock(KinetisIo* io, KinetisPeripheralId peripheral, bool en
         !kinetis_profile_has_peripheral(io->configuration.profile, peripheral))
         return;
     io->clock_enabled[peripheral] = enabled;
-    if (kinetis_io_internal_is_port(peripheral))
-        io->clock_enabled[KINETIS_PERIPHERAL_GPIOA + port_index(peripheral)] = enabled;
-    else if (kinetis_io_internal_is_gpio(peripheral))
-        io->clock_enabled[KINETIS_PERIPHERAL_PORTA + port_index(peripheral)] = enabled;
+    if (io->configuration.profile->id != KINETIS_PROFILE_MKV10Z1287) {
+        if (kinetis_io_internal_is_port(peripheral))
+            io->clock_enabled[KINETIS_PERIPHERAL_GPIOA + port_index(peripheral)] = enabled;
+        else if (peripheral >= KINETIS_PERIPHERAL_GPIOA &&
+                 peripheral <= KINETIS_PERIPHERAL_GPIOE)
+            io->clock_enabled[KINETIS_PERIPHERAL_PORTA + port_index(peripheral)] = enabled;
+    }
 }
 
 bool kinetis_io_clock_enabled(const KinetisIo* io, KinetisPeripheralId peripheral) {
@@ -398,7 +411,10 @@ bool kinetis_io_internal_read_gpio(KinetisIo* io, KinetisPeripheralLocation loca
     if (register_offset == 0)
         register_value = io->gpio_pdor[port];
     else if (register_offset == 0x10u)
-        register_value = kinetis_io_internal_pin_level(io, port);
+        register_value = io->configuration.profile->id != KINETIS_PROFILE_MKV10Z1287 ||
+                                 io->clock_enabled[KINETIS_PERIPHERAL_PORTA + port]
+                             ? kinetis_io_internal_pin_level(io, port)
+                             : 0u;
     else if (register_offset == 0x14u)
         register_value = io->gpio_pddr[port];
     *output_value = (register_value >> (byte_offset * 8u)) & width_mask(size);

@@ -44,6 +44,14 @@ static bool bus_write(void* context, uint32_t address, uint8_t size, uint32_t va
         kinetis_data_test_store(bus->ram, address - RAM_BASE, size, value);
         if (bus->dma_write_count < sizeof(bus->dma_write_values) / sizeof(bus->dma_write_values[0]))
             bus->dma_write_values[bus->dma_write_count++] = value;
+        if (bus->dma_control_write_pending) {
+            bus->dma_control_write_pending = false;
+            kinetis_data_write(bus->data, DMA, 4u, bus->dma_control_on_write);
+        }
+        if (bus->dma_request_write_pending) {
+            bus->dma_request_write_pending = false;
+            kinetis_data_write(bus->data, DMA + 0x1du, 1u, bus->dma_request_on_write);
+        }
         return true;
     }
     return false;
@@ -55,7 +63,14 @@ static void bus_interrupt(void* context, KinetisDataInterrupt interrupt, bool as
 }
 
 KinetisData* kinetis_data_test_create(TestState* state, TestBus* bus, KinetisProfile profile) {
-    KinetisDataBus callbacks = {bus, bus_read, bus_write, bus_write, bus_interrupt, NULL};
+    KinetisDataBus callbacks = {
+        .context = bus,
+        .read = bus_read,
+        .write = bus_write,
+        .flash_read = bus_read,
+        .program = bus_write,
+        .interrupt = bus_interrupt,
+    };
     KinetisData* data = kinetis_data_create(kinetis_profile_get(profile), callbacks);
     expect(state, data != NULL, "data != NULL");
     bus->data = data;
@@ -64,7 +79,13 @@ KinetisData* kinetis_data_test_create(TestState* state, TestBus* bus, KinetisPro
 
 KinetisData* kinetis_data_test_create_without_program(TestState* state, TestBus* bus,
                                                       KinetisProfile profile) {
-    KinetisDataBus callbacks = {bus, bus_read, bus_write, NULL, bus_interrupt, NULL};
+    KinetisDataBus callbacks = {
+        .context = bus,
+        .read = bus_read,
+        .write = bus_write,
+        .flash_read = bus_read,
+        .interrupt = bus_interrupt,
+    };
     KinetisData* data = kinetis_data_create(kinetis_profile_get(profile), callbacks);
     expect(state, data != NULL, "data != NULL");
     bus->data = data;
@@ -205,6 +226,26 @@ void kinetis_data_test_test_dma(TestState* state) {
     expect(state, !bus.interrupt[KINETIS_DATA_INTERRUPT_DMA_ERROR],
            "!bus.interrupt[KINETIS_DATA_INTERRUPT_DMA_ERROR]");
     kinetis_data_destroy(data);
+
+    TestBus mkv_bus = {0};
+    KinetisData* mkv10 =
+        kinetis_data_test_create(state, &mkv_bus, KINETIS_PROFILE_MKV10Z1287);
+    write_tcd(state, mkv10, TCD0, RAM_BASE + 0x800u, 32, 0x0505u, 32u, 0,
+              RAM_BASE + 0x900u, 32, 1u, 0, 0u);
+    kinetis_data_test_write_value(state, mkv10, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(mkv10, 1u);
+    expect(state, (kinetis_data_test_read_value(state, mkv10, DMA + 4u, 4u) & 0xa0u) == 0xa0u,
+           "MKV10 rejects the unsupported 32-byte DMA transfer size");
+    kinetis_data_test_write_value(state, mkv10, DMA + 0x1eu, 1u, 0u);
+    for (uint8_t index = 0u; index < 16u; index++)
+        mkv_bus.ram[0x800u + index] = (uint8_t)(0xa0u + index);
+    write_tcd(state, mkv10, TCD0, RAM_BASE + 0x800u, 16, 0x0404u, 16u, 0,
+              RAM_BASE + 0x900u, 16, 1u, 0, 0u);
+    kinetis_data_test_write_value(state, mkv10, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(mkv10, 1u);
+    expect(state, memcmp(mkv_bus.ram + 0x800u, mkv_bus.ram + 0x900u, 16u) == 0,
+           "MKV10 accepts the documented 16-byte DMA transfer size");
+    kinetis_data_destroy(mkv10);
 }
 
 void kinetis_data_test_test_dma_advanced(TestState* state) {
@@ -380,9 +421,9 @@ void kinetis_data_test_test_dmamux_triggers(TestState* state) {
 
 void kinetis_data_test_test_dmamux_source_matrix(TestState* state) {
     static const uint64_t expected[KINETIS_PROFILE_COUNT] = {
-        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xf03f2f00f3f4c03c), UINT64_C(0xfc3f2f00fffdf0fc),
-        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc),
-        UINT64_C(0xfffffffffffffffc), UINT64_C(0xfffffffffffffffc),
+        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xf03f2f00f3f4c03c), UINT64_C(0xffffafffff43003c),
+        UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xfc3f2f00fffdf0fc), UINT64_C(0xfc3f6ffffffdf0fc),
+        UINT64_C(0xfc3f6ffffffdf0fc), UINT64_C(0xfffffffffffffffc), UINT64_C(0xfffffffffffffffc),
     };
     TestBus bus = {0};
     for (uint8_t profile = 0u; profile < KINETIS_PROFILE_COUNT; profile++) {
@@ -497,6 +538,127 @@ void kinetis_data_test_test_dma_arbitration_and_control(TestState* state) {
     kinetis_data_advance(data, 1u);
     expect(state, (kinetis_data_test_read_value(state, data, DMA, 4u) & 0x20u) != 0u,
            "(kinetis_data_test_read_value(state, data, DMA, 4u) & 0x20u) != 0u");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    bus.dma_active = 0u;
+    bus.observe_dma_active = true;
+    bus.ram[0x10u] = 0xa0u;
+    bus.ram[0x11u] = 0xa1u;
+    bus.ram[0x20u] = 0xb1u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 2u, 0, RAM_BASE + 0x200u, 1, 1,
+              0, 0);
+    prepare_single_byte_dma(state, data, TCD1, RAM_BASE + 0x20u, RAM_BASE + 0x210u);
+    kinetis_data_test_write_value(state, data, DMA + 0x103u, 1u, 0x80u);
+    bus.dma_request_on_write = 1u;
+    bus.dma_request_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 3u, "preempted transfers complete");
+    expect(state, bus.dma_write_values[0] == 0xa0u && bus.dma_write_values[1] == 0xb1u &&
+                      bus.dma_write_values[2] == 0xa1u,
+           "higher-priority channel preempts at a read-write boundary");
+    expect(state, (bus.dma_active & 3u) == 3u, "preempted and preempting channels are active");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    bus.observe_dma_active = false;
+    bus.ram[0x10u] = 0xa0u;
+    bus.ram[0x11u] = 0xa1u;
+    bus.ram[0x20u] = 0xb1u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 2u, 0, RAM_BASE + 0x200u, 1, 1,
+              0, 0);
+    prepare_single_byte_dma(state, data, TCD1, RAM_BASE + 0x20u, RAM_BASE + 0x210u);
+    kinetis_data_test_write_value(state, data, DMA + 0x103u, 1u, 0x80u);
+    kinetis_data_test_write_value(state, data, DMA + 0x102u, 1u, 0x41u);
+    bus.dma_request_on_write = 1u;
+    bus.dma_request_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_values[0] == 0xa0u && bus.dma_write_values[1] == 0xa1u &&
+                      bus.dma_write_values[2] == 0xb1u,
+           "DPA prevents a channel from preempting");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 2u, 0, RAM_BASE + 0x200u, 1, 2,
+              0, 0);
+    bus.dma_control_on_write = 0x00010000u;
+    bus.dma_control_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 1u, "CX retires after the current read-write sequence");
+    expect(state, kinetis_data_test_read_value(state, data, TCD0 + 0x16u, 2u) == 1u,
+           "CX retires the current minor loop");
+    expect(state, (kinetis_data_test_read_value(state, data, DMA, 4u) & 0x00010000u) == 0u,
+           "CX self-clears");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 2u, 0, RAM_BASE + 0x200u, 1, 2,
+              0, 0);
+    bus.dma_control_on_write = 0x00020000u;
+    bus.dma_control_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 1u, "ECX cancels after the current read-write sequence");
+    expect(state, (kinetis_data_test_read_value(state, data, DMA + 4u, 4u) & (1u << 16u)) != 0u,
+           "ECX records the cancellation error");
+    expect(state, kinetis_data_test_read_value(state, data, TCD0 + 0x16u, 2u) == 2u,
+           "ECX preserves the minor-loop count");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    prepare_single_byte_dma(state, data, TCD0, RAM_BASE + 0x10u, RAM_BASE + 0x200u);
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_set_clocks(data, 48000000u, 24000000u, 0u, 0u, false,
+                            KINETIS_DATA_STOP_NORMAL);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 0u, "DMA request waits in Stop without EARS");
+    kinetis_data_test_write_value(state, data, DMA + 0x44u, 2u, 1u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 1u, "EARS enables the DMA request in Stop");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    bus.ram[0x10u] = 0xa0u;
+    bus.ram[0x11u] = 0xa1u;
+    bus.ram[0x20u] = 0xb1u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 2u, 0, RAM_BASE + 0x200u, 1, 1,
+              0, 0);
+    prepare_single_byte_dma(state, data, TCD1, RAM_BASE + 0x20u, RAM_BASE + 0x210u);
+    kinetis_data_test_write_value(state, data, DMA + 0x103u, 1u, 0x80u);
+    kinetis_data_test_write_value(state, data, DMA + 0x44u, 2u, 1u);
+    kinetis_data_set_clocks(data, 48000000u, 24000000u, 0u, 0u, false,
+                            KINETIS_DATA_STOP_NORMAL);
+    bus.dma_request_on_write = 1u;
+    bus.dma_request_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 2u && bus.dma_write_values[0] == 0xa0u &&
+                      bus.dma_write_values[1] == 0xa1u,
+           "a channel without EARS cannot preempt in Stop");
+    kinetis_data_test_write_value(state, data, DMA + 0x44u, 2u, 3u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_count == 3u && bus.dma_write_values[2] == 0xb1u,
+           "EARS releases the pending preempting channel in Stop");
+
+    kinetis_data_reset(data);
+    bus.dma_write_count = 0u;
+    bus.ram[0x10u] = 0xa0u;
+    bus.ram[0x11u] = 0xa1u;
+    bus.ram[0x20u] = 0xb1u;
+    write_tcd(state, data, TCD0, RAM_BASE + 0x10u, 1, 0, 1u, 0, RAM_BASE + 0x200u, 1,
+              0x8002u, 0, 0);
+    prepare_single_byte_dma(state, data, TCD1, RAM_BASE + 0x20u, RAM_BASE + 0x210u);
+    kinetis_data_test_write_value(state, data, DMA, 4u, 0x40u);
+    bus.dma_request_on_write = 1u;
+    bus.dma_request_write_pending = true;
+    kinetis_data_test_write_value(state, data, DMA + 0x1du, 1u, 0u);
+    kinetis_data_advance(data, 1u);
+    expect(state, bus.dma_write_values[0] == 0xa0u && bus.dma_write_values[1] == 0xa1u &&
+                      bus.dma_write_values[2] == 0xb1u,
+           "CLM self-link restarts without arbitration");
     kinetis_data_destroy(data);
 
     memset(&bus, 0, sizeof(bus));
@@ -517,6 +679,9 @@ void kinetis_data_test_test_adc(TestState* state) {
     expect(state, kinetis_data_test_read_value(state, data, ADC0, 1) == 0x1fu,
            "kinetis_data_test_read_value(state, data, ADC0, 1) == 0x1fu");
     kinetis_data_test_write_value(state, data, ADC0 + 8, 1, 0x0cu);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x28u, 2u, 0u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x2cu, 2u, 0x8000u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x30u, 2u, 0x8000u);
     expect(state, kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 7, 0x0abcu),
            "kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 7, 0x0abcu)");
     kinetis_data_test_write_value(state, data, ADC0, 1, 7u | 0x40u);
@@ -535,6 +700,9 @@ void kinetis_data_test_test_adc(TestState* state) {
     expect(state, kinetis_data_set_adc_input(data, 1, KINETIS_ADC_MUX_A, 3, 0x0555u),
            "kinetis_data_set_adc_input(data, 1, KINETIS_ADC_MUX_A, 3, 0x0555u)");
     kinetis_data_test_write_value(state, data, ADC1 + 8, 1, 0x0cu);
+    kinetis_data_test_write_value(state, data, ADC1 + 0x28u, 2u, 0u);
+    kinetis_data_test_write_value(state, data, ADC1 + 0x2cu, 2u, 0x8000u);
+    kinetis_data_test_write_value(state, data, ADC1 + 0x30u, 2u, 0x8000u);
     kinetis_data_test_write_value(state, data, ADC1 + 0x20, 1, 0x40u);
     kinetis_data_test_write_value(state, data, ADC1, 1, 3u);
     kinetis_data_advance(data, 100);
@@ -545,42 +713,58 @@ void kinetis_data_test_test_adc(TestState* state) {
     expect(state, kinetis_data_test_read_value(state, data, ADC1 + 0x10, 2) == 0x0555u,
            "kinetis_data_test_read_value(state, data, ADC1 + 0x10, 2) == 0x0555u");
     kinetis_data_test_write_value(state, data, ADC0 + 0x24, 1, 0x80u);
-    expect(state, (kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0xc0u) == 0,
-           "(kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0xc0u) == 0");
-    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0,
-           "(kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0");
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0xc0u) == 0x80u,
+           "calibration remains active before its documented maximum duration");
+    kinetis_data_advance(data, 14099u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0x80u) != 0u,
+           "calibration has not completed one cycle early");
+    kinetis_data_advance(data, 1u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0 + 0x24, 1) & 0xc0u) == 0u,
+           "calibration completes without failure");
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0u,
+           "calibration completion sets COCO");
 
     kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0cu);
     kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
-    kinetis_data_set_clocks(data, 1u, 1u, false, false);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, false, false);
     kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) == 0u,
            "bus-clocked ADC pauses when its clock is absent");
-    kinetis_data_set_clocks(data, 1u, 1u, true, false);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, true, false);
     kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) != 0u,
            "bus-clocked ADC resumes when its clock returns");
 
     kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0fu);
     kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
-    kinetis_data_set_clocks(data, 1u, 1u, false, false);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, false, false);
     kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) != 0u,
            "ADACK conversion does not depend on the bus clock");
 
     kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0cu);
     kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
-    kinetis_data_set_clocks(data, 1u, 1u, false, true);
-    kinetis_data_set_clocks(data, 1u, 1u, true, false);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, false, true);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, true, false);
     kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) == 0u,
            "Stop aborts a bus-clocked conversion");
+
+    kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0du);
+    kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, false, true);
+    kinetis_data_set_clocks(data, 1u, 1u, 1u, 1u, true, false);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) == 0u,
+           "Stop aborts a bus-divided conversion");
     kinetis_data_destroy(data);
 }
 
 void kinetis_data_test_test_adc_compare_dma_and_continuous(TestState* state) {
     TestBus bus = {0};
     KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN51212);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x2cu, 2u, 0x8000u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x30u, 2u, 0x8000u);
     expect(state, kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 1, 100u),
            "kinetis_data_set_adc_input(data, 0, KINETIS_ADC_MUX_A, 1, 100u)");
     kinetis_data_test_write_value(state, data, ADC0 + 0x18u, 2, 90u);
@@ -588,16 +772,29 @@ void kinetis_data_test_test_adc_compare_dma_and_continuous(TestState* state) {
     kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x28u);
     kinetis_data_test_write_value(state, data, ADC0, 1, 1u);
     kinetis_data_advance(data, 100u);
-    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0u,
-           "(kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0u");
-    expect(state, kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2) == 100u,
-           "kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2) == 100u");
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) == 0u,
+           "range compare rejects an in-range result when ACFGT is clear");
 
     kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x38u);
     kinetis_data_test_write_value(state, data, ADC0, 1, 1u);
     kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0u,
+           "range compare accepts an in-range result when ACFGT is set");
+    expect(state, kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2) == 100u,
+           "accepted range comparison stores its result");
+    kinetis_data_test_write_value(state, data, ADC0 + 0x18u, 2, 110u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x1cu, 2, 90u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x28u);
+    kinetis_data_test_write_value(state, data, ADC0, 1, 1u);
+    kinetis_data_advance(data, 100u);
+    expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) != 0u,
+           "reversed range accepts its strict interior when ACFGT is clear");
+    kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x38u);
+    kinetis_data_test_write_value(state, data, ADC0, 1, 1u);
+    kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) == 0u,
-           "(kinetis_data_test_read_value(state, data, ADC0, 1) & 0x80u) == 0u");
+           "reversed range rejects its interior when ACFGT is set");
     kinetis_data_test_write_value(state, data, ADC0 + 0x20u, 1, 0x30u);
     kinetis_data_test_write_value(state, data, ADC0 + 0x18u, 2, 99u);
     kinetis_data_test_write_value(state, data, ADC0, 1, 1u);
@@ -680,7 +877,7 @@ void kinetis_data_test_test_dac_cmp_vref(TestState* state) {
            "kinetis_data_get_cmp_output(data, 0, &comparator_high)");
     expect(state, !comparator_high, "!comparator_high");
     kinetis_data_test_write_value(state, data, CMP0 + 5, 1, (1u << 3) | 2u);
-    kinetis_data_test_write_value(state, data, CMP0 + 3, 1, 0x08u);
+    kinetis_data_test_write_value(state, data, CMP0 + 3, 1, 0x10u);
     kinetis_data_test_write_value(state, data, CMP0 + 1, 1, 1u);
     expect(state, kinetis_data_get_cmp_output(data, 0, &comparator_high),
            "kinetis_data_get_cmp_output(data, 0, &comparator_high)");
@@ -689,7 +886,7 @@ void kinetis_data_test_test_dac_cmp_vref(TestState* state) {
            "(kinetis_data_test_read_value(state, data, CMP0 + 3, 1) & 5u) == 5u");
     expect(state, bus.interrupt[KINETIS_DATA_INTERRUPT_CMP0],
            "bus.interrupt[KINETIS_DATA_INTERRUPT_CMP0]");
-    kinetis_data_test_write_value(state, data, CMP0 + 3, 1, 0x0cu);
+    kinetis_data_test_write_value(state, data, CMP0 + 3, 1, 0x14u);
     expect(state, !bus.interrupt[KINETIS_DATA_INTERRUPT_CMP0],
            "!bus.interrupt[KINETIS_DATA_INTERRUPT_CMP0]");
     expect(state, kinetis_data_set_cmp_input(data, 0, 1, 0),
@@ -725,8 +922,8 @@ void kinetis_data_test_test_dac_cmp_vref(TestState* state) {
 void kinetis_data_test_test_rng_crc(TestState* state) {
     TestBus bus = {0};
     KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN51212);
-    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == UINT32_MAX,
-           "kinetis_data_test_read_value(state, data, CRC, 4) == UINT32_MAX");
+    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0xffffu,
+           "kinetis_data_test_read_value(state, data, CRC, 4) == 0xffffu");
     kinetis_data_rng_seed(data, 1);
     kinetis_data_test_write_value(state, data, RNG, 4, 3u);
     kinetis_data_advance(data, 63);
@@ -754,24 +951,64 @@ void kinetis_data_test_test_rng_crc(TestState* state) {
            "kinetis_data_test_read_value(state, data, CRC, 4) == 0x1234u");
     kinetis_data_test_write_value(state, data, CRC + 8, 4, 0x12000000u);
     kinetis_data_test_write_value(state, data, CRC, 4, 0x01234567u);
-    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x0123a2e6u,
-           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x0123a2e6u");
+    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x0000a2e6u,
+           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x0000a2e6u");
     kinetis_data_test_write_value(state, data, CRC + 8, 4, 0x22000000u);
     kinetis_data_test_write_value(state, data, CRC, 4, 0x01234567u);
-    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x0123e6a2u,
-           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x0123e6a2u");
+    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0xe6a20000u,
+           "kinetis_data_test_read_value(state, data, CRC, 4) == 0xe6a20000u");
     kinetis_data_test_write_value(state, data, CRC + 8, 4, 0x32000000u);
     kinetis_data_test_write_value(state, data, CRC, 4, 0x01234567u);
-    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x01236745u,
-           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x01236745u");
+    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x67450000u,
+           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x67450000u");
     kinetis_data_test_write_value(state, data, CRC + 8, 4, 0x16000000u);
     kinetis_data_test_write_value(state, data, CRC, 4, 0x01234567u);
-    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x01235d19u,
-           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x01235d19u");
+    expect(state, kinetis_data_test_read_value(state, data, CRC, 4) == 0x00005d19u,
+           "kinetis_data_test_read_value(state, data, CRC, 4) == 0x00005d19u");
     kinetis_data_test_write_value(state, data, CRC + 8, 4, 0x40000000u);
     kinetis_data_test_write_value(state, data, CRC, 2, 0x1234u);
     expect(state, kinetis_data_test_read_value(state, data, CRC, 4) != UINT32_MAX,
            "kinetis_data_test_read_value(state, data, CRC, 4) != UINT32_MAX");
+    static const uint8_t transpose_bytes[4][4] = {
+        {0x12u, 0x34u, 0x56u, 0x78u},
+        {0x12u, 0x34u, 0x56u, 0x78u},
+        {0x78u, 0x56u, 0x34u, 0x12u},
+        {0x78u, 0x56u, 0x34u, 0x12u},
+    };
+    static const uint32_t transposed_seeds[4] = {
+        0x12345678u,
+        0x482c6a1eu,
+        0x1e6a2c48u,
+        0x78563412u,
+    };
+    for (uint8_t transpose = 0u; transpose < 4u; transpose++) {
+        const uint32_t control = (uint32_t)transpose << 30u;
+        kinetis_data_test_write_value(state, data, CRC + 8u, 4u, control | 0x02000000u);
+        kinetis_data_test_write_value(state, data, CRC, 4u, 0xffffu);
+        kinetis_data_test_write_value(state, data, CRC + 8u, 4u, control);
+        kinetis_data_test_write_value(state, data, CRC, 4u, 0x12345678u);
+        const uint32_t word_result = kinetis_data_test_read_value(state, data, CRC, 4u);
+        kinetis_data_test_write_value(state, data, CRC + 8u, 4u, control | 0x02000000u);
+        kinetis_data_test_write_value(state, data, CRC, 4u, 0xffffu);
+        kinetis_data_test_write_value(state, data, CRC + 8u, 4u, control);
+        for (uint8_t index = 0u; index < 4u; index++)
+            kinetis_data_test_write_value(state, data, CRC, 1u,
+                                          transpose_bytes[transpose][index]);
+        expect(state, kinetis_data_test_read_value(state, data, CRC, 4u) == word_result,
+               "CRC word input follows the documented transpose byte order");
+        kinetis_data_test_write_value(state, data, CRC + 8u, 4u, control | 0x02000000u);
+        kinetis_data_test_write_value(state, data, CRC, 4u, 0x12345678u);
+        expect(state, data->crc_value == transposed_seeds[transpose],
+               "CRC seed writes pass through the configured input transpose");
+    }
+    kinetis_data_test_write_value(state, data, CRC + 8u, 4u, 0x01000000u);
+    kinetis_data_test_write_value(state, data, CRC + 4u, 4u, 0xa5a51234u);
+    kinetis_data_test_write_value(state, data, CRC + 8u, 4u, 0u);
+    kinetis_data_test_write_value(state, data, CRC + 4u, 4u, 0xffff5678u);
+    kinetis_data_test_write_value(state, data, CRC + 6u, 2u, 0xabcdu);
+    kinetis_data_test_write_value(state, data, CRC + 8u, 4u, 0x01000000u);
+    expect(state, kinetis_data_test_read_value(state, data, CRC + 4u, 4u) == 0xa5a55678u,
+           "16-bit CRC preserves GPOLY HIGH while updating GPOLY LOW");
     expect(state, kinetis_data_test_read_value(state, data, RNG + 8u, 4) == 0u,
            "kinetis_data_test_read_value(state, data, RNG + 8u, 4) == 0u");
     kinetis_data_destroy(data);

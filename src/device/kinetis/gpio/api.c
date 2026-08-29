@@ -3,7 +3,8 @@
 bool kinetis_io_read(KinetisIo* io, uint32_t address, uint8_t size, uint32_t* output_value) {
     if (io == NULL || output_value == NULL || !kinetis_io_internal_valid_size(size))
         return false;
-    if (address >= KINETIS_BIT_BAND_BASE && address < KINETIS_BIT_BAND_LIMIT && size == 4) {
+    if (io->configuration.profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M &&
+        address >= KINETIS_BIT_BAND_BASE && address < KINETIS_BIT_BAND_LIMIT && size == 4) {
         const uint32_t alias_address = address - KINETIS_BIT_BAND_BASE;
         const uint32_t source_byte_address = KINETIS_PERIPHERAL_BASE + alias_address / 32u;
         const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
@@ -19,7 +20,8 @@ bool kinetis_io_read(KinetisIo* io, uint32_t address, uint8_t size, uint32_t* ou
 bool kinetis_io_write(KinetisIo* io, uint32_t address, uint8_t size, uint32_t write_value) {
     if (io == NULL || !kinetis_io_internal_valid_size(size))
         return false;
-    if (address >= KINETIS_BIT_BAND_BASE && address < KINETIS_BIT_BAND_LIMIT && size == 4) {
+    if (io->configuration.profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M &&
+        address >= KINETIS_BIT_BAND_BASE && address < KINETIS_BIT_BAND_LIMIT && size == 4) {
         const uint32_t alias_address = address - KINETIS_BIT_BAND_BASE;
         const uint32_t source_byte_address = KINETIS_PERIPHERAL_BASE + alias_address / 32u;
         const uint8_t bit_index = (uint8_t)((alias_address / 4u) & 7u);
@@ -160,15 +162,27 @@ static bool i2s_irq_asserted(uint32_t control) {
 bool kinetis_io_irq_asserted(const KinetisIo* io, uint8_t irq) {
     if (io == NULL)
         return false;
-    if (irq >= 59u && irq <= 63u) {
-        const uint8_t port = (uint8_t)(irq - 59u);
-        uint32_t pending = io->port_isfr[port];
-        while (pending != 0) {
-            const uint8_t pin = kinetis_io_internal_first_set_bit(pending);
-            const uint32_t interrupt_config = (io->port_pcr[port][pin] >> 16) & 15u;
-            if (interrupt_config >= 8u && interrupt_config <= 12u)
-                return true;
-            pending &= ~(1u << pin);
+    uint8_t first_port = 0u;
+    uint8_t last_port = 0u;
+    bool port_irq = false;
+    if (io->configuration.profile->id == KINETIS_PROFILE_MKV10Z1287 && (irq == 30u || irq == 31u)) {
+        first_port = irq == 30u ? 0u : 1u;
+        last_port = irq == 30u ? 0u : 4u;
+        port_irq = true;
+    } else if (irq >= 59u && irq <= 63u) {
+        first_port = last_port = (uint8_t)(irq - 59u);
+        port_irq = true;
+    }
+    if (port_irq) {
+        for (uint8_t port = first_port; port <= last_port; port++) {
+            uint32_t pending = io->port_isfr[port];
+            while (pending != 0) {
+                const uint8_t pin = kinetis_io_internal_first_set_bit(pending);
+                const uint32_t interrupt_config = (io->port_pcr[port][pin] >> 16) & 15u;
+                if (interrupt_config >= 8u && interrupt_config <= 12u)
+                    return true;
+                pending &= ~(1u << pin);
+            }
         }
         return false;
     }

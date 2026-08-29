@@ -669,15 +669,15 @@ static const KinetisRegisterDescriptor mk22fn12810_registers[] = {
      8u, (KinetisRegisterAccess)3},
     {0x40032000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 11u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032000u, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 11u,
+    {0x40032000u, 0x0000ffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 11u,
      32u, (KinetisRegisterAccess)3},
     {0x40032001u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
+    {0x40032002u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 11u,
+    {0x40032002u, 0x00000000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 11u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032003u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
+    {0x40032003u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
      8u, (KinetisRegisterAccess)3},
     {0x40032004u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 11u,
      8u, (KinetisRegisterAccess)3},
@@ -2048,7 +2048,7 @@ static const KinetisRegisterDescriptor mk22fn12810_registers[] = {
 const KinetisRegisterManifest* kinetis_mk22fn12810_register_manifest(void) {
     static const KinetisRegisterManifest manifest = {
         KINETIS_PROFILE_MK22FN12810,  mk22fn12810_registers,          COUNT(mk22fn12810_registers),
-        mk22fn12810_peripherals,      COUNT(mk22fn12810_peripherals), UINT64_C(0xf61e2e5f714e55ac),
+        mk22fn12810_peripherals,      COUNT(mk22fn12810_peripherals), UINT64_C(0x3c45e71f9d5ee284),
         UINT64_C(0x8b036d005f6d0028),
     };
     return &manifest;

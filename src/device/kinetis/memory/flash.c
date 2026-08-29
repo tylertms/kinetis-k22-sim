@@ -57,6 +57,8 @@ static bool flash_load(KinetisData* data, uint32_t address, uint8_t byte_count,
             kinetis_data_internal_load_bytes(data->flash_config, address - 0x400u, byte_count);
         return true;
     }
+    if (data->bus.flash_read != NULL)
+        return data->bus.flash_read(data->bus.context, address, byte_count, output_value);
     if (data->bus.read == NULL)
         return false;
     return data->bus.read(data->bus.context, address, byte_count, output_value);
@@ -245,13 +247,15 @@ static bool flash_once_record(const KinetisData* data, uint8_t record_index,
         *record_size = 8u;
         return true;
     }
-    if (record_index <= 7u) {
+    const bool mkv10 = data->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    if (record_index <= (mkv10 ? 0x0fu : 7u)) {
         *record_offset = 0xc0u + (uint32_t)record_index * 4u;
         *record_size = 4u;
         return true;
     }
     if (record_index >= 0x10u && record_index <= 0x13u) {
-        *record_offset = 0xe0u + (uint32_t)(record_index - 0x10u) * 8u;
+        *record_offset = (mkv10 ? 0xa0u : 0xe0u) +
+                         (uint32_t)(record_index - 0x10u) * 8u;
         *record_size = 8u;
         return true;
     }
@@ -265,7 +269,7 @@ static bool flash_read_once(KinetisData* data) {
         return false;
     for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
         flash_set_fccob(data, (uint8_t)(4u + byte_index),
-                        data->flash_program_ifr[record_offset + byte_index]);
+                        data->flash_program_ifr[record_offset + record_size - 1u - byte_index]);
     return true;
 }
 
@@ -279,11 +283,69 @@ static bool flash_program_once(KinetisData* data, bool* verify_failure) {
             return false;
     }
     for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
-        data->flash_program_ifr[record_offset + byte_index] =
+        data->flash_program_ifr[record_offset + record_size - 1u - byte_index] =
             flash_fccob(data, (uint8_t)(4u + byte_index));
     for (uint8_t byte_index = 0u; byte_index < record_size; byte_index++)
-        *verify_failure |= data->flash_program_ifr[record_offset + byte_index] !=
+        *verify_failure |= data->flash_program_ifr[record_offset + record_size - 1u - byte_index] !=
                            flash_fccob(data, (uint8_t)(4u + byte_index));
+    return true;
+}
+
+static bool flash_execute_access_segment_enabled(const KinetisData* data,
+                                                 uint8_t segment) {
+    return (data->flash[0x1fu - (segment >> 3u)] & (1u << (segment & 7u))) != 0u;
+}
+
+static bool flash_read_execute_access(KinetisData* data, bool* verify_failure) {
+    const uint8_t margin = flash_fccob(data, 1u);
+    if (data->profile->id != KINETIS_PROFILE_MKV10Z1287 || margin > 2u)
+        return false;
+    const uint32_t segment_size = 4096u;
+    const uint8_t segment_count = (uint8_t)(data->profile->program_flash_size / segment_size);
+    for (uint8_t segment = 0u; segment < segment_count; segment++) {
+        if (!flash_execute_access_segment_enabled(data, segment) &&
+            !flash_range_erased(data, (uint32_t)segment * segment_size, segment_size)) {
+            *verify_failure = true;
+            break;
+        }
+    }
+    if (!*verify_failure) {
+        data->flash_access_control_disabled = true;
+        data->flash_execute_access_programmed = false;
+    } else if (data->flash_execute_access_programmed) {
+        data->flash_access_control_disabled = false;
+        data->flash_execute_access_programmed = false;
+    }
+    return true;
+}
+
+static bool flash_erase_execute_access(KinetisData* data, bool* protection_failure,
+                                       bool* verify_failure) {
+    if (data->profile->id != KINETIS_PROFILE_MKV10Z1287)
+        return false;
+    const uint32_t segment_size = 4096u;
+    const uint8_t segment_count = (uint8_t)(data->profile->program_flash_size / segment_size);
+    for (uint8_t segment = 0u; segment < segment_count; segment++) {
+        const uint32_t start = (uint32_t)segment * segment_size;
+        if (!flash_execute_access_segment_enabled(data, segment) &&
+            flash_memory_range_protected(data, start, segment_size)) {
+            *protection_failure = true;
+            return true;
+        }
+    }
+    for (uint8_t segment = 0u; segment < segment_count; segment++) {
+        const uint32_t start = (uint32_t)segment * segment_size;
+        if (flash_execute_access_segment_enabled(data, segment))
+            continue;
+        if (!flash_erase(data, start, segment_size))
+            return false;
+        if (!flash_range_erased(data, start, segment_size)) {
+            *verify_failure = true;
+            return true;
+        }
+    }
+    data->flash_access_control_disabled = true;
+    data->flash_execute_access_programmed = false;
     return true;
 }
 
@@ -458,6 +520,8 @@ static uint8_t flash_busy_banks(uint8_t command, uint32_t address) {
         return 3u;
     case 0x41u:
     case 0x43u:
+    case 0x4au:
+    case 0x4bu:
     case 0x45u:
     case 0x46u:
         return 1u;
@@ -499,6 +563,11 @@ static void flash_execute(KinetisData* data) {
                       flash_swap_range_protected(data, address, program_words * 4u, false));
         if (valid && !protection_failure)
             valid = flash_program_words(data, address, program_words, &verify_failure);
+        if (valid && !protection_failure && !verify_failure &&
+            data->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+            data->flash_access_control_disabled &&
+            !flash_execute_access_segment_enabled(data, (uint8_t)(address >> 12u)))
+            data->flash_execute_access_programmed = true;
     } else if (command == 0x09u) {
         bool data_flash = false;
         uint32_t offset = 0;
@@ -602,6 +671,10 @@ static void flash_execute(KinetisData* data) {
         valid = flash_read_once(data);
     } else if (command == 0x43u) {
         valid = flash_program_once(data, &verify_failure);
+    } else if (command == 0x4au) {
+        valid = flash_read_execute_access(data, &verify_failure);
+    } else if (command == 0x4bu) {
+        valid = flash_erase_execute_access(data, &protection_failure, &verify_failure);
     } else if (command == 0x0bu) {
         const uint32_t count = ((uint32_t)flash_fccob(data, 4u) << 8u) | flash_fccob(data, 5u);
         const uint32_t length = count * 16u;
@@ -635,7 +708,10 @@ static void flash_execute(KinetisData* data) {
     else if (verify_failure)
         data->flash[0] |= 1u;
     data->flash_cycles =
-        command == 0x08u || command == 0x09u || command == 0x44u || command == 0x80u ? 2000u : 40u;
+        command == 0x08u || command == 0x09u || command == 0x44u || command == 0x4bu ||
+                command == 0x80u
+            ? 2000u
+            : 40u;
     data->flash_busy_banks = valid && !protection_failure ? flash_busy_banks(command, address) : 0u;
     data->flash_busy_start = 0u;
     data->flash_busy_length = 0u;
@@ -677,7 +753,8 @@ bool kinetis_data_internal_flash_write(KinetisData* data, uint32_t address, uint
         return false;
     if (register_offset == 0u && byte_count == 1u) {
         data->flash[0] &= (uint8_t)~(write_value & 0x70u);
-        if ((write_value & 0x80u) != 0u && (data->flash[0] & 0xb0u) == 0x80u)
+        if ((write_value & 0x80u) != 0u && (data->flash[0] & 0xb0u) == 0x80u &&
+            !data->vlp_mode)
             flash_execute(data);
         else
             kinetis_data_internal_flash_update_interrupts(data);

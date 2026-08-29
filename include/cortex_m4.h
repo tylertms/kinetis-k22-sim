@@ -9,6 +9,11 @@ typedef struct CortexM4 CortexM4;
 typedef struct CortexM4Coverage CortexM4Coverage;
 
 typedef enum {
+    CORTEX_M4_ARCHITECTURE_ARMV7E_M,
+    CORTEX_M4_ARCHITECTURE_ARMV6_M,
+} CortexM4Architecture;
+
+typedef enum {
     CORTEX_M4_STOP_RUNNING,
     CORTEX_M4_STOP_LIMIT,
     CORTEX_M4_STOP_BREAKPOINT,
@@ -95,6 +100,7 @@ uint8_t cortex_m4_coverage_flags(const CortexM4Coverage* coverage, uint32_t addr
 
 CortexM4* cortex_m4_create(CortexM4Bus bus);
 void cortex_m4_destroy(CortexM4* cpu);
+bool cortex_m4_configure_architecture(CortexM4* cpu, CortexM4Architecture architecture);
 bool cortex_m4_configure_implementation(CortexM4* cpu, uint16_t external_irq_count,
                                         uint8_t priority_bits, uint8_t mpu_region_count);
 bool cortex_m4_copy(CortexM4* destination, const CortexM4* source);

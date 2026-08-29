@@ -160,11 +160,18 @@ int main(int argc, char** argv) {
     CortexM4* cpu = kinetis_cpu(device);
     const Census thumb16 = census_thumb16(cpu);
     const Census thumb32 = census_thumb32(cpu, shard);
-    expect(&test_state,
-           thumb16.examined_count == 196608u && thumb16.permitted_count == 185351u &&
-               thumb16.executed_count == 146023u &&
-               thumb16.fingerprint == UINT64_C(14300317076329787867),
-           "thumb16 census matches");
+    const bool thumb16_matches =
+        thumb16.examined_count == 196608u && thumb16.permitted_count == 185351u &&
+        thumb16.executed_count == 146023u &&
+        thumb16.fingerprint == UINT64_C(1911476509732320621);
+    if (!thumb16_matches) {
+        fprintf(stderr,
+                "[census] thumb16 examined=%" PRIu64 " permitted=%" PRIu64 " executed=%" PRIu64
+                " fingerprint=%" PRIu64 "\n",
+                thumb16.examined_count, thumb16.permitted_count, thumb16.executed_count,
+                thumb16.fingerprint);
+    }
+    expect(&test_state, thumb16_matches, "thumb16 census matches");
     const bool thumb32_matches = thumb32.examined_count == 50331648u &&
                                  thumb32.permitted_count == expected_permitted[shard] &&
                                  thumb32.executed_count == expected_executed[shard] &&

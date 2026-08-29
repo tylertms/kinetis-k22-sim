@@ -13,11 +13,43 @@ static uint32_t decode_branch_offset(uint16_t first, uint16_t second) {
 
 static uint32_t read_special_register(const CortexM4* cpu, uint8_t selector) {
     const uint32_t xpsr = cortex_m4_xpsr_value(cpu);
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+        const bool privileged =
+            (cpu->xpsr & 0x1ffu) != 0u || (cpu->control & CORTEX_M4_CONTROL_NPRIV) == 0u;
+        if (!privileged && selector != 0u && selector != 20u)
+            return 0u;
+        const uint32_t apsr = xpsr & 0xf8000000u;
+        const uint32_t ipsr = xpsr & 0x1ffu;
+        switch (selector) {
+        case 0:
+        case 2:
+            return apsr;
+        case 1:
+        case 3:
+            return apsr | ipsr;
+        case 5:
+        case 7:
+            return ipsr;
+        case 6:
+            return 0u;
+        case 8:
+            return cpu->msp;
+        case 9:
+            return cpu->psp;
+        case 16:
+            return cpu->primask;
+        case 20:
+            return cpu->control;
+        default:
+            return 0u;
+        }
+    }
+    const uint32_t application_mask = 0xf80f0000u;
     switch (selector) {
     case 0:
-        return xpsr & 0xf80f0000u;
+        return xpsr & application_mask;
     case 1:
-        return xpsr & 0xf80f01ffu;
+        return xpsr & (application_mask | 0x1ffu);
     case 2:
         return xpsr & 0x0700fc00u;
     case 3:
@@ -50,7 +82,9 @@ static void write_special_register(CortexM4* cpu, uint8_t selector, uint32_t val
     const bool privileged =
         (cpu->xpsr & 0x1ffu) != 0 || (cpu->control & CORTEX_M4_CONTROL_NPRIV) == 0;
     if (selector <= 3) {
-        cpu->xpsr = (cpu->xpsr & ~0xf80f0000u) | (value & 0xf80f0000u) | CORTEX_M4_XPSR_T;
+        const uint32_t mask =
+            cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0xf8000000u : 0xf80f0000u;
+        cpu->xpsr = (cpu->xpsr & ~mask) | (value & mask) | CORTEX_M4_XPSR_T;
     } else if (selector == 8 && privileged) {
         cpu->msp = value & ~3u;
     } else if (selector == 9 && privileged) {
@@ -67,7 +101,11 @@ static void write_special_register(CortexM4* cpu, uint8_t selector, uint32_t val
     } else if (selector == 19 && privileged) {
         cpu->faultmask = value & 1u;
     } else if (selector == 20 && privileged) {
-        cpu->control = value & 7u;
+        const uint32_t mask = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 3u : 7u;
+        const uint32_t stack_selection =
+            (cpu->xpsr & 0x1ffu) == 0u ? value & CORTEX_M4_CONTROL_SPSEL
+                                      : cpu->control & CORTEX_M4_CONTROL_SPSEL;
+        cpu->control = (value & mask & ~CORTEX_M4_CONTROL_SPSEL) | stack_selection;
     }
 }
 

@@ -18,6 +18,7 @@ typedef struct {
 static const ProfileFixture fixtures[] = {
     {KINETIS_PROFILE_MK22FN12810, KINETIS_PACKAGE_DC_121_XFBGA},
     {KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_LH_64_LQFP},
+    {KINETIS_PROFILE_MKV10Z1287, KINETIS_PACKAGE_LH_64_LQFP},
     {KINETIS_PROFILE_MK22FN12812, KINETIS_PACKAGE_AH_64_WLCSP},
     {KINETIS_PROFILE_MK22FN25612, KINETIS_PACKAGE_DC_121_XFBGA},
     {KINETIS_PROFILE_MK22FN256CAP12, KINETIS_PACKAGE_AP_80_WLCSP},
@@ -32,12 +33,12 @@ static const uint8_t flash_configuration[16] = {
 };
 
 static const uint32_t sim_fcfg1_reset_values[KINETIS_PROFILE_COUNT] = {
-    0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u,
+    0x0f0f0f00u, 0x0f0f0f00u, 0x07000000u, 0x0f0f0f00u, 0x0f0f0f00u,
     0x090f0f00u, 0x0f0f0f00u, 0xff0f0f00u, 0xff0f0f00u,
 };
 
 static const uint32_t sim_fcfg2_reset_values[KINETIS_PROFILE_COUNT] = {
-    0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u,
+    0x10000000u, 0x10800000u, 0x10800000u, 0x10000000u, 0x20000000u,
     0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
 };
 
@@ -119,6 +120,8 @@ static uint32_t expected_reset_value(const ProfileFixture* fixture,
     if (descriptor->address == 0x40048050u) {
         return sim_fcfg2_reset_values[fixture->profile];
     }
+    if (descriptor->address == 0xf000000cu && fixture->profile == KINETIS_PROFILE_MKV10Z1287)
+        return 0x1ffff000u;
     const uint32_t offset = descriptor->address - 0x40020000u;
     if (offset == 1u && (manifest->profile == KINETIS_PROFILE_MK22FN1M012 ||
                          manifest->profile == KINETIS_PROFILE_MK22FX51212))
@@ -133,6 +136,13 @@ static uint32_t expected_reset_value(const ProfileFixture* fixture,
         return flash_configuration[14];
     if (offset == 0x17u)
         return flash_configuration[15];
+    if (fixture->profile == KINETIS_PROFILE_MKV10Z1287 &&
+        ((offset >= 0x1cu && offset <= 0x1fu) || (offset >= 0x24u && offset <= 0x27u)))
+        return 0xffu;
+    if (fixture->profile == KINETIS_PROFILE_MKV10Z1287 && offset == 0x28u)
+        return 4u;
+    if (fixture->profile == KINETIS_PROFILE_MKV10Z1287 && offset == 0x2bu)
+        return 0x20u;
     const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
     return widest->reset_value >> ((descriptor->address - widest->address) * 8u);
 }
@@ -159,7 +169,10 @@ static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFi
     const uint8_t size = (uint8_t)(descriptor->width / 8u);
     uint32_t actual = UINT32_MAX;
     const bool read = kinetis_read(device, descriptor->address, &actual, size);
-    const bool readable = (descriptor->access & KINETIS_REGISTER_ACCESS_READ) != 0u;
+    const bool readable = (descriptor->access & KINETIS_REGISTER_ACCESS_READ) != 0u &&
+                          !(fixture->profile == KINETIS_PROFILE_MKV10Z1287 &&
+                            (descriptor->address == 0xf0003040u ||
+                             descriptor->address == 0xf0004010u));
     if (read != readable) {
         report_mismatch(descriptor, "read access", read, readable);
     }
@@ -171,7 +184,14 @@ static void expect_reset_read(TestState* state, Kinetis* device, const ProfileFi
     const KinetisRegisterDescriptor* widest = widest_covering_descriptor(manifest, descriptor);
     const bool semantic_reset = descriptor->address == 0x40048024u ||
                                 descriptor->address == 0x4004804cu ||
-                                descriptor->address == 0x40048050u;
+                                descriptor->address == 0x40048050u ||
+                                descriptor->address == 0xf000000cu ||
+                                (fixture->profile == KINETIS_PROFILE_MKV10Z1287 &&
+                                 ((descriptor->address >= 0x4002001cu &&
+                                   descriptor->address <= 0x4002001fu) ||
+                                  (descriptor->address >= 0x40020024u &&
+                                   descriptor->address <= 0x40020028u) ||
+                                  descriptor->address == 0x4002002bu));
     const uint32_t reset_mask =
         uses_flash_configuration(descriptor) || semantic_reset
             ? width_mask(descriptor->width)
@@ -190,6 +210,8 @@ static void expect_declared_writes(TestState* state, Kinetis* device,
         !descriptor_available(device, descriptor)) {
         return;
     }
+    if (descriptor->address == 0xf0003040u)
+        return;
     const uint8_t size = (uint8_t)(descriptor->width / 8u);
     static const uint32_t values[] = {
         0u, 1u, 0x55555555u, 0xaaaaaaaau, UINT32_MAX,

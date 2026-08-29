@@ -108,6 +108,49 @@ static void test_special_registers(Fixture* fixture) {
     fixture->cpu->control = 0u;
 }
 
+static void test_armv6_special_registers(Fixture* fixture) {
+    expect(fixture->state,
+           cortex_m4_configure_architecture(fixture->cpu, CORTEX_M4_ARCHITECTURE_ARMV6_M),
+           "configure ARMv6-M special-register behavior");
+    fixture->cpu->xpsr = CORTEX_M4_XPSR_T | CORTEX_M4_XPSR_N | CORTEX_M4_XPSR_C |
+                         CORTEX_M4_XPSR_Q | 7u;
+    fixture->cpu->control = 0u;
+    const uint8_t selectors[] = {0u, 1u, 2u, 3u, 5u, 6u, 7u};
+    const uint32_t expected[] = {0xa8000000u, 0xa8000007u, 0xa8000000u, 0xa8000007u,
+                                 7u,          0u,          7u};
+    for (size_t index = 0u; index < sizeof(selectors); index++) {
+        execute(fixture, 0xf3efu, (uint16_t)(0x8000u | selectors[index]));
+        expect(fixture->state, fixture->cpu->registers[0] == expected[index],
+               "ARMv6-M MRS returns only implemented status fields");
+    }
+    fixture->cpu->xpsr = CORTEX_M4_XPSR_T;
+    fixture->cpu->control = CORTEX_M4_CONTROL_NPRIV;
+    const uint8_t privileged_selectors[] = {1u, 2u, 3u, 5u, 6u, 7u, 8u, 9u, 16u};
+    for (size_t index = 0u; index < sizeof(privileged_selectors); index++) {
+        execute(fixture, 0xf3efu, (uint16_t)(0x8000u | privileged_selectors[index]));
+        expect(fixture->state, fixture->cpu->registers[0] == 0u,
+               "unprivileged ARMv6-M MRS hides privileged registers");
+    }
+    execute(fixture, 0xf3efu, 0x8014u);
+    expect(fixture->state, fixture->cpu->registers[0] == CORTEX_M4_CONTROL_NPRIV,
+           "unprivileged ARMv6-M MRS exposes CONTROL");
+    fixture->cpu->xpsr = CORTEX_M4_XPSR_T | 3u;
+    fixture->cpu->control = CORTEX_M4_CONTROL_SPSEL;
+    fixture->cpu->registers[1] = 0u;
+    execute(fixture, 0xf381u, 0x8814u);
+    expect(fixture->state, fixture->cpu->control == CORTEX_M4_CONTROL_SPSEL,
+           "Handler-mode ARMv6-M MSR preserves CONTROL.SPSEL");
+    fixture->cpu->registers[1] = CORTEX_M4_XPSR_Q;
+    execute(fixture, 0xf381u, 0x8800u);
+    expect(fixture->state, (fixture->cpu->xpsr & CORTEX_M4_XPSR_Q) != 0u,
+           "ARMv6-M MSR writes APSR.Q");
+    expect(fixture->state,
+           cortex_m4_configure_architecture(fixture->cpu, CORTEX_M4_ARCHITECTURE_ARMV7E_M),
+           "restore ARMv7E-M architecture");
+    fixture->cpu->xpsr = CORTEX_M4_XPSR_T;
+    fixture->cpu->control = 0u;
+}
+
 static void test_immediates(Fixture* fixture) {
     execute(fixture, 0xf240u, 0x0101u);
     expect(fixture->state, fixture->cpu->registers[1] == 1u, "fixture->cpu->registers[1] == 1u");
@@ -318,6 +361,7 @@ int main(void) {
     test_branches(&fixture);
     test_branch_decode_precedence(&fixture);
     test_special_registers(&fixture);
+    test_armv6_special_registers(&fixture);
     test_immediates(&fixture);
     test_arithmetic(&fixture);
     test_memory_and_exclusive(&fixture);

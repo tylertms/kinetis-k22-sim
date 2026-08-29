@@ -238,6 +238,11 @@ test_definitions = [
     'suite': ['device', 'integration'],
   },
   {
+    'name': 'device_mkv10_complete',
+    'sources': ['device/kinetis/variants/mkv10_test.c'],
+    'suite': ['device', 'integration'],
+  },
+  {
     'name': 'device_peripheral_census',
     'sources': ['device/kinetis/variants/peripheral_census_test.c'],
     'suite': ['device', 'unit', 'integration'],

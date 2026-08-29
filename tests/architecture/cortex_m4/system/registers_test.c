@@ -35,6 +35,10 @@
 #define FPU_FPCCR 0xe000ef34u
 #define FPU_FPCAR 0xe000ef38u
 #define FPU_FPDSCR 0xe000ef3cu
+#define DWT_BASE 0xe0001000u
+#define FPB_BASE 0xe0002000u
+#define CORESIGHT_SCS_BASE 0xe000e000u
+#define CORESIGHT_ROM_BASE 0xe00ff000u
 
 typedef struct {
     uint8_t memory[SRAM_SIZE];
@@ -92,6 +96,89 @@ static uint32_t system_read(TestState* state, CortexM4* cpu, uint32_t address, u
 static CortexM4SystemAccess system_write(CortexM4* cpu, uint32_t address, uint8_t size,
                                          uint32_t value) {
     return cortex_m4_system_write(cpu, address, size, CORTEX_M4_ACCESS_DATA, value);
+}
+
+static uint32_t debug_system_read(TestState* state, CortexM4* cpu, uint32_t address) {
+    uint32_t value = 0u;
+    expect(state,
+           cortex_m4_system_read(cpu, address, 4u, CORTEX_M4_ACCESS_DEBUG, &value) ==
+               CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
+           "debug system register read is accepted");
+    return value;
+}
+
+static void test_armv6_m_discovery(TestState* state) {
+    TestBus bus = {0};
+    CortexM4 cpu = create_cpu(&bus);
+    expect(state, cortex_m4_configure_architecture(&cpu, CORTEX_M4_ARCHITECTURE_ARMV6_M),
+           "ARMv6-M architecture configures");
+    cortex_m4_system_reset(&cpu);
+
+    static const uint32_t entries[4] = {0xfff0f003u, 0xfff02003u, 0xfff03003u, 0u};
+    for (uint8_t index = 0u; index < 4u; index++)
+        expect(state, debug_system_read(state, &cpu, CORESIGHT_ROM_BASE + index * 4u) == entries[index],
+               "ARMv6-M CoreSight ROM entry matches");
+    expect(state, debug_system_read(state, &cpu, CORESIGHT_ROM_BASE + 0xfccu) == 1u,
+           "ARMv6-M CoreSight ROM reports system memory");
+
+    static const uint32_t bases[4] = {
+        CORESIGHT_SCS_BASE, DWT_BASE, FPB_BASE, CORESIGHT_ROM_BASE};
+    static const uint8_t peripheral[4][5] = {
+        {0x08u, 0xb0u, 0x0bu, 0x00u, 0x04u},
+        {0x0au, 0xb0u, 0x0bu, 0x00u, 0x04u},
+        {0x0bu, 0xb0u, 0x0bu, 0x00u, 0x04u},
+        {0xc0u, 0xb4u, 0x0bu, 0x00u, 0x04u},
+    };
+    static const uint8_t component[4][4] = {
+        {0x0du, 0xe0u, 0x05u, 0xb1u},
+        {0x0du, 0xe0u, 0x05u, 0xb1u},
+        {0x0du, 0xe0u, 0x05u, 0xb1u},
+        {0x0du, 0x10u, 0x05u, 0xb1u},
+    };
+    for (uint8_t device = 0u; device < 4u; device++) {
+        expect(state, debug_system_read(state, &cpu, bases[device] + 0xfd0u) == peripheral[device][4],
+               "ARMv6-M CoreSight PID4 matches");
+        for (uint8_t index = 0u; index < 4u; index++) {
+            expect(state,
+                   debug_system_read(state, &cpu, bases[device] + 0xfe0u + index * 4u) ==
+                       peripheral[device][index],
+                   "ARMv6-M CoreSight peripheral ID matches");
+            expect(state,
+                   debug_system_read(state, &cpu, bases[device] + 0xff0u + index * 4u) ==
+                       component[device][index],
+                   "ARMv6-M CoreSight component ID matches");
+        }
+    }
+
+    uint32_t value = 0u;
+    expect(state,
+           cortex_m4_system_read(&cpu, CORESIGHT_ROM_BASE, 4u, CORTEX_M4_ACCESS_DATA, &value) ==
+               CORTEX_M4_SYSTEM_ACCESS_REJECTED,
+           "ARMv6-M CoreSight discovery requires debug access");
+    expect(state,
+           cortex_m4_system_read(&cpu, CORESIGHT_ROM_BASE, 2u, CORTEX_M4_ACCESS_DEBUG, &value) ==
+               CORTEX_M4_SYSTEM_ACCESS_REJECTED,
+           "ARMv6-M CoreSight discovery rejects nonword reads");
+    expect(state,
+           cortex_m4_system_write(&cpu, CORESIGHT_ROM_BASE, 4u, CORTEX_M4_ACCESS_DEBUG, 0u) ==
+               CORTEX_M4_SYSTEM_ACCESS_REJECTED,
+           "ARMv6-M CoreSight discovery rejects writes");
+    expect(state,
+           cortex_m4_system_write(&cpu, SCB_VTOR, 4u, CORTEX_M4_ACCESS_DATA, 0x12345680u) ==
+               CORTEX_M4_SYSTEM_ACCESS_ACCEPTED &&
+               cpu.vtor == 0x12345600u,
+           "ARMv6-M VTOR implements bits 31 through 8");
+    cpu.irq_pending[0] = 1u;
+    cpu.irq_enabled[0] = 0u;
+    expect(state, (debug_system_read(state, &cpu, SCB_ICSR) & (1u << 22u)) != 0u,
+           "ARMv6-M ICSR reports disabled pending external interrupts");
+    cpu.irq_enabled[0] = 1u;
+    cpu.debug.halted = true;
+    expect(state, (debug_system_read(state, &cpu, SCB_ICSR) & (1u << 23u)) != 0u,
+           "ARMv6-M ICSR reports a serviceable interrupt during debug halt");
+    cpu.primask = 1u;
+    expect(state, (debug_system_read(state, &cpu, SCB_ICSR) & (1u << 23u)) == 0u,
+           "ARMv6-M ICSR excludes masked interrupts from debug return preemption");
 }
 
 static void test_registers(TestState* state, CortexM4* cpu) {
@@ -598,5 +685,6 @@ int main(void) {
     test_copy_implementation(&state);
     test_configure_implementation(&state);
     test_public_ppb_access(&state);
+    test_armv6_m_discovery(&state);
     return test_finish(&state);
 }

@@ -7,42 +7,160 @@ void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
     timing->core_clock_hz = 120000000u;
     timing->bus_clock_hz = 60000000u;
     timing->sim_scgc6 |= 1u << 22u;
-    timing->pdb_sc = 0x700du;
-    timing->pdb_mod = UINT16_MAX;
-    timing->pdb_counter = 0u;
-    timing->pdb_remainder = 0u;
-    kinetis_timing_internal_advance_pdb(timing, 10239u);
-    expect(state, timing->pdb_counter == 0u, "PDB waits for the complete divided clock period");
-    kinetis_timing_internal_advance_pdb(timing, 1u);
-    expect(state, timing->pdb_counter == 1u, "PDB preserves the exact prescaled clock ratio");
+    timing->pdb_sc[0] = 0x708cu;
+    timing->pdb_mod[0] = UINT16_MAX;
+    timing->pdb_counter[0] = 0u;
+    timing->pdb_remainder[0] = 0u;
+    timing->pdb_running[0] = true;
+    kinetis_timing_internal_advance_pdb(timing, 0u, 10239u);
+    expect(state, timing->pdb_counter[0] == 0u,
+           "PDB waits for the complete divided clock period");
+    kinetis_timing_internal_advance_pdb(timing, 0u, 1u);
+    expect(state, timing->pdb_counter[0] == 1u, "PDB preserves the exact prescaled clock ratio");
     timing->core_clock_hz = original_core_clock_hz;
     timing->bus_clock_hz = original_bus_clock_hz;
-    timing->pdb_sc = 0u;
-    timing->pdb_counter = 0u;
-    timing->pdb_remainder = 0u;
+    timing->pdb_sc[0] = 0u;
+    timing->pdb_counter[0] = 0u;
+    timing->pdb_remainder[0] = 0u;
 
     kinetis_timing_test_expect_write(state, timing, SIM_SCGC6, 4, timing->sim_scgc6 | (1u << 22u));
-    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 4u);
+    timing->pdb_sc[0] = 0x80u;
+    timing->pdb_mod[0] = 10u;
+    timing->pdb_idly[0] = 0u;
+    expect(state, kinetis_timing_trigger_pdb_input(timing, 0u),
+           "PDB accepts the software test trigger");
+    expect(state, (timing->pdb_sc[0] & (1u << 6u)) == 0u,
+           "PDB delay interrupt waits until IDLY plus one");
+    kinetis_timing_internal_advance_pdb(
+        timing, 0u,
+        kinetis_timing_test_cycles_for_ticks(timing, 1u, timing->bus_clock_hz));
+    expect(state, (timing->pdb_sc[0] & (1u << 6u)) != 0u,
+           "PDB delay interrupt asserts on the clock after IDLY");
+    timing->pdb_sc[0] = 0u;
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 10u);
     kinetis_timing_test_expect_write(state, timing, PDB_IDLY, 4, 2u);
-    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x10u, 4, 3u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x10u, 4, 0x303u);
     kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x18u, 4, 1u);
-    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x1cu, 4, 2u);
-    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x150u, 4, 2u);
-    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x154u, 4, 1u);
-    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x23u);
-    kinetis_timing_advance(timing, 2u);
-    kinetis_timing_test_expect_read(state, timing, PDB_CNT, 4, 2u);
-    kinetis_timing_test_expect_read(state, timing, PDB_SC, 4, 0x63u);
-    kinetis_timing_test_expect_read(state, timing, PDB_SC + 0x14u, 4, 3u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x1cu, 4, 4u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x150u, 4, 1u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x154u, 4, 2u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10fa3u);
+    kinetis_timing_advance(timing, 4u);
+    expect(state, observations->adc_triggers == 1u, "first delayed PDB pretrigger waits two bus cycles");
+    kinetis_timing_adc_complete(timing, 0u, 0u);
+    kinetis_timing_advance(timing, 3u);
+    kinetis_timing_test_expect_read(state, timing, PDB_CNT, 4, 7u);
+    kinetis_timing_test_expect_read(state, timing, PDB_SC, 4, 0xfe2u);
+    kinetis_timing_test_expect_read(state, timing, PDB_SC + 0x14u, 4, 0x30000u);
     expect(state, observations->adc_triggers == 2u, "observations->adc_triggers == 2u");
     expect(state, observations->dac_triggers == 1u, "observations->dac_triggers == 1u");
     expect(state, observations->last_trigger_instance == 0u,
            "observations->last_trigger_instance == 0u");
-    expect(state, observations->last_trigger_channel == 0u,
-           "observations->last_trigger_channel == 0u");
-    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x14u, 4, 3u);
+    expect(state, observations->last_trigger_channel == 1u,
+           "observations->last_trigger_channel == 1u");
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x14u, 4, 0u);
     kinetis_timing_test_expect_read(state, timing, PDB_SC + 0x14u, 4, 0u);
     expect(state, observations->irq[52], "observations->irq[52]");
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 10u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x10u, 4, 1u);
+    const uint32_t bypass_before = observations->adc_triggers;
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10f81u);
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == bypass_before,
+           "PDB bypass waits for two peripheral clocks");
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == bypass_before,
+           "PDB channel trigger follows the bypass pretrigger");
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == bypass_before + 1u,
+           "PDB bypass reaches the ADC after the channel delay");
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10f80u);
+    kinetis_timing_advance(timing, 3u);
+    kinetis_timing_test_expect_read(state, timing, PDB_SC + 0x14u, 4, 0x10001u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x14u, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x10u, 4, 0u);
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x10u, 4, 0x20103u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x18u, 4, 0u);
+    const uint32_t back_to_back_before = observations->adc_triggers;
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10f81u);
+    kinetis_timing_advance(timing, 3u);
+    expect(state, observations->adc_triggers == back_to_back_before + 1u,
+           "PDB delayed pretrigger zero uses the fixed two-cycle delay");
+    kinetis_timing_adc_complete(timing, 0u, 0u);
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == back_to_back_before + 1u,
+           "PDB back-to-back trigger waits for two peripheral clocks");
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == back_to_back_before + 1u,
+           "PDB back-to-back pretrigger precedes its channel trigger");
+    kinetis_timing_advance(timing, 1u);
+    expect(state, observations->adc_triggers == back_to_back_before + 2u,
+           "PDB back-to-back trigger follows ADC acknowledgement");
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x150u, 4, 3u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x154u, 4, 1u);
+    const uint32_t external_dac_before = observations->dac_triggers;
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10f81u);
+    kinetis_timing_advance(timing, 2u);
+    expect(state, observations->dac_triggers == external_dac_before,
+           "PDB DAC external mode bypasses the interval counter");
+    expect(state, kinetis_timing_trigger_pdb_dac_input(timing, 0u, 0u),
+           "PDB DAC external input accepts an enabled edge");
+    expect(state, observations->dac_triggers == external_dac_before + 1u,
+           "PDB DAC external input emits the trigger pulse");
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x190u, 4, 1u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x194u, 4, 0x00010003u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x10f81u);
+    kinetis_timing_advance(timing, 1u);
+    expect(state, kinetis_timing_pdb_pulse_output(timing, 0u, 0u),
+           "PDB pulse output rises at DLY1");
+    kinetis_timing_advance(timing, 2u);
+    expect(state, !kinetis_timing_pdb_pulse_output(timing, 0u, 0u),
+           "PDB pulse output falls at DLY2");
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    const uint16_t loaded_modulo = timing->pdb_mod[0];
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x80380u);
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 7u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x80381u);
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 9u);
+    kinetis_timing_test_expect_read(state, timing, PDB_MOD, 4, loaded_modulo);
+    expect(state, timing->pdb_mod[0] == loaded_modulo,
+           "trigger load mode keeps buffered values inactive until a trigger");
+    expect(state, (timing->pdb_sc[0] & 1u) != 0u, "LDOK remains set while a trigger load waits");
+    expect(state, kinetis_timing_trigger_pdb_input(timing, 3u),
+           "selected external PDB input triggers the counter");
+    expect(state, timing->pdb_mod[0] == 7u, "trigger load mode transfers the buffered modulus");
+    expect(state, (timing->pdb_sc[0] & 1u) == 0u, "trigger load clears LDOK");
+    expect(state, timing->pdb_running[0], "selected trigger starts the PDB counter");
+    kinetis_timing_advance(timing, 8u);
+    expect(state, !timing->pdb_running[0], "one-shot PDB stops after modulus overflow");
+    expect(state, timing->pdb_counter[0] == 0u, "one-shot PDB stops at zero");
+    expect(state, !kinetis_timing_trigger_pdb_input(timing, 15u),
+           "software trigger is not exposed as an external input");
+
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 5u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x81u);
+    expect(state, timing->pdb_mod[0] == 5u, "immediate load establishes the active modulus");
+    kinetis_timing_test_expect_write(state, timing, PDB_MOD, 4, 7u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x80381u);
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x80300u);
+    expect(state, timing->pdb_mod[0] == 5u,
+           "disabling PDB abandons a buffered update without loading it");
+    expect(state, (timing->pdb_sc[0] & 1u) == 0u, "disabling PDB clears LDOK");
+    kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x80380u);
+    expect(state, kinetis_timing_trigger_pdb_input(timing, 3u),
+           "PDB restarts without a new load request");
+    expect(state, timing->pdb_mod[0] == 5u,
+           "a later trigger does not load the abandoned buffered update");
     kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0x23u);
     expect(state, !observations->irq[52], "!observations->irq[52]");
 }
@@ -313,8 +431,127 @@ void kinetis_timing_test_test_ftm_clock_sources(TestState* state,
            "null FTM timing state is rejected");
 }
 
+void kinetis_timing_test_test_mkv10_ftm_dma(TestState* state) {
+    KinetisTiming timing;
+    Observations observations = {0};
+    const KinetisDeviceProfile* profile = kinetis_profile_get(KINETIS_PROFILE_MKV10Z1287);
+    expect(state,
+           kinetis_timing_init(&timing, profile, 8000000u, 32768u,
+                               kinetis_timing_test_signals(&observations)),
+           "MKV10 FTM DMA timing state initializes");
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    kinetis_timing_test_expect_write(state, &timing, SIM_SCGC6, 4u,
+                                     timing.sim_scgc6 | (1u << 6u));
+    kinetis_timing_test_expect_write(state, &timing, 0x40026008u, 4u, 2u);
+    kinetis_timing_test_expect_write(state, &timing, 0x40026030u, 4u, 1u);
+    kinetis_timing_test_expect_write(state, &timing, 0x4002602cu, 4u, 0x51u);
+    kinetis_timing_test_expect_write(state, &timing, 0x40026000u, 4u, 8u);
+    kinetis_timing_advance(&timing, 1u);
+    expect(state, observations.dma_requests == 1u,
+           "MKV10 FTM3 channel 4 requests DMA on compare");
+    expect(state, observations.last_dma == 54u,
+           "MKV10 FTM3 channel 4 uses DMA request source 54");
+    timing.ftm[3].channel_sc[4] |= 0x80u;
+    timing.ftm[3].channel_flag_read[4] = true;
+    kinetis_timing_internal_ftm_dma_complete(&timing, 54u);
+    expect(state,
+           (timing.ftm[3].channel_sc[4] & 0x80u) == 0u &&
+               !timing.ftm[3].channel_flag_read[4],
+           "FTM channel DMA completion clears its event flag");
+
+    timing.sim_scgc6 |= (1u << 24u) | (1u << 25u) | (1u << 6u) | (1u << 7u);
+    for (uint8_t instance = 0u; instance < 5u; instance++) {
+        timing.ftm[instance].counter = 0u;
+        timing.ftm[instance].modulo = 100u;
+        timing.ftm[instance].sc = 8u;
+    }
+    timing.ftm[1].registers[12] = 1u << 9u;
+    timing.ftm[4].registers[12] = 1u << 9u;
+    kinetis_timing_advance(&timing, 1u);
+    expect(state,
+           timing.ftm[0].counter == 1u && timing.ftm[1].counter == 0u &&
+               timing.ftm[3].counter == 1u && timing.ftm[4].counter == 0u,
+           "MKV10 global time-base participants wait for their group output");
+    timing.ftm[0].registers[12] = 1u << 10u;
+    timing.ftm[3].registers[12] = 1u << 10u;
+    kinetis_timing_advance(&timing, 1u);
+    expect(state,
+           timing.ftm[0].counter == 2u && timing.ftm[1].counter == 1u &&
+               timing.ftm[3].counter == 2u && timing.ftm[4].counter == 1u,
+           "MKV10 FTM0 and FTM3 release their global time-base groups");
+}
+
+static void test_ftm_dual_edge_capture(TestState* state, const KinetisDeviceProfile* profile) {
+    KinetisTiming timing;
+    Observations observations = {0};
+    expect(state,
+           kinetis_timing_init(&timing, profile, 8000000u, 32768u,
+                               kinetis_timing_test_signals(&observations)),
+           "dual-edge capture fixture initializes");
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    timing.sim_scgc6 |= 1u << 24u;
+    timing.ftm[0].registers[0] = 4u;
+    timing.ftm[0].modulo = 100u;
+    timing.ftm[0].sc = 8u;
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4u, 0x44u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C1SC, 4u, 0x48u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_COMBINE, 4u, 0x0cu);
+
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, true),
+           "dual-edge initial input rises");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state,
+           timing.ftm[0].dual_capture_first[0] == 3u &&
+               (timing.ftm[0].channel_sc[0] & 0x80u) != 0u,
+           "dual-edge initial edge enters the even capture buffer");
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, false),
+           "dual-edge final input falls");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state,
+           timing.ftm[0].channel_value[0] == 3u && timing.ftm[0].dual_capture_second[0] == 6u &&
+               (timing.ftm[0].channel_sc[1] & 0x80u) != 0u &&
+               (timing.ftm[0].registers[4] & 8u) == 0u,
+           "one-shot dual-edge capture completes and clears DECAP");
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C1V, 4u, 0u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C0V, 4u, 3u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C1V, 4u, 6u);
+
+    kinetis_timing_test_expect_write(state, &timing, FTM0_COMBINE, 4u, 0x0cu);
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, true),
+           "flagged one-shot dual-edge input rises");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state, timing.ftm[0].dual_capture_first[0] == 3u,
+           "one-shot dual-edge capture waits for both flags to clear");
+    kinetis_timing_test_expect_write(state, &timing, FTM0_STATUS, 4u, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4u, 0x54u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C1SC, 4u, 0x58u);
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, false),
+           "continuous dual-edge input returns low");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 1u, true),
+           "continuous dual-edge odd channel changes");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state, !timing.ftm[0].dual_capture_waiting_final[0],
+           "dual-edge capture ignores the odd channel input");
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, true),
+           "continuous dual-edge initial input rises");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state, kinetis_timing_set_ftm_input(&timing, 0u, 0u, false),
+           "continuous dual-edge final input falls");
+    kinetis_timing_advance(&timing, 3u);
+    expect(state,
+           (timing.ftm[0].registers[4] & 8u) != 0u &&
+               !timing.ftm[0].dual_capture_waiting_final[0],
+           "continuous dual-edge capture remains active for the next pair");
+    const uint16_t continuous_first = timing.ftm[0].channel_value[0];
+    const uint16_t continuous_second = timing.ftm[0].dual_capture_second[0];
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C0V, 4u, continuous_first);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C1V, 4u, continuous_second);
+}
+
 void kinetis_timing_test_test_ftm_input_capture(TestState* state,
                                                 const KinetisDeviceProfile* profile) {
+    test_ftm_dual_edge_capture(state, profile);
     KinetisTiming timing;
     Observations observations = {0};
     expect(state,
@@ -390,7 +627,78 @@ static void expect_ftm_output(TestState* state, const KinetisTiming* timing, boo
     expect(state, high == expected, "high == expected");
 }
 
+static void test_ftm_debug_modes(TestState* state, const KinetisDeviceProfile* profile) {
+    KinetisTiming timing;
+    Observations observations = {0};
+    expect(state,
+           kinetis_timing_init(&timing, profile, 8000000u, 32768u,
+                               kinetis_timing_test_signals(&observations)),
+           "initialize FTM debug mode fixture");
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    kinetis_timing_test_expect_write(state, &timing, SIM_SCGC6, 4u,
+                                     timing.sim_scgc6 | (1u << 24u));
+    kinetis_timing_test_expect_write(state, &timing, FTM0_MOD, 4u, 7u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0V, 4u, 3u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4u, 0x14u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4u, 8u);
+    kinetis_timing_advance(&timing, 1u);
+    kinetis_timing_set_debug_halted(&timing, true);
+    kinetis_timing_advance(&timing, 4u);
+    expect(state, timing.ftm[0].counter == 1u, "BDMMODE 00 stops the counter");
+    kinetis_timing_test_expect_write(state, &timing, FTM0_MOD, 4u, 9u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0V, 4u, 5u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNTIN, 4u, 2u);
+    expect(state,
+           timing.ftm[0].modulo == 9u && timing.ftm[0].channel_value[0] == 5u &&
+               timing.ftm[0].initial == 2u && !timing.ftm[0].modulo_pending &&
+               !timing.ftm[0].channel_value_pending[0] && !timing.ftm[0].initial_pending,
+           "stopped BDM modes bypass FTM register buffers");
+    kinetis_timing_set_debug_halted(&timing, false);
+
+    timing.ftm[0].registers[12] = 1u << 6u;
+    timing.ftm[0].registers[7] = 0u;
+    timing.ftm[0].channel_output[0] = true;
+    kinetis_timing_set_debug_halted(&timing, true);
+    expect_ftm_output(state, &timing, false);
+    timing.ftm[0].registers[7] = 1u;
+    expect_ftm_output(state, &timing, true);
+    kinetis_timing_set_debug_halted(&timing, false);
+
+    timing.ftm[0].registers[12] = 2u << 6u;
+    timing.ftm[0].registers[7] = 0u;
+    timing.ftm[0].channel_output[0] = true;
+    kinetis_timing_set_debug_halted(&timing, true);
+    timing.ftm[0].channel_output[0] = false;
+    expect_ftm_output(state, &timing, true);
+    kinetis_timing_set_debug_halted(&timing, false);
+
+    timing.ftm[0].registers[12] = 3u << 6u;
+    timing.ftm[0].counter = 0u;
+    timing.ftm[0].initial = 0u;
+    timing.ftm[0].modulo = 7u;
+    timing.ftm[0].sc = 8u;
+    kinetis_timing_set_debug_halted(&timing, true);
+    kinetis_timing_advance(&timing, 3u);
+    expect(state, timing.ftm[0].counter == 3u, "BDMMODE 11 remains fully functional");
+    kinetis_timing_set_debug_halted(&timing, false);
+
+    timing.ftm[0].registers[12] = 1u << 6u;
+    timing.ftm[0].channel_sc[0] = 4u;
+    timing.ftm[0].channel_filtered_input[0] = false;
+    timing.ftm[0].channel_input[0] = false;
+    timing.ftm[0].channel_input_age[0] = 0u;
+    kinetis_timing_set_debug_halted(&timing, true);
+    kinetis_timing_set_ftm_input(&timing, 0u, 0u, true);
+    kinetis_timing_advance(&timing, 4u);
+    expect(state,
+           timing.ftm[0].channel_value[0] == timing.ftm[0].counter &&
+               (timing.ftm[0].channel_sc[0] & 0x80u) == 0u,
+           "BDMMODE 01 captures the frozen counter without setting CHnF");
+    kinetis_timing_set_debug_halted(&timing, false);
+}
+
 void kinetis_timing_test_test_ftm_output(TestState* state, const KinetisDeviceProfile* profile) {
+    test_ftm_debug_modes(state, profile);
     KinetisTiming timing;
     Observations observations = {0};
     expect(state,

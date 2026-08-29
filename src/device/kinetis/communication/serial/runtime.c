@@ -13,7 +13,8 @@ bool kinetis_serial_read(KinetisSerial* serial, uint32_t address, uint8_t byte_c
                                                  output_value);
     KinetisSerialSpi* spi = kinetis_serial_internal_spi_at(serial, address, &register_offset);
     if (spi != NULL)
-        return kinetis_serial_internal_read_spi(spi, register_offset, byte_count, output_value);
+        return kinetis_serial_internal_read_spi(serial, spi, register_offset, byte_count,
+                                                 output_value);
     KinetisSerialI2c* i2c = kinetis_serial_internal_i2c_at(serial, address, &register_offset);
     if (i2c != NULL)
         return kinetis_serial_internal_read_i2c(serial, i2c, register_offset, byte_count,
@@ -34,7 +35,8 @@ bool kinetis_serial_write(KinetisSerial* serial, uint32_t address, uint8_t byte_
                                                   write_value);
     KinetisSerialSpi* spi = kinetis_serial_internal_spi_at(serial, address, &register_offset);
     if (spi != NULL)
-        return kinetis_serial_internal_write_spi(spi, register_offset, byte_count, write_value);
+        return kinetis_serial_internal_write_spi(serial, spi, register_offset, byte_count,
+                                                  write_value);
     KinetisSerialI2c* i2c = kinetis_serial_internal_i2c_at(serial, address, &register_offset);
     if (i2c != NULL)
         return kinetis_serial_internal_write_i2c(serial, i2c, register_offset, byte_count,
@@ -123,24 +125,70 @@ static void advance_uart(KinetisSerialUart* uart, bool is_lpuart, uint64_t cycle
     kinetis_serial_internal_refresh_uart(uart, is_lpuart);
 }
 
-static uint32_t spi_frame_cycles(const KinetisSerialSpi* spi) {
+static uint32_t spi_baud_cycles(uint32_t ctar) {
     static const uint16_t baud_scalers[16] = {2,   4,   6,    8,    16,   32,   64,    128,
                                               256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
     static const uint8_t prescalers[4] = {2, 3, 5, 7};
-    const uint16_t command = spi->transmit.metadata[spi->transmit.read_index];
-    const uint32_t ctar = spi->registers[(((command >> 12) & 7u) != 0 ? SPI_CTAR1 : SPI_CTAR0) / 4];
-    uint32_t frame_bits = ((ctar >> 27) & 0x0fu) + 1u;
     uint32_t cycles = prescalers[(ctar >> 16) & 3u] * baud_scalers[ctar & 0x0fu];
     if ((ctar & (1u << 31)) != 0 && cycles > 1)
         cycles /= 2u;
-    return cycles * frame_bits;
+    return cycles;
 }
 
-static void advance_spi(KinetisSerialSpi* spi, uint64_t cycles) {
-    while (cycles != 0 && spi->clock_enabled && spi->transmit.count != 0 &&
-           (spi->registers[SPI_MCR / 4] & 0x00004001u) == 0) {
-        if (spi->transfer_cycles == 0)
-            spi->transfer_cycles = spi_frame_cycles(spi);
+static uint32_t spi_ctar(const KinetisSerialSpi* spi, uint16_t command) {
+    return spi->registers[(((command >> 12u) & 7u) != 0u ? SPI_CTAR1 : SPI_CTAR0) / 4u];
+}
+
+static uint32_t spi_delay_cycles(uint32_t ctar, uint8_t prescaler_shift,
+                                 uint8_t scaler_shift) {
+    static const uint8_t prescalers[4] = {1u, 3u, 5u, 7u};
+    return (uint32_t)prescalers[(ctar >> prescaler_shift) & 3u]
+           << (((ctar >> scaler_shift) & 15u) + 1u);
+}
+
+static uint32_t spi_frame_cycles(const KinetisSerialSpi* spi) {
+    const uint16_t command = spi->transmit.metadata[spi->transmit.read_index];
+    const uint32_t ctar = spi_ctar(spi, command);
+    return spi_baud_cycles(ctar) * (((ctar >> 27u) & 15u) + 1u);
+}
+
+static uint32_t spi_pre_frame_cycles(const KinetisSerialSpi* spi) {
+    if ((spi->registers[SPI_MCR / 4u] & (1u << 30u)) != 0u)
+        return 0u;
+    const uint16_t command = spi->transmit.metadata[spi->transmit.read_index];
+    return spi_delay_cycles(spi_ctar(spi, command), 22u, 12u);
+}
+
+static uint32_t spi_post_frame_cycles(const KinetisSerialSpi* spi, uint16_t command) {
+    const uint32_t ctar = spi_ctar(spi, command);
+    const bool continuous_clock = (spi->registers[SPI_MCR / 4u] & (1u << 30u)) != 0u;
+    const bool continuous_select = (command & (1u << 15u)) != 0u;
+    if (continuous_clock && continuous_select)
+        return 0u;
+    const uint32_t after_sck = spi_delay_cycles(ctar, 20u, 8u);
+    if (continuous_select)
+        return after_sck;
+    const uint32_t after_transfer = continuous_clock
+                                        ? spi_baud_cycles(ctar)
+                                        : spi_delay_cycles(ctar, 18u, 4u);
+    return after_sck + after_transfer;
+}
+
+static void advance_spi(KinetisSerial* serial, KinetisSerialSpi* spi, uint64_t cycles) {
+    while (cycles != 0u && kinetis_serial_internal_spi_running(serial, spi)) {
+        if (spi->transfer_cycles == 0u && spi->transfer_delay_cycles != 0u) {
+            const uint64_t elapsed = cycles < spi->transfer_delay_cycles
+                                         ? cycles
+                                         : spi->transfer_delay_cycles;
+            cycles -= elapsed;
+            spi->transfer_delay_cycles -= (uint32_t)elapsed;
+            continue;
+        }
+        if (spi->transfer_cycles == 0u) {
+            if (spi->transmit.count == 0u)
+                break;
+            spi->transfer_cycles = spi_pre_frame_cycles(spi) + spi_frame_cycles(spi);
+        }
         uint64_t elapsed = cycles < spi->transfer_cycles ? cycles : spi->transfer_cycles;
         cycles -= elapsed;
         spi->transfer_cycles -= (uint32_t)elapsed;
@@ -153,15 +201,17 @@ static void advance_spi(KinetisSerialSpi* spi, uint64_t cycles) {
             kinetis_serial_internal_fifo_push(&spi->wire_transmit, KINETIS_SERIAL_FIFO_CAPACITY,
                                               transmitted, command);
             spi->registers[SPI_POPR / 4] = received;
-            if (!kinetis_serial_internal_fifo_push(&spi->receive, spi->fifo_depth, received, 0))
+            if (!kinetis_serial_internal_fifo_push(
+                    &spi->receive, kinetis_serial_internal_spi_receive_capacity(spi), received, 0))
                 spi->registers[SPI_SR / 4] |= 1u << 19;
             spi->registers[SPI_TCR / 4] += 1u << 16;
             spi->registers[SPI_SR / 4] |= 1u << 31;
             if ((command & (1u << 11)) != 0)
                 spi->registers[SPI_SR / 4] |= 1u << 28;
+            spi->transfer_delay_cycles = spi_post_frame_cycles(spi, command);
         }
     }
-    kinetis_serial_internal_refresh_spi(spi);
+    kinetis_serial_internal_refresh_spi(serial, spi);
 }
 
 static uint32_t i2c_transfer_cycles(const KinetisSerialI2c* i2c) {
@@ -214,13 +264,16 @@ void kinetis_serial_advance(KinetisSerial* serial, uint32_t core_cycles) {
         serial->core_clock_hz == 0u ? 0u : scaled_lpuart_cycles / serial->core_clock_hz;
     serial->lpuart_cycle_remainder =
         serial->core_clock_hz == 0u ? 0u : scaled_lpuart_cycles % serial->core_clock_hz;
-    for (size_t index = 0; index < 2; index++)
-        advance_uart(&serial->uart[index], false, serial->system_clock_running ? core_cycles : 0u);
+    const uint64_t system_cycles = serial->system_clock_running ? core_cycles : 0u;
+    const bool mkv10 = serial->profile != NULL && serial->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    advance_uart(&serial->uart[0], false, system_cycles);
+    advance_uart(&serial->uart[1], false, mkv10 ? peripheral_cycles : system_cycles);
     advance_uart(&serial->lpuart0, true, lpuart_cycles);
     for (size_t index = 2; index < 6; index++)
         advance_uart(&serial->uart[index], false, peripheral_cycles);
-    for (size_t index = 0; index < 3; index++)
-        advance_spi(&serial->spi[index], peripheral_cycles);
+    advance_spi(serial, &serial->spi[0], mkv10 ? system_cycles : peripheral_cycles);
+    for (size_t index = 1; index < 3; index++)
+        advance_spi(serial, &serial->spi[index], peripheral_cycles);
     for (size_t index = 0; index < 3; index++)
         advance_i2c(&serial->i2c[index], peripheral_cycles);
 }
@@ -260,7 +313,13 @@ void kinetis_serial_advance_endpoint(KinetisSerial* serial, KinetisSerialEndpoin
     }
     KinetisSerialSpi* spi = endpoint_spi(serial, endpoint);
     if (spi != NULL) {
-        advance_spi(spi, spi_frame_cycles(spi));
+        if (spi->transmit.count != 0u) {
+            const uint64_t cycles = spi->transfer_delay_cycles +
+                                    (spi->transfer_cycles != 0u
+                                         ? spi->transfer_cycles
+                                         : spi_pre_frame_cycles(spi) + spi_frame_cycles(spi));
+            advance_spi(serial, spi, cycles);
+        }
         return;
     }
     KinetisSerialI2c* i2c = endpoint_i2c(serial, endpoint);
@@ -289,7 +348,7 @@ bool kinetis_serial_push_receive(KinetisSerial* serial, KinetisSerialEndpoint en
     KinetisSerialI2c* i2c = endpoint_i2c(serial, endpoint);
     if (i2c == NULL || !i2c->present)
         return false;
-    if ((i2c->registers[I2C_S] & 0x40u) != 0 && !i2c->slave_transmit) {
+    if (i2c->slave_addressed && !i2c->slave_transmit) {
         if (!kinetis_serial_internal_fifo_push(&i2c->slave_receive, KINETIS_SERIAL_FIFO_CAPACITY,
                                                value, 0))
             return false;
@@ -375,9 +434,15 @@ bool kinetis_serial_i2c_detect_stop(KinetisSerial* serial, KinetisSerialEndpoint
     KinetisSerialI2c* i2c = enabled_i2c(serial, endpoint);
     if (i2c == NULL)
         return false;
-    i2c->registers[I2C_FLT] |= 0x40u;
-    if ((i2c->registers[I2C_FLT] & 0x20u) != 0u)
-        i2c->registers[I2C_S] |= 2u;
+    const bool matched_slave = i2c->slave_addressed;
+    i2c->registers[I2C_S] &= 0xdfu;
+    if (matched_slave) {
+        i2c->registers[I2C_FLT] |= 0x40u;
+        if ((i2c->registers[I2C_FLT] & 0x20u) != 0u)
+            i2c->registers[I2C_S] |= 2u;
+    }
+    i2c->slave_addressed = false;
+    i2c->slave_transmit = false;
     return true;
 }
 
@@ -392,6 +457,8 @@ bool kinetis_serial_i2c_lose_arbitration(KinetisSerial* serial, KinetisSerialEnd
     i2c->registers[I2C_C1] &= 0xdfu;
     i2c->transfer_pending = false;
     i2c->transfer_cycles = 0;
+    i2c->slave_addressed = false;
+    i2c->slave_transmit = false;
     return true;
 }
 
@@ -403,16 +470,28 @@ bool kinetis_serial_i2c_slave_address(KinetisSerial* serial, KinetisSerialEndpoi
     if (i2c == NULL || !i2c->present || !i2c->clock_enabled ||
         (i2c->registers[I2C_C1] & 0x80u) == 0)
         return false;
+    const uint8_t control = i2c->registers[I2C_C2];
     uint16_t primary_slave_address = i2c->registers[I2C_A1] >> 1;
-    primary_slave_address |= (uint16_t)(i2c->registers[I2C_C2] & 0x07u) << 7;
-    uint16_t secondary_slave_address = i2c->registers[I2C_A2] >> 1;
-    if (address != primary_slave_address && address != secondary_slave_address)
+    if ((control & 0x40u) != 0u)
+        primary_slave_address |= (uint16_t)(control & 0x07u) << 7u;
+    const uint16_t range_address = i2c->registers[I2C_RA] >> 1u;
+    const bool primary = address == primary_slave_address;
+    const bool range = (control & 8u) != 0u && range_address > primary_slave_address &&
+                       address > primary_slave_address && address <= range_address;
+    const bool general_call = (control & 0x80u) != 0u && address == 0u && !is_read;
+    const uint8_t smb = i2c->registers[I2C_SMB];
+    const bool alert = (smb & 0x40u) != 0u && address == 0x0cu && is_read;
+    const bool secondary = (smb & 0x20u) != 0u && address == (i2c->registers[I2C_A2] >> 1u);
+    if (!primary && !range && !general_call && !alert && !secondary)
         return false;
-    i2c->registers[I2C_S] |= 0x42u;
-    if (is_read)
-        i2c->registers[I2C_S] |= 0x04u;
-    else
-        i2c->registers[I2C_S] &= 0xfbu;
+    const bool extended_primary = primary && (control & 0x40u) != 0u;
+    i2c->registers[I2C_D] = !extended_primary
+                                 ? (uint8_t)((address << 1u) | is_read)
+                                 : is_read ? (uint8_t)(0xf1u | ((address >> 7u) & 6u))
+                                           : (uint8_t)address;
+    i2c->registers[I2C_S] = (i2c->registers[I2C_S] & 0xf3u) | 0xe2u |
+                             (is_read ? 4u : 0u) | (range ? 8u : 0u);
+    i2c->slave_addressed = true;
     i2c->slave_transmit = is_read;
     return true;
 }
@@ -450,11 +529,11 @@ static bool uart_irq(const KinetisSerialUart* source_uart, bool is_lpuart,
             ((status & 0x10u) != 0 && (control & 0x10u) != 0));
 }
 
-static bool spi_irq(const KinetisSerialSpi* source_spi) {
+static bool spi_irq(const KinetisSerial* serial, const KinetisSerialSpi* source_spi) {
     KinetisSerialSpi* spi = (KinetisSerialSpi*)source_spi;
     if (!spi->present || !spi->clock_enabled)
         return false;
-    kinetis_serial_internal_refresh_spi(spi);
+    kinetis_serial_internal_refresh_spi(serial, spi);
     uint32_t status = spi->registers[SPI_SR / 4];
     uint32_t enable = spi->registers[SPI_RSER / 4];
     return ((status & enable & 0xb8080000u) != 0) ||
@@ -469,11 +548,11 @@ bool kinetis_serial_irq(const KinetisSerial* serial, KinetisSerialIrq irq) {
     case KINETIS_SERIAL_IRQ_LPUART0:
         return uart_irq(&serial->lpuart0, true, false);
     case KINETIS_SERIAL_IRQ_SPI0:
-        return spi_irq(&serial->spi[0]);
+        return spi_irq(serial, &serial->spi[0]);
     case KINETIS_SERIAL_IRQ_SPI1:
-        return spi_irq(&serial->spi[1]);
+        return spi_irq(serial, &serial->spi[1]);
     case KINETIS_SERIAL_IRQ_SPI2:
-        return spi_irq(&serial->spi[2]);
+        return spi_irq(serial, &serial->spi[2]);
     case KINETIS_SERIAL_IRQ_I2C0:
     case KINETIS_SERIAL_IRQ_I2C1:
     case KINETIS_SERIAL_IRQ_I2C2: {
@@ -532,7 +611,7 @@ bool kinetis_serial_dma_request(const KinetisSerial* serial, KinetisSerialDmaReq
         KinetisSerialSpi* spi = (KinetisSerialSpi*)&serial->spi[spi_index];
         if (!spi->present || !spi->clock_enabled)
             return false;
-        kinetis_serial_internal_refresh_spi(spi);
+        kinetis_serial_internal_refresh_spi(serial, spi);
         uint32_t status_register = spi->registers[SPI_SR / 4];
         uint32_t enable_register = spi->registers[SPI_RSER / 4];
         return is_receive ? (status_register & (1u << 17)) != 0 &&

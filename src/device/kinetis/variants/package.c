@@ -57,6 +57,8 @@ static const KinetisPackageDescription packages[KINETIS_PACKAGE_COUNT] = {
 };
 
 static const KinetisPackageSelection selections[] = {
+    SELECTION(KINETIS_PROFILE_MKV10Z1287, KINETIS_PACKAGE_LH_64_LQFP, 0x001c303fu, 0x000f000fu,
+              0x00000fffu, 0x000000ffu, 0xe3ff0003u),
     SELECTION(KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_FM_32_QFN, 0x000c001fu, 0x00000003u,
               0x000000feu, 0x000000f0u, 0x030f0000u),
     SELECTION(KINETIS_PROFILE_MKV30F12810, KINETIS_PACKAGE_LF_48_LQFP, 0x000c001fu, 0x0003000fu,
@@ -259,6 +261,11 @@ bool kinetis_package_adc_input_exists(const KinetisPackageSelection* selection, 
     if (selection == NULL || instance >= 2u || (unsigned)mux >= KINETIS_ADC_MUX_COUNT ||
         channel >= 31u || (mux == KINETIS_ADC_MUX_B && (channel < 4u || channel > 7u)))
         return false;
+    if (selection->profile == KINETIS_PROFILE_MKV10Z1287) {
+        static const uint32_t inputs[2] = {0x0e007fffu, 0x0e03ffffu};
+        return mux == KINETIS_ADC_MUX_A &&
+               (inputs[instance] & (UINT32_C(1) << channel)) != 0u;
+    }
     if (selection->profile == KINETIS_PROFILE_MKV30F12810) {
         static const uint32_t inputs[3][2][KINETIS_ADC_MUX_COUNT] = {
             {{0x6c86f3ffu, 0x000000f0u}, {0x6c84033fu, 0x000000f0u}},

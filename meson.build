@@ -49,6 +49,7 @@ simulator_sources = files(
   'src/device/kinetis/memory/integrity.c',
   'src/device/kinetis/memory/runtime.c',
   'src/device/kinetis/platform/peripherals.c',
+  'src/device/kinetis/platform/mtb.c',
   'src/device/kinetis/platform/registers.c',
   'src/device/kinetis/timing/api.c',
   'src/device/kinetis/timing/clocks.c',
@@ -64,6 +65,7 @@ simulator_sources = files(
   'src/device/kinetis/variants/registers/mk22f25612.c',
   'src/device/kinetis/variants/registers/mk22f51212.c',
   'src/device/kinetis/variants/registers/mkv30f12810.c',
+  'src/device/kinetis/variants/registers/mkv10z1287.c',
 )
 
 simulator = static_library(

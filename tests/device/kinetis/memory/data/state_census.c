@@ -1,5 +1,8 @@
 #include "device/kinetis/memory/data/internal.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 typedef struct {
     uint32_t random;
     uint32_t reads;
@@ -117,9 +120,14 @@ void kinetis_data_test_test_state_census(TestState* state) {
                          (cmp << 5u) | (dac << 6u));
         mix(&census, data->dma_requests ^ data->rng_status ^ data->crc_value);
     }
-    expect(state,
-           census.reads == 19524u && census.writes == 19097u && census.signals == 66372u &&
-               census.fingerprint == UINT64_C(8595398675578996704),
-           "data state census matches");
+    const bool census_matches =
+        census.reads == 19524u && census.writes == 19140u && census.signals == 66372u &&
+        census.fingerprint == UINT64_C(10162107594302033538);
+    if (!census_matches)
+        fprintf(stderr,
+                "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.reads, census.writes, census.signals, census.fingerprint);
+    expect(state, census_matches, "data state census matches");
     kinetis_data_destroy(data);
 }

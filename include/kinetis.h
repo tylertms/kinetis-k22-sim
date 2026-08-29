@@ -12,6 +12,7 @@ typedef struct Kinetis Kinetis;
 typedef enum {
     KINETIS_PROFILE_MK22FN12810,
     KINETIS_PROFILE_MKV30F12810,
+    KINETIS_PROFILE_MKV10Z1287,
     KINETIS_PROFILE_MK22FN12812,
     KINETIS_PROFILE_MK22FN25612,
     KINETIS_PROFILE_MK22FN256CAP12,
@@ -174,6 +175,10 @@ bool kinetis_set_ftm_input(Kinetis* device, uint8_t instance, uint8_t channel, b
 bool kinetis_set_ftm_clock_input(Kinetis* device, uint8_t input_index, bool input_high);
 bool kinetis_set_ftm_fault(Kinetis* device, uint8_t instance, uint8_t input_index, bool input_high);
 bool kinetis_trigger_ftm_hardware(Kinetis* device, uint8_t instance, uint8_t trigger);
+bool kinetis_trigger_pdb_input(Kinetis* device, uint8_t input);
+bool kinetis_trigger_pdb_dac_input(Kinetis* device, uint8_t instance, uint8_t dac);
+bool kinetis_get_pdb_pulse_output(const Kinetis* device, uint8_t instance, uint8_t output,
+                                  bool* output_high);
 bool kinetis_get_ftm_output(const Kinetis* device, uint8_t instance, uint8_t channel,
                             bool* output_high);
 bool kinetis_get_dac_output(const Kinetis* device, uint8_t instance, uint16_t* output_value);
@@ -210,6 +215,7 @@ bool kinetis_flexbus_read(const Kinetis* device, size_t window_offset, void* out
                           size_t read_size);
 bool kinetis_set_usb_charger(Kinetis* device, KinetisUsbCharger charger);
 bool kinetis_set_usb_pullup(Kinetis* device, bool enabled);
+bool kinetis_set_reset_pin(Kinetis* device, bool high);
 bool kinetis_set_reset_state(Kinetis* device, uint8_t srs0, bool ackiso);
 bool kinetis_uart1_receive(Kinetis* device, uint8_t value, uint8_t status);
 bool kinetis_uart1_error(Kinetis* device, uint8_t status);

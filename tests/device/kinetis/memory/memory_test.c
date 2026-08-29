@@ -115,7 +115,7 @@ int main(void) {
     expect(&state, value == 1u, "value == 1u");
     const Census census = census_bit_band(device);
     const bool census_matches =
-        census.accepted == 32997u && census.fingerprint == UINT64_C(13541836500357080215);
+        census.accepted == 32997u && census.fingerprint == UINT64_C(16889461913195958415);
     if (!census_matches) {
         fprintf(stderr, "[census] accepted=%" PRIu64 " fingerprint=%" PRIu64 "\n", census.accepted,
                 census.fingerprint);

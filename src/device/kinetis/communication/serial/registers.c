@@ -141,6 +141,7 @@ static void reset_spi(KinetisSerialSpi* spi, const KinetisDeviceProfile* profile
     fifo_clear(&spi->wire_receive);
     fifo_clear(&spi->wire_transmit);
     spi->transfer_cycles = 0;
+    spi->transfer_delay_cycles = 0;
     spi->push_command = 0;
     spi->clock_enabled = false;
 }
@@ -157,6 +158,7 @@ static void reset_i2c(KinetisSerialI2c* i2c, const KinetisDeviceProfile* profile
     i2c->acknowledge = true;
     i2c->transfer_pending = false;
     i2c->read_pending = false;
+    i2c->slave_addressed = false;
     i2c->slave_transmit = false;
 }
 
@@ -170,6 +172,7 @@ bool kinetis_serial_init(KinetisSerial* serial, const KinetisDeviceProfile* prof
     serial->lpuart_clock_hz = profile->cpu.maximum_core_clock_hz;
     serial->system_clock_running = true;
     serial->bus_clock_running = true;
+    serial->debug_halted = false;
     configure_uart(&serial->lpuart0, profile, KINETIS_PERIPHERAL_LPUART0, 1);
     configure_uart(&serial->uart[0], profile, KINETIS_PERIPHERAL_UART0, 8);
     configure_uart(&serial->uart[1], profile, KINETIS_PERIPHERAL_UART1, 1);
@@ -232,6 +235,11 @@ void kinetis_serial_set_clock_domains(KinetisSerial* serial, bool system_clock_r
         return;
     serial->system_clock_running = system_clock_running;
     serial->bus_clock_running = bus_clock_running;
+}
+
+void kinetis_serial_set_debug_halted(KinetisSerial* serial, bool halted) {
+    if (serial != NULL)
+        serial->debug_halted = halted;
 }
 
 static KinetisSerialUart* find_uart_by_peripheral(KinetisSerial* serial,
@@ -355,12 +363,28 @@ void kinetis_serial_internal_refresh_uart(KinetisSerialUart* uart, bool lpuart) 
     uart->registers[UART_TCFIFO] = (uint8_t)uart->transmit.count;
 }
 
-void kinetis_serial_internal_refresh_spi(KinetisSerialSpi* spi) {
+uint8_t kinetis_serial_internal_spi_transmit_capacity(const KinetisSerialSpi* spi) {
+    return (spi->registers[SPI_MCR / 4] & (1u << 13)) != 0u ? 1u : spi->fifo_depth;
+}
+
+uint8_t kinetis_serial_internal_spi_receive_capacity(const KinetisSerialSpi* spi) {
+    return (spi->registers[SPI_MCR / 4] & (1u << 12)) != 0u ? 1u : spi->fifo_depth;
+}
+
+bool kinetis_serial_internal_spi_running(const KinetisSerial* serial,
+                                         const KinetisSerialSpi* spi) {
+    const uint32_t mode = spi->registers[SPI_MCR / 4];
+    const uint32_t status = spi->registers[SPI_SR / 4];
+    return spi->clock_enabled && (mode & 0x00004001u) == 0u && (status & (1u << 28)) == 0u &&
+           (!serial->debug_halted || (mode & (1u << 27)) == 0u);
+}
+
+void kinetis_serial_internal_refresh_spi(const KinetisSerial* serial, KinetisSerialSpi* spi) {
     uint32_t status = spi->registers[SPI_SR / 4];
     status &= ~0x0000f0f0u;
     status |= (uint32_t)(spi->transmit.count & 0x0fu) << 12;
     status |= (uint32_t)(spi->receive.count & 0x0fu) << 4;
-    if (spi->transmit.count < spi->fifo_depth)
+    if (spi->transmit.count < kinetis_serial_internal_spi_transmit_capacity(spi))
         status |= 1u << 25;
     else
         status &= ~(1u << 25);
@@ -368,7 +392,7 @@ void kinetis_serial_internal_refresh_spi(KinetisSerialSpi* spi) {
         status |= 1u << 17;
     else
         status &= ~(1u << 17);
-    if (spi->transfer_cycles != 0)
+    if (kinetis_serial_internal_spi_running(serial, spi))
         status |= 1u << 30;
     else
         status &= ~(1u << 30);
@@ -481,11 +505,12 @@ bool kinetis_serial_internal_write_uart(KinetisSerialUart* uart, bool lpuart,
     return true;
 }
 
-bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_offset,
+bool kinetis_serial_internal_read_spi(KinetisSerial* serial, KinetisSerialSpi* spi,
+                                      uint32_t register_offset,
                                       uint8_t byte_count, uint32_t* output_value) {
     if (!spi->clock_enabled)
         return false;
-    kinetis_serial_internal_refresh_spi(spi);
+    kinetis_serial_internal_refresh_spi(serial, spi);
     if (register_offset == SPI_PUSHR && byte_count == 4u) {
         if (spi->transmit.count != 0) {
             uint16_t index = spi->transmit.read_index;
@@ -504,7 +529,7 @@ bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_o
             spi->registers[SPI_SR / 4] |= 1u << 19;
             *output_value = spi->registers[SPI_POPR / 4] & (UINT32_MAX >> ((4u - byte_count) * 8u));
         }
-        kinetis_serial_internal_refresh_spi(spi);
+        kinetis_serial_internal_refresh_spi(serial, spi);
         return true;
     }
     if (byte_count != 4u || (register_offset & 3u) != 0u)
@@ -513,7 +538,8 @@ bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_o
     return true;
 }
 
-bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_offset,
+bool kinetis_serial_internal_write_spi(KinetisSerial* serial, KinetisSerialSpi* spi,
+                                       uint32_t register_offset,
                                        uint8_t byte_count, uint32_t write_value) {
     if (!spi->clock_enabled)
         return false;
@@ -524,7 +550,7 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
                                 register_offset <= SPI_PUSHR + 3u && byte_count == 1u);
     if ((push_data_access || push_command_access) &&
         (spi->registers[SPI_MCR / 4] & (1u << 14)) != 0u) {
-        kinetis_serial_internal_refresh_spi(spi);
+        kinetis_serial_internal_refresh_spi(serial, spi);
         return true;
     }
     bool master = (spi->registers[SPI_MCR / 4] & (1u << 31)) != 0u;
@@ -543,8 +569,9 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
             spi->push_command = (uint16_t)(write_value >> 16);
         uint16_t command = master ? spi->push_command : 0u;
         spi->registers[SPI_PUSHR / 4] = ((uint32_t)command << 16) | (uint16_t)write_value;
-        if (!kinetis_serial_internal_fifo_push(&spi->transmit, spi->fifo_depth,
-                                               (uint16_t)write_value, command))
+        if (!kinetis_serial_internal_fifo_push(
+                &spi->transmit, kinetis_serial_internal_spi_transmit_capacity(spi),
+                (uint16_t)write_value, command))
             spi->registers[SPI_SR / 4] |= 1u << 27;
     } else if (byte_count != 4u || (register_offset & 3u) != 0u) {
         return false;
@@ -560,7 +587,7 @@ bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_
     } else {
         spi->registers[register_offset / 4] = write_value;
     }
-    kinetis_serial_internal_refresh_spi(spi);
+    kinetis_serial_internal_refresh_spi(serial, spi);
     return true;
 }
 
@@ -576,6 +603,8 @@ bool kinetis_serial_internal_read_i2c(KinetisSerial* serial, KinetisSerialI2c* i
         return false;
     if (register_offset == I2C_D) {
         *output_value = i2c->registers[I2C_D];
+        if ((i2c->registers[I2C_C1] & 0x10u) == 0u)
+            i2c->registers[I2C_S] &= 0x7fu;
         if ((i2c->registers[I2C_C1] & 0x30u) == 0) {
             if (i2c->slave_receive.count != 0)
                 kinetis_serial_internal_fifo_pop(&i2c->slave_receive, NULL, NULL);
@@ -597,11 +626,16 @@ static void latch_i2c_detection_interrupt(KinetisSerialI2c* i2c) {
 }
 
 static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
+    const bool matched_slave = i2c->slave_addressed;
     i2c->registers[I2C_S] &= 0xdfu;
-    i2c->registers[I2C_FLT] |= 0x40u;
-    latch_i2c_detection_interrupt(i2c);
+    if (matched_slave) {
+        i2c->registers[I2C_FLT] |= 0x40u;
+        latch_i2c_detection_interrupt(i2c);
+    }
     i2c->transfer_pending = false;
     i2c->transfer_cycles = 0;
+    i2c->slave_addressed = false;
+    i2c->slave_transmit = false;
     push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
 }
 
@@ -613,6 +647,7 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
     const uint8_t register_value = (uint8_t)write_value;
     if (register_offset == I2C_C1) {
         const uint8_t previous_control = i2c->registers[I2C_C1];
+        i2c->registers[I2C_S] &= 0xb7u;
         i2c->registers[I2C_C1] = register_value & 0xfbu;
         if ((register_value & 0x80u) == 0) {
             if ((previous_control & 0x20u) != 0 || (i2c->registers[I2C_S] & 0x20u) != 0)
@@ -622,6 +657,8 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
                 i2c->transfer_cycles = 0;
             }
             i2c->registers[I2C_S] = 0;
+            i2c->slave_addressed = false;
+            i2c->slave_transmit = false;
         } else if ((register_value & 0x20u) != 0 && (previous_control & 0x20u) == 0) {
             i2c->registers[I2C_S] |= 0x20u;
             i2c->registers[I2C_FLT] |= 0x10u;
@@ -633,6 +670,10 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
             latch_i2c_detection_interrupt(i2c);
             push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_REPEATED_START,
                        0);
+        } else if ((register_value & 0x04u) != 0 && (register_value & 0x20u) == 0) {
+            i2c->registers[I2C_S] = (i2c->registers[I2C_S] | 0x12u) & 0xdfu;
+            i2c->transfer_pending = false;
+            i2c->transfer_cycles = 0;
         } else if ((register_value & 0x20u) == 0 && (previous_control & 0x20u) != 0) {
             i2c_stop(serial, i2c);
         }
@@ -645,6 +686,8 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
         latch_i2c_detection_interrupt(i2c);
     } else if (register_offset == I2C_D) {
         i2c->registers[I2C_D] = register_value;
+        if ((i2c->registers[I2C_C1] & 0x10u) != 0u)
+            i2c->registers[I2C_S] &= 0x7fu;
         if ((i2c->registers[I2C_C1] & 0x30u) == 0x30u) {
             i2c->pending_value = register_value;
             i2c->read_pending = false;
@@ -657,6 +700,13 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
             kinetis_serial_internal_fifo_push(&i2c->slave_transmit_fifo,
                                               KINETIS_SERIAL_FIFO_CAPACITY, register_value, 0);
         }
+    } else if (register_offset == I2C_SMB) {
+        i2c->registers[I2C_SMB] = (register_value & 0xf1u) |
+                                  (i2c->registers[I2C_SMB] & 4u) |
+                                  (i2c->registers[I2C_SMB] & 0x0au & ~register_value);
+    } else if (register_offset == I2C_A1 || register_offset == I2C_RA ||
+               register_offset == I2C_A2) {
+        i2c->registers[register_offset] = register_value & 0xfeu;
     } else {
         i2c->registers[register_offset] = register_value;
     }

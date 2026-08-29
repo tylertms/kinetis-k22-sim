@@ -10,6 +10,8 @@ const KinetisRegisterManifest* kinetis_register_manifest_get(KinetisProfile prof
         return kinetis_mk22fn12810_register_manifest();
     case KINETIS_PROFILE_MKV30F12810:
         return kinetis_mkv30f12810_register_manifest();
+    case KINETIS_PROFILE_MKV10Z1287:
+        return kinetis_mkv10z1287_register_manifest();
     case KINETIS_PROFILE_MK22FN12812:
         return kinetis_mk22fn12812_register_manifest();
     case KINETIS_PROFILE_MK22FN25612:

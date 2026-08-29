@@ -68,7 +68,8 @@ static void randomize_state(KinetisTiming* timing, RegisterStateCensus* census, 
         timing->mcg[index] = (uint8_t)next_random(census);
     timing->osc_cr = (uint8_t)random;
     timing->osc_div = (uint8_t)second;
-    for (uint8_t index = 0u; index < sizeof(timing->llwu); index++)
+    const uint8_t llwu_count = timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 16u : 11u;
+    for (uint8_t index = 0u; index < llwu_count; index++)
         timing->llwu[index] = (uint8_t)next_random(census);
     for (uint8_t index = 0u; index < sizeof(timing->pmc); index++)
         timing->pmc[index] = (uint8_t)next_random(census);
@@ -108,12 +109,12 @@ static void randomize_state(KinetisTiming* timing, RegisterStateCensus* census, 
     timing->rtc_rar = next_random(census);
     timing->rtc_remainder = random & 0xffffu;
     timing->rtc_subsecond_ticks = second & 0xffffu;
-    timing->pdb_sc = random;
-    timing->pdb_mod = (uint16_t)second;
-    timing->pdb_counter = (uint16_t)next_random(census);
-    timing->pdb_idly = (uint16_t)next_random(census);
-    timing->pdb_registers[(random >> 16u) % 104u] = second;
-    timing->pdb_remainder = random & 0xffffu;
+    timing->pdb_sc[0] = random;
+    timing->pdb_mod[0] = (uint16_t)second;
+    timing->pdb_counter[0] = (uint16_t)next_random(census);
+    timing->pdb_idly[0] = (uint16_t)next_random(census);
+    timing->pdb_registers[0][(random >> 16u) % 104u] = second;
+    timing->pdb_remainder[0] = random & 0xffffu;
 }
 
 int main(void) {
@@ -140,10 +141,10 @@ int main(void) {
         mix(&census, value);
         mix(&census, read | (written << 1u));
         mix(&census,
-            timing.pit[0].current ^ timing.lptmr_counter ^ timing.rtc_tsr ^ timing.pdb_counter);
+            timing.pit[0].current ^ timing.lptmr_counter ^ timing.rtc_tsr ^ timing.pdb_counter[0]);
     }
-    const bool census_matches = census.reads == 9044u && census.writes == 12043u &&
-                                census.fingerprint == UINT64_C(4415701068765923762);
+    const bool census_matches = census.reads == 8723u && census.writes == 11722u &&
+                                census.fingerprint == UINT64_C(17341850400685714190);
     if (!census_matches) {
         fprintf(stderr, "[census] reads=%" PRIu32 " writes=%" PRIu32 " fingerprint=%" PRIu64 "\n",
                 census.reads, census.writes, census.fingerprint);

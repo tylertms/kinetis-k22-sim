@@ -27,16 +27,19 @@ static void reset_signal(void* context, uint8_t srs0, uint8_t srs1) {
 }
 
 static void trigger_signal(void* context, KinetisTimingTrigger trigger, uint8_t instance,
-                           uint8_t channel) {
+                           uint8_t channel, uint8_t source_instance) {
     Observations* observations = context;
     if (trigger == KINETIS_TIMING_TRIGGER_PDB_ADC)
         observations->adc_triggers++;
     else if (trigger == KINETIS_TIMING_TRIGGER_PDB_DAC)
         observations->dac_triggers++;
-    else
+    else if (trigger == KINETIS_TIMING_TRIGGER_ADC_ALTERNATE)
         observations->alternate_triggers++;
+    else
+        observations->pdb_ftm_triggers++;
     observations->last_trigger_instance = instance;
     observations->last_trigger_channel = channel;
+    observations->last_trigger_source = source_instance;
 }
 
 KinetisTimingSignals kinetis_timing_test_signals(Observations* observations) {
@@ -95,11 +98,11 @@ void kinetis_timing_test_disable_watchdog_fixture(KinetisTiming* timing) {
 
 void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
     static const uint32_t expected_fcfg1[KINETIS_PROFILE_COUNT] = {
-        0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u, 0x0f0f0f00u,
+        0x0f0f0f00u, 0x0f0f0f00u, 0x07000000u, 0x0f0f0f00u, 0x0f0f0f00u,
         0x090f0f00u, 0x0f0f0f00u, 0xff0f0f00u, 0xff0f0f00u,
     };
     static const uint32_t expected_fcfg2[KINETIS_PROFILE_COUNT] = {
-        0x10000000u, 0x10800000u, 0x10000000u, 0x20000000u,
+        0x10000000u, 0x10800000u, 0x10800000u, 0x10000000u, 0x20000000u,
         0x20000000u, 0x20200000u, 0x40c00000u, 0x40100000u,
     };
     for (KinetisProfile id = 0; id < KINETIS_PROFILE_COUNT; id++) {
@@ -124,9 +127,13 @@ void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
             expect(state, !kinetis_timing_write(&timing, SIM_SCGC3, 4, 0u),
                    "profile without SCGC3 rejects the register");
         kinetis_timing_test_expect_read(state, &timing, RCM_SRS0, 1, 0x82u);
-        kinetis_timing_test_expect_read(
-            state, &timing, 0x40037000u, 4,
-            id == KINETIS_PROFILE_MK22FN1M012 || id == KINETIS_PROFILE_MK22FX51212 ? 2u : 6u);
+        if (kinetis_profile_has_peripheral(profile, KINETIS_PERIPHERAL_PIT))
+            kinetis_timing_test_expect_read(
+                state, &timing, 0x40037000u, 4,
+                id == KINETIS_PROFILE_MK22FN1M012 || id == KINETIS_PROFILE_MK22FX51212 ? 2u : 6u);
+        else
+            expect(state, !kinetis_timing_read(&timing, 0x40037000u, 4, &(uint32_t){0}),
+                   "profile without PIT rejects the register");
         if (kinetis_profile_has_peripheral(profile, KINETIS_PERIPHERAL_RTC))
             kinetis_timing_test_expect_read(state, &timing, 0x4003d014u, 4, 1u);
         else
@@ -135,8 +142,10 @@ void kinetis_timing_test_test_profiles_and_reset(TestState* state) {
         kinetis_timing_test_expect_read(state, &timing, 0x40052000u, 2, 0x01d3u);
         expect(state, kinetis_timing_core_clock_hz(&timing) == 20971520u,
                "kinetis_timing_core_clock_hz(&timing) == 20971520u");
-        expect(state, kinetis_timing_bus_clock_hz(&timing) == 20971520u,
-               "kinetis_timing_bus_clock_hz(&timing) == 20971520u");
+        expect(state,
+               kinetis_timing_bus_clock_hz(&timing) ==
+                   (id == KINETIS_PROFILE_MKV10Z1287 ? 10485760u : 20971520u),
+               "reset bus clock matches the device clock tree");
         expect(state, !kinetis_timing_read(&timing, MCG_S + 1u, 1, &(uint32_t){0}),
                "!kinetis_timing_read(&timing, MCG_S + 1u, 1, &(uint32_t){0})");
         expect(state, !kinetis_timing_read(&timing, SIM_SDID, 1, &(uint32_t){0}),
@@ -177,19 +186,20 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
     expect(state, stopped.pit[0].current == 8u, "PIT runs in partial Stop 2");
 
     stopped.sim_scgc6 |= (1u << 22u) | (1u << 24u);
-    stopped.pdb_sc = 1u;
-    stopped.pdb_mod = 9u;
-    stopped.pdb_counter = 0u;
+    stopped.pdb_sc[0] = 0x80u;
+    stopped.pdb_mod[0] = 9u;
+    stopped.pdb_counter[0] = 0u;
+    stopped.pdb_running[0] = true;
     stopped.ftm[0].sc = 8u;
     stopped.ftm[0].modulo = 9u;
     stopped.ftm[0].counter = 0u;
     stopped.smc[2] = 0u;
     kinetis_timing_advance(&stopped, 1u);
-    expect(state, stopped.pdb_counter == 0u, "PDB stops with the bus clock");
+    expect(state, stopped.pdb_counter[0] == 0u, "PDB stops with the bus clock");
     expect(state, stopped.ftm[0].counter == 0u, "FTM stops with the bus clock");
     stopped.smc[2] = 2u << 6u;
     kinetis_timing_advance(&stopped, 1u);
-    expect(state, stopped.pdb_counter == 1u, "PDB runs in partial Stop 2");
+    expect(state, stopped.pdb_counter[0] == 1u, "PDB runs in partial Stop 2");
     expect(state, stopped.ftm[0].counter == 1u, "FTM runs in partial Stop 2");
 
     stopped.lptmr_psr = 5u;

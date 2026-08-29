@@ -16,7 +16,8 @@ void kinetis_timing_internal_signal_reset(KinetisTiming* timing, uint8_t srs0, u
 static void update_watchdog_interrupt(const KinetisTiming* timing) {
     const bool watchdog_interrupt_enabled = (timing->wdog[1] & 0x8000u) != 0u;
     const bool external_monitor_asserted = timing->ewm_output && (timing->ewm_ctrl & 8u) != 0u;
-    kinetis_timing_internal_set_irq(timing, IRQ_WDOG_EWM,
+    kinetis_timing_internal_set_irq(
+        timing, kinetis_timing_internal_profile_irq(timing, IRQ_WDOG_EWM, 23u),
                                     watchdog_interrupt_enabled || external_monitor_asserted);
 }
 
@@ -101,8 +102,12 @@ static bool is_watchdog_running(const KinetisTiming* timing) {
         return false;
     if (!timing->cpu_sleeping)
         return true;
-    if (timing->deep_sleeping)
+    if (timing->deep_sleeping) {
+        if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+            kinetis_timing_power_status(timing) == 0x40u)
+            return false;
         return (timing->wdog[0] & 0x40u) != 0u;
+    }
     return (timing->wdog[0] & 0x80u) != 0u;
 }
 
@@ -141,8 +146,12 @@ void kinetis_timing_internal_advance_wdog(KinetisTiming* timing, uint32_t cycles
         (update_was_open && !timing->wdog_update_open) || !is_watchdog_running(timing))
         return;
     const bool is_test_mode = (timing->wdog[0] & 0x4400u) == 0x0400u;
+    const uint32_t default_clock_hz =
+        timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && (timing->sim_wdogc & 2u) != 0u
+            ? kinetis_timing_internal_mcgir_clock_hz(timing)
+            : kinetis_timing_internal_lpo_clock_hz(timing);
     const uint32_t source_hz =
-        is_test_mode || (timing->wdog[0] & (1u << 13u)) != 0u ? bus_clock_hz : timing->lpo_hz;
+        is_test_mode || (timing->wdog[0] & 2u) != 0u ? bus_clock_hz : default_clock_hz;
     const uint32_t divider = ((timing->wdog[11] & 0x700u) >> 8u) + 1u;
     const uint64_t elapsed_watchdog_ticks = kinetis_timing_internal_clock_ticks(
         &timing->wdog_remainder, cycles, source_hz / divider, timing->core_clock_hz);
@@ -157,10 +166,15 @@ static void trigger_ewm_output(KinetisTiming* timing) {
 }
 
 void kinetis_timing_internal_advance_ewm(KinetisTiming* timing, uint32_t cycles) {
+    const bool clock_stopped = timing->profile->id == KINETIS_PROFILE_MKV10Z1287
+                                   ? timing->deep_sleeping
+                                   : timing->cpu_sleeping;
     if (!kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_EWM) ||
-        (timing->ewm_ctrl & 1u) == 0u || timing->ewm_output || timing->cpu_sleeping)
+        (timing->ewm_ctrl & 1u) == 0u || timing->ewm_output || clock_stopped)
         return;
-    const uint32_t source_hz = timing->lpo_hz / ((uint32_t)timing->ewm_prescaler + 1u);
+    const uint32_t source_hz =
+        kinetis_timing_internal_lpo_clock_hz(timing) /
+        ((uint32_t)timing->ewm_prescaler + 1u);
     const uint64_t ticks = kinetis_timing_internal_clock_ticks(&timing->ewm_remainder, cycles,
                                                                source_hz, timing->core_clock_hz);
     const uint32_t increment = ticks > UINT32_MAX ? UINT32_MAX : (uint32_t)ticks;
@@ -453,6 +467,11 @@ bool kinetis_timing_internal_ftm_read(KinetisTiming* timing, uint8_t instance, u
                 ftm->channel_flag_read[channel] = true;
         } else {
             *output_value = ftm->channel_value[channel];
+            const uint8_t first = channel & 0xfeu;
+            const uint8_t shift = (uint8_t)((channel / 2u) * 8u);
+            if (channel == first && (ftm->sc & (1u << 5u)) == 0u &&
+                ((ftm->registers[4] >> shift) & 5u) == 4u)
+                ftm->channel_value[first + 1u] = ftm->dual_capture_second[first / 2u];
         }
     } else if (offset == 0x4cu)
         *output_value = ftm->initial;

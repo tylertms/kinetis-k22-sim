@@ -71,7 +71,7 @@ typedef struct {
     uint32_t can[0x8c0 / 4];
     uint32_t i2s[0x108 / 4];
     uint32_t flexbus[0x64 / 4];
-    uint32_t mcm[0x3c / 4];
+    uint32_t mcm[0x44 / 4];
     uint32_t sysmpu[0x830 / 4];
     uint32_t i2s_receive_fifo[KINETIS_IO_FIFO_CAPACITY];
     uint32_t i2s_transmit_fifo[KINETIS_IO_FIFO_CAPACITY];

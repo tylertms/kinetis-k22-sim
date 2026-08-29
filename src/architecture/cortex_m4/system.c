@@ -4,6 +4,7 @@
 
 #define PPB_START 0xe0000000u
 #define PPB_END 0xe0100000u
+#define ACTLR 0xe000e008u
 #define ICTR 0xe000e004u
 #define SYST_CSR 0xe000e010u
 #define SYST_RVR 0xe000e014u
@@ -39,6 +40,8 @@
 #define FPU_MVFR0 0xe000ef40u
 #define FPU_MVFR1 0xe000ef44u
 #define FPU_MVFR2 0xe000ef48u
+#define CORESIGHT_ROM_BASE 0xe00ff000u
+#define CORESIGHT_SCS_BASE 0xe000e000u
 #define FPCCR_ASPEN (1u << 31)
 #define FPCCR_LSPEN (1u << 30)
 #define FPCCR_THREAD (1u << 3)
@@ -56,6 +59,28 @@ static bool valid_system_access(uint32_t address, uint8_t size) {
     return (address >= SCB_SHPR && address + size <= SCB_SHPR + 12u) ||
            (address >= SCB_CFSR && address + size <= SCB_CFSR + 4u) ||
            (address >= NVIC_IPR && address + size <= NVIC_IPR + CORTEX_M4_IRQ_COUNT);
+}
+
+static bool armv6_m_system_register(const CortexM4* cpu, uint32_t address, uint8_t size) {
+    if (cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+        return true;
+    }
+    const uint32_t aligned = address & ~3u;
+    if (aligned == ACTLR || (aligned >= SYST_CSR && aligned <= SYST_CALIB) ||
+        aligned == SCB_CPUID || aligned == SCB_ICSR || aligned == SCB_VTOR ||
+        aligned == SCB_AIRCR || aligned == SCB_SCR || aligned == SCB_CCR ||
+        aligned == SCB_SHCSR || aligned == SCB_DFSR) {
+        return true;
+    }
+    if ((aligned == NVIC_ISER || aligned == NVIC_ICER || aligned == NVIC_ISPR ||
+         aligned == NVIC_ICPR) &&
+        size <= 4u) {
+        return true;
+    }
+    if (address >= NVIC_IPR && address + size <= NVIC_IPR + cpu->external_irq_count) {
+        return true;
+    }
+    return address >= SCB_SHPR + 4u && address + size <= SCB_SHPR + 12u;
 }
 
 static bool is_privileged_access(const CortexM4* cpu, CortexM4Access access) {
@@ -208,6 +233,14 @@ static bool has_enabled_external_pending(const CortexM4* cpu) {
     return false;
 }
 
+static bool has_external_pending(const CortexM4* cpu) {
+    for (uint8_t word_index = 0u; word_index < external_irq_word_count(cpu); word_index++) {
+        if (cpu->irq_pending[word_index] != 0u)
+            return true;
+    }
+    return false;
+}
+
 static bool has_wakeup_pending(const CortexM4* cpu) {
     return cpu->system_pending != 0 || has_enabled_external_pending(cpu);
 }
@@ -325,12 +358,18 @@ static bool configurable_system_exception(uint8_t exception) {
            exception == 12 || exception == 14 || exception == 15;
 }
 
+static bool configurable_system_exception_for_cpu(const CortexM4* cpu, uint8_t exception) {
+    return cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+               ? exception == 11u || exception == 14u || exception == 15u
+               : configurable_system_exception(exception);
+}
+
 static uint32_t read_system_priority(const CortexM4* cpu, uint32_t byte_offset,
                                      uint8_t byte_count) {
     uint32_t priority_value = 0;
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
         const uint8_t exception = (uint8_t)(byte_offset + byte_index + 4u);
-        if (configurable_system_exception(exception)) {
+        if (configurable_system_exception_for_cpu(cpu, exception)) {
             priority_value |= (uint32_t)cpu->system_priority[byte_offset + byte_index]
                               << (byte_index * 8u);
         }
@@ -343,7 +382,7 @@ static void write_system_priority(CortexM4* cpu, uint32_t byte_offset, uint8_t b
     const uint8_t priority_mask = (uint8_t)(0xffu << (8u - cpu->priority_bits));
     for (uint8_t byte_index = 0; byte_index < byte_count; byte_index++) {
         const uint8_t exception = (uint8_t)(byte_offset + byte_index + 4u);
-        if (configurable_system_exception(exception)) {
+        if (configurable_system_exception_for_cpu(cpu, exception)) {
             cpu->system_priority[byte_offset + byte_index] =
                 (uint8_t)(priority_value >> (byte_index * 8u)) & priority_mask;
         }
@@ -354,6 +393,50 @@ static CortexM4SystemAccess accepted_read(uint32_t register_value, uint32_t addr
                                           uint32_t* output_value) {
     *output_value = read_partial_register(register_value, address, size);
     return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
+}
+
+static bool armv6_m_component_id(uint32_t offset, const uint8_t peripheral[5],
+                                 const uint8_t component[4], uint32_t* value) {
+    if (offset == 0xfd0u) {
+        *value = peripheral[4];
+        return true;
+    }
+    if (offset >= 0xfd4u && offset <= 0xfdcu && (offset & 3u) == 0u) {
+        *value = 0u;
+        return true;
+    }
+    if (offset >= 0xfe0u && offset <= 0xfecu && (offset & 3u) == 0u) {
+        *value = peripheral[(offset - 0xfe0u) / 4u];
+        return true;
+    }
+    if (offset >= 0xff0u && offset <= 0xffcu && (offset & 3u) == 0u) {
+        *value = component[(offset - 0xff0u) / 4u];
+        return true;
+    }
+    return false;
+}
+
+static bool armv6_m_discovery_read(uint32_t address, uint32_t* value) {
+    static const uint8_t scs_peripheral[5] = {0x08u, 0xb0u, 0x0bu, 0x00u, 0x04u};
+    static const uint8_t scs_component[4] = {0x0du, 0xe0u, 0x05u, 0xb1u};
+    static const uint8_t rom_peripheral[5] = {0xc0u, 0xb4u, 0x0bu, 0x00u, 0x04u};
+    static const uint8_t rom_component[4] = {0x0du, 0x10u, 0x05u, 0xb1u};
+    if (address >= CORESIGHT_SCS_BASE + 0xfd0u && address < CORESIGHT_SCS_BASE + 0x1000u)
+        return armv6_m_component_id(address - CORESIGHT_SCS_BASE, scs_peripheral, scs_component,
+                                    value);
+    if (address < CORESIGHT_ROM_BASE || address >= CORESIGHT_ROM_BASE + 0x1000u)
+        return false;
+    const uint32_t offset = address - CORESIGHT_ROM_BASE;
+    static const uint32_t entries[4] = {0xfff0f003u, 0xfff02003u, 0xfff03003u, 0u};
+    if (offset < sizeof(entries)) {
+        *value = entries[offset / 4u];
+        return true;
+    }
+    if (offset == 0xfccu) {
+        *value = 1u;
+        return true;
+    }
+    return armv6_m_component_id(offset, rom_peripheral, rom_component, value);
 }
 
 CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint8_t size,
@@ -367,7 +450,18 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
     if (cpu == NULL || output_value == NULL) {
         return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     }
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+        (size != 4u || (address & 3u) != 0u))
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
+    uint32_t discovery_value = 0u;
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+        access == CORTEX_M4_ACCESS_DEBUG &&
+        armv6_m_discovery_read(address, &discovery_value))
+        return accepted_read(discovery_value, address, size, output_value);
     if (cortex_m4_debug_address(address)) {
+        if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+            access != CORTEX_M4_ACCESS_DEBUG)
+            return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
         if (!debug_access_permitted(cpu, address, access)) {
             return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
         }
@@ -377,6 +471,15 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
         return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     }
     const uint32_t aligned = address & ~3u;
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+        (aligned == SCB_SHCSR || aligned == SCB_DFSR) && access != CORTEX_M4_ACCESS_DEBUG)
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
+    if (!armv6_m_system_register(cpu, address, size)) {
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
+    }
+    if (aligned == ACTLR) {
+        return accepted_read(0u, address, size, output_value);
+    }
     if (aligned == ICTR) {
         return accepted_read((cpu->external_irq_count - 1u) / 32u, address, size, output_value);
     }
@@ -424,18 +527,21 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_CPUID) {
-        return accepted_read(0x410fc241u, address, size, output_value);
+        return accepted_read(cpu->cpuid, address, size, output_value);
     }
     if (aligned == SCB_ICSR) {
         const uint16_t pending = pending_vector(cpu);
         uint32_t icsr_value = cpu->xpsr & 0x1ffu;
         icsr_value |= (uint32_t)pending << 12;
-        if (cpu->exception_depth <= 1) {
+        if (cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M && cpu->exception_depth <= 1) {
             icsr_value |= 1u << 11;
         }
-        if (has_enabled_external_pending(cpu)) {
+        if (has_external_pending(cpu)) {
             icsr_value |= 1u << 22;
         }
+        if (cpu->debug.halted && pending != 0u &&
+            cortex_m4_system_exception_can_preempt(cpu, pending, (uint16_t)(cpu->xpsr & 0x1ffu)))
+            icsr_value |= 1u << 23u;
         if ((cpu->system_pending & (1u << 2)) != 0) {
             icsr_value |= 1u << 31;
         }
@@ -451,20 +557,28 @@ CortexM4SystemAccess cortex_m4_system_read(CortexM4* cpu, uint32_t address, uint
         return accepted_read(cpu->vtor, address, size, output_value);
     }
     if (aligned == SCB_AIRCR) {
-        return accepted_read(0xfa050000u | (cpu->aircr & 0x00008700u), address, size, output_value);
+        const uint32_t implemented = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                                         ? 0u
+                                         : cpu->aircr & 0x00008700u;
+        return accepted_read(0xfa050000u | implemented, address, size, output_value);
     }
     if (aligned == SCB_SCR) {
         return accepted_read(cpu->scr, address, size, output_value);
     }
     if (aligned == SCB_CCR) {
-        return accepted_read(cpu->ccr, address, size, output_value);
+        return accepted_read(cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0x208u
+                                                                                 : cpu->ccr,
+                             address, size, output_value);
     }
     if (address >= SCB_SHPR && address + size <= SCB_SHPR + 12u) {
         *output_value = read_system_priority(cpu, address - SCB_SHPR, size);
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_SHCSR) {
-        return accepted_read(shcsr_value(cpu), address, size, output_value);
+        const uint32_t value = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                                   ? cpu->system_pending & (1u << 11) ? 1u << 15 : 0u
+                                   : shcsr_value(cpu);
+        return accepted_read(value, address, size, output_value);
     }
     if (aligned == SCB_CFSR) {
         return accepted_read(cpu->cfsr, address, size, output_value);
@@ -541,13 +655,25 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
     if (cpu == NULL) {
         return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     }
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+        (size != 4u || (address & 3u) != 0u))
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     const uint32_t aligned = address & ~3u;
     if (cortex_m4_debug_address(address)) {
+        if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+            access != CORTEX_M4_ACCESS_DEBUG)
+            return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
         if (!debug_access_permitted(cpu, address, access)) {
             return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
         }
         return cortex_m4_debug_write(cpu, address, size, value);
     }
+    if (!armv6_m_system_register(cpu, address, size)) {
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
+    }
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+        (aligned == SCB_SHCSR || aligned == SCB_DFSR) && access != CORTEX_M4_ACCESS_DEBUG)
+        return CORTEX_M4_SYSTEM_ACCESS_REJECTED;
     const bool user_stir = address == NVIC_STIR && size == 4u &&
                            cortex_m4_access_is_unprivileged_data(cpu, access) &&
                            (cpu->ccr & (1u << 1u)) != 0u;
@@ -569,6 +695,7 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
     }
     if (aligned == SYST_CVR) {
         cpu->systick_current = 0;
+        cpu->systick_external_phase = 0;
         cpu->systick_control &= ~(1u << 16);
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
@@ -632,12 +759,17 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_VTOR) {
-        cpu->vtor = merge_partial_register_write(cpu->vtor, address, size, value) & 0xffffff80u;
+        const uint32_t mask = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                                  ? 0xffffff00u
+                                  : 0xffffff80u;
+        cpu->vtor = merge_partial_register_write(cpu->vtor, address, size, value) & mask;
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_AIRCR) {
         if (size == 4 && (value >> 16) == 0x05fau) {
-            cpu->aircr = value & 0x00000700u;
+            cpu->aircr = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                             ? 0u
+                             : value & 0x00000700u;
             if ((value & (1u << 2)) != 0) {
                 cpu->reset_requested = true;
             }
@@ -649,7 +781,10 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_CCR) {
-        cpu->ccr = merge_partial_register_write(cpu->ccr, address, size, value) & 0x0000031bu;
+        if (cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+            cpu->ccr =
+                merge_partial_register_write(cpu->ccr, address, size, value) & 0x0000031bu;
+        }
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (address >= SCB_SHPR && address + size <= SCB_SHPR + 12u) {
@@ -657,7 +792,12 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_SHCSR) {
-        write_shcsr(cpu, address, size, value);
+        if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+            const uint32_t written = access_value(address, size, value);
+            cortex_m4_system_set_pending(cpu, 11u, (written & (1u << 15)) != 0u);
+        } else {
+            write_shcsr(cpu, address, size, value);
+        }
         return CORTEX_M4_SYSTEM_ACCESS_ACCEPTED;
     }
     if (aligned == SCB_CFSR) {
@@ -723,10 +863,13 @@ void cortex_m4_system_reset(CortexM4* cpu) {
     if (cpu == NULL) {
         return;
     }
+    if (cpu->cpuid == 0u)
+        cpu->cpuid = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0x410cc601u
+                                                                         : 0x410fc241u;
     cpu->vtor = 0;
     cpu->aircr = 0;
     cpu->scr = 0;
-    cpu->ccr = 1u << 9;
+    cpu->ccr = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0x208u : 1u << 9;
     cpu->shcsr = 0;
     cpu->cfsr = 0;
     cpu->hfsr = 0;
@@ -735,7 +878,9 @@ void cortex_m4_system_reset(CortexM4* cpu) {
     cpu->bfar = 0;
     cpu->afsr = 0;
     cpu->cpacr = 0;
-    cpu->fpccr = FPCCR_ASPEN | FPCCR_LSPEN;
+    cpu->fpccr = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                     ? 0u
+                     : FPCCR_ASPEN | FPCCR_LSPEN;
     cpu->fpcar = 0;
     cpu->fpdscr = 0;
     cpu->fpscr = 0;
@@ -746,6 +891,7 @@ void cortex_m4_system_reset(CortexM4* cpu) {
     cpu->systick_control = 0;
     cpu->systick_reload = 0;
     cpu->systick_current = 0;
+    cpu->systick_external_phase = 0;
     cpu->exception_frame_depth = 0;
     cortex_m4_exception_advanced_reset(cpu);
     cortex_m4_mpu_reset(cpu);

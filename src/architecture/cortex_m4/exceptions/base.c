@@ -10,6 +10,12 @@ void cortex_m4_raise_fault(CortexM4* cpu, uint8_t exception) {
         cpu->stop = CORTEX_M4_STOP_LOCKUP;
         return;
     }
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+        cortex_m4_system_set_pending(cpu, 3u, true);
+        cpu->event_register = true;
+        cpu->sleeping = false;
+        return;
+    }
     const uint32_t fault_enable_mask = 1u << (exception + 12u);
     if ((cpu->shcsr & fault_enable_mask) != 0 &&
         cortex_m4_system_exception_can_preempt(cpu, exception, current_exception)) {
@@ -42,6 +48,7 @@ static bool enter_exception(CortexM4* cpu, uint16_t exception) {
     }
     exception = cortex_m4_exception_advanced_late_arrival(cpu, exception);
     uint32_t vector_address = 0;
+    cortex_m4_exception_vector_fetch(cpu);
     if (!cortex_m4_bus_read(cpu, cpu->vtor + exception * 4u, 4, CORTEX_M4_ACCESS_DATA,
                             &vector_address) ||
         (vector_address & 1u) == 0) {

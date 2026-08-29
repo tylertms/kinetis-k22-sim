@@ -1,5 +1,8 @@
 #include "device/kinetis/timing/support.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 typedef struct {
     uint32_t random;
     uint32_t reads;
@@ -104,8 +107,13 @@ void kinetis_timing_test_test_state_census(TestState* state, KinetisTiming* timi
         mix(&census, input | (fault << 1u) | (trigger << 2u) | (output << 3u) | (high << 4u));
         mix(&census, ftm->sc ^ ftm->counter ^ ftm->registers[0]);
     }
-    expect(state,
-           census.reads == 3752u && census.writes == 3752u && census.signals == 53454u &&
-               census.fingerprint == UINT64_C(16015189613287118939),
-           "timing state census matches");
+    const bool census_matches =
+        census.reads == 3752u && census.writes == 3752u && census.signals == 53454u &&
+        census.fingerprint == UINT64_C(11271206906845177889);
+    if (!census_matches)
+        fprintf(stderr,
+                "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32
+                " fingerprint=%" PRIu64 "\n",
+                census.reads, census.writes, census.signals, census.fingerprint);
+    expect(state, census_matches, "timing state census matches");
 }

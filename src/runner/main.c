@@ -9,6 +9,33 @@
 
 #include "cortex_m4_firmware_image.h"
 
+typedef struct {
+    uint32_t address;
+    uint32_t value;
+} InitialWrite;
+
+typedef struct {
+    CortexM4* cpu;
+    uint32_t addresses[16];
+    uint32_t opcodes[16];
+    size_t count;
+    bool frozen;
+} ExecutionTrace;
+
+static void record_trace(void* context, uint32_t address, uint32_t opcode, bool executed) {
+    ExecutionTrace* trace = context;
+    if (trace->frozen || !executed)
+        return;
+    if ((cortex_m4_get_xpsr(trace->cpu) & 0x1ffu) != 0u) {
+        trace->frozen = true;
+        return;
+    }
+    const size_t index = trace->count % (sizeof(trace->addresses) / sizeof(trace->addresses[0]));
+    trace->addresses[index] = address;
+    trace->opcodes[index] = opcode;
+    trace->count++;
+}
+
 static bool parse_uint64(const char* text, uint64_t* parsed_value) {
     char* end = NULL;
     errno = 0;
@@ -20,12 +47,31 @@ static bool parse_uint64(const char* text, uint64_t* parsed_value) {
     return true;
 }
 
+static bool parse_initial_write(const char* text, InitialWrite* write) {
+    char* separator = NULL;
+    errno = 0;
+    const unsigned long address = strtoul(text, &separator, 0);
+    if (errno != 0 || separator == text || *separator != ':')
+        return false;
+    char* end = NULL;
+    errno = 0;
+    const unsigned long value = strtoul(separator + 1, &end, 0);
+    if (errno != 0 || end == separator + 1 || *end != '\0' || address > UINT32_MAX ||
+        value > UINT32_MAX)
+        return false;
+    write->address = (uint32_t)address;
+    write->value = (uint32_t)value;
+    return true;
+}
+
 static void print_usage(const char* program) {
     fprintf(stderr,
             "usage: %s IMAGE --profile DEVICE --reset-address ADDRESS "
             "[--package CODE] [--binary-address ADDRESS] "
             "[--max-instructions COUNT] "
-            "[--max-cycles COUNT] [--stop-address ADDRESS] [--coverage]\n",
+            "[--max-cycles COUNT] [--stop-address ADDRESS] "
+            "[--write32 ADDRESS:VALUE] [--coverage] "
+            "[--minimum-instructions-covered COUNT] [--minimum-branches-covered COUNT]\n",
             program);
 }
 
@@ -45,6 +91,10 @@ int main(int argc, char** argv) {
     bool profile_set = false;
     KinetisPackage package = KINETIS_PACKAGE_DEFAULT;
     CortexM4RunLimits limits = {1000000, 10000000};
+    uint64_t minimum_instructions_covered = 0u;
+    uint64_t minimum_branches_covered = 0u;
+    InitialWrite initial_writes[32];
+    size_t initial_write_count = 0u;
     for (int argument_index = 2; argument_index < argc;) {
         if (strcmp(argv[argument_index], "--coverage") == 0) {
             coverage_requested = true;
@@ -74,6 +124,18 @@ int main(int argc, char** argv) {
             continue;
         }
 
+        if (strcmp(argv[argument_index], "--write32") == 0) {
+            if (initial_write_count >= sizeof(initial_writes) / sizeof(initial_writes[0]) ||
+                !parse_initial_write(argv[argument_index + 1],
+                                     &initial_writes[initial_write_count])) {
+                fprintf(stderr, "invalid initial write: %s\n", argv[argument_index + 1]);
+                return EXIT_FAILURE;
+            }
+            initial_write_count++;
+            argument_index += 2;
+            continue;
+        }
+
         uint64_t parsed_value = 0;
         if (!parse_uint64(argv[argument_index + 1], &parsed_value)) {
             fprintf(stderr, "invalid value: %s\n", argv[argument_index + 1]);
@@ -92,6 +154,12 @@ int main(int argc, char** argv) {
         } else if (strcmp(argv[argument_index], "--stop-address") == 0) {
             stop_address = parsed_value;
             stop_address_set = true;
+        } else if (strcmp(argv[argument_index], "--minimum-instructions-covered") == 0) {
+            minimum_instructions_covered = parsed_value;
+            coverage_requested = true;
+        } else if (strcmp(argv[argument_index], "--minimum-branches-covered") == 0) {
+            minimum_branches_covered = parsed_value;
+            coverage_requested = true;
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[argument_index]);
             return EXIT_FAILURE;
@@ -128,6 +196,16 @@ int main(int argc, char** argv) {
         kinetis_destroy(device);
         return EXIT_FAILURE;
     }
+    for (size_t write_index = 0u; write_index < initial_write_count; write_index++) {
+        const InitialWrite* initial_write = &initial_writes[write_index];
+        if (!kinetis_write(device, initial_write->address, &initial_write->value,
+                           sizeof(initial_write->value))) {
+            fprintf(stderr, "failed initial write at 0x%08" PRIx32 "\n",
+                    initial_write->address);
+            kinetis_destroy(device);
+            return EXIT_FAILURE;
+        }
+    }
     CortexM4Coverage* coverage = NULL;
     if (coverage_requested) {
         coverage = binary_image_loaded ? NULL : cortex_m4_coverage_create_elf(argv[1]);
@@ -144,6 +222,8 @@ int main(int argc, char** argv) {
         kinetis_destroy(device);
         return EXIT_FAILURE;
     }
+    ExecutionTrace trace = {.cpu = kinetis_cpu(device)};
+    cortex_m4_set_trace(kinetis_cpu(device), record_trace, &trace);
     const CortexM4Result result = cortex_m4_run(kinetis_cpu(device), limits);
     const uint32_t fault_status = cortex_m4_get_fault_status(kinetis_cpu(device));
     printf("stop=%u pc=0x%08" PRIx32 " opcode=0x%08" PRIx32 " instructions=%" PRIu64
@@ -155,8 +235,47 @@ int main(int argc, char** argv) {
                cortex_m4_get_register(kinetis_cpu(device), register_index),
                register_index == 15 ? '\n' : ' ');
     }
+    const uint16_t active_exception = (uint16_t)(cortex_m4_get_xpsr(kinetis_cpu(device)) & 0x1ffu);
+    if (active_exception == 3u) {
+        const uint32_t stack_pointer = cortex_m4_get_register(kinetis_cpu(device), 13u);
+        uint32_t stacked_registers[8] = {0u};
+        uint32_t stacked_lr = 0u;
+        uint32_t stacked_pc = 0u;
+        uint32_t stacked_xpsr = 0u;
+        bool frame_read = true;
+        for (uint8_t frame_index = 0u; frame_index < 8u; frame_index++)
+            frame_read = frame_read &&
+                         cortex_m4_read_memory(kinetis_cpu(device),
+                                               stack_pointer + (uint32_t)frame_index * 4u, 4u,
+                                               &stacked_registers[frame_index]);
+        if (frame_read) {
+            stacked_lr = stacked_registers[5];
+            stacked_pc = stacked_registers[6];
+            stacked_xpsr = stacked_registers[7];
+            printf("exception=%u stacked_lr=0x%08" PRIx32 " stacked_pc=0x%08" PRIx32
+                   " stacked_xpsr=0x%08" PRIx32 "\n",
+                   active_exception, stacked_lr, stacked_pc, stacked_xpsr);
+            printf("stacked_r0=0x%08" PRIx32 " stacked_r1=0x%08" PRIx32
+                   " stacked_r2=0x%08" PRIx32 " stacked_r3=0x%08" PRIx32
+                   " stacked_r12=0x%08" PRIx32 "\n",
+                   stacked_registers[0], stacked_registers[1], stacked_registers[2],
+                   stacked_registers[3], stacked_registers[4]);
+        }
+        const size_t trace_length =
+            trace.count < sizeof(trace.addresses) / sizeof(trace.addresses[0])
+                ? trace.count
+                : sizeof(trace.addresses) / sizeof(trace.addresses[0]);
+        const size_t trace_start = trace.count - trace_length;
+        for (size_t trace_offset = 0u; trace_offset < trace_length; trace_offset++) {
+            const size_t trace_index =
+                (trace_start + trace_offset) % (sizeof(trace.addresses) / sizeof(trace.addresses[0]));
+            printf("trace pc=0x%08" PRIx32 " opcode=0x%08" PRIx32 "\n",
+                   trace.addresses[trace_index], trace.opcodes[trace_index]);
+        }
+    }
+    CortexM4CoverageResult coverage_result = {0};
     if (coverage != NULL) {
-        const CortexM4CoverageResult coverage_result = cortex_m4_coverage_result(coverage);
+        coverage_result = cortex_m4_coverage_result(coverage);
         printf("coverage instructions=%zu/%zu %.2f%% branches=%zu/%zu %.2f%%\n",
                coverage_result.covered_instructions, coverage_result.total_instructions,
                coverage_result.instruction_coverage_percent, coverage_result.covered_branch_sites,
@@ -169,5 +288,10 @@ int main(int argc, char** argv) {
         fault_status != 0 || result.stop == CORTEX_M4_STOP_CLOCK ||
         result.stop == CORTEX_M4_STOP_UNSUPPORTED || result.stop == CORTEX_M4_STOP_BUS_FAULT ||
         result.stop == CORTEX_M4_STOP_USAGE_FAULT || result.stop == CORTEX_M4_STOP_LOCKUP;
-    return failed ? EXIT_FAILURE : EXIT_SUCCESS;
+    const bool coverage_failed =
+        coverage_result.covered_instructions < minimum_instructions_covered ||
+        coverage_result.covered_branch_sites < minimum_branches_covered;
+    if (coverage_failed)
+        fprintf(stderr, "coverage minimum not reached\n");
+    return failed || coverage_failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }

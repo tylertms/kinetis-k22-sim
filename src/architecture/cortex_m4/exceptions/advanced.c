@@ -149,9 +149,12 @@ bool cortex_m4_exception_advanced_valid_return(const CortexM4* cpu, uint32_t exc
         (cpu->xpsr & XPSR_EXCEPTION_MASK) == 0u) {
         return false;
     }
-    const bool canonical = exception_return == 0xffffffe1u || exception_return == 0xffffffe9u ||
-                           exception_return == 0xffffffedu || exception_return == 0xfffffff1u ||
-                           exception_return == 0xfffffff9u || exception_return == 0xfffffffdu;
+    const bool basic = exception_return == 0xfffffff1u || exception_return == 0xfffffff9u ||
+                       exception_return == 0xfffffffdu;
+    const bool canonical = basic ||
+                           (cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+                            (exception_return == 0xffffffe1u || exception_return == 0xffffffe9u ||
+                             exception_return == 0xffffffedu));
     if (!canonical ||
         cpu->active_exceptions[cpu->exception_depth - 1u] != (cpu->xpsr & XPSR_EXCEPTION_MASK)) {
         return false;
@@ -175,7 +178,8 @@ bool cortex_m4_exception_advanced_valid_stacked_xpsr(const CortexM4* cpu, uint32
     }
     const bool returns_to_thread = (exception_return & (1u << 3)) != 0u;
     const uint16_t stacked_exception = (uint16_t)(stacked_xpsr & XPSR_EXCEPTION_MASK);
-    const bool has_ici_state = (stacked_xpsr & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
+    const bool has_ici_state = cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+                               (stacked_xpsr & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
                                ((stacked_xpsr >> 12u) & 15u) != 0u;
     if (has_ici_state) {
         if (cpu->exception_frame_depth == 0u) {
@@ -249,6 +253,7 @@ bool cortex_m4_exception_advanced_hardfault_vector(CortexM4* cpu, uint32_t* vect
     if (cpu == NULL || vector_address == NULL || cpu->stop == CORTEX_M4_STOP_LOCKUP) {
         return false;
     }
+    cortex_m4_exception_vector_fetch(cpu);
     if (!cortex_m4_bus_read(cpu, cpu->vtor + 12u, 4, CORTEX_M4_ACCESS_DATA, vector_address) ||
         (*vector_address & 1u) == 0u) {
         cpu->stop = CORTEX_M4_STOP_LOCKUP;
@@ -279,6 +284,7 @@ CortexM4ExceptionChain cortex_m4_exception_advanced_tail_chain(CortexM4* cpu,
         return CORTEX_M4_EXCEPTION_CHAIN_NONE;
     }
     uint32_t vector_address = 0;
+    cortex_m4_exception_vector_fetch(cpu);
     if (!cortex_m4_bus_read(cpu, cpu->vtor + selected_exception * 4u, 4, CORTEX_M4_ACCESS_DATA,
                             &vector_address) ||
         (vector_address & 1u) == 0u) {
@@ -310,12 +316,16 @@ CortexM4ExceptionChain cortex_m4_exception_advanced_tail_chain(CortexM4* cpu,
 }
 
 uint8_t cortex_m4_exception_advanced_multiple_resume(const CortexM4* cpu) {
-    return cpu != NULL && cpu->ici_valid ? cpu->ici_register : 0u;
+    return cpu != NULL && cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M && cpu->ici_valid
+               ? cpu->ici_register
+               : 0u;
 }
 
 uint32_t cortex_m4_exception_advanced_multiple_address(const CortexM4* cpu,
                                                        uint32_t initial_address) {
-    return cpu != NULL && cpu->ici_valid ? cpu->ici_address : initial_address;
+    return cpu != NULL && cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M && cpu->ici_valid
+               ? cpu->ici_address
+               : initial_address;
 }
 
 bool cortex_m4_exception_advanced_multiple_suspend(CortexM4* cpu, uint8_t next_register,
@@ -329,10 +339,16 @@ bool cortex_m4_exception_advanced_multiple_suspend(CortexM4* cpu, uint8_t next_r
     if (selected_pending(cpu, current_exception, 0u) == 0u) {
         return false;
     }
+    cpu->registers[15] -= instruction_size;
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
+        cpu->ici_address = 0u;
+        cpu->ici_register = 0u;
+        cpu->ici_valid = false;
+        return true;
+    }
     cpu->ici_address = next_address;
     cpu->ici_register = next_register;
     cpu->ici_valid = true;
-    cpu->registers[15] -= instruction_size;
     return true;
 }
 
@@ -345,7 +361,7 @@ void cortex_m4_exception_advanced_multiple_complete(CortexM4* cpu) {
 }
 
 uint32_t cortex_m4_exception_advanced_xpsr(const CortexM4* cpu, uint32_t xpsr_value) {
-    if (cpu == NULL || !cpu->ici_valid) {
+    if (cpu == NULL || cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M || !cpu->ici_valid) {
         return xpsr_value;
     }
     return (xpsr_value & ~XPSR_ICI_IT_MASK) | ((uint32_t)cpu->ici_register << 12u);
@@ -355,7 +371,8 @@ void cortex_m4_exception_advanced_load_xpsr(CortexM4* cpu, uint32_t xpsr_value) 
     if (cpu == NULL) {
         return;
     }
-    const bool ici = (xpsr_value & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
+    const bool ici = cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+                     (xpsr_value & (XPSR_ICI_HIGH_MASK | XPSR_ICI_LOW_MASK)) == 0u &&
                      ((xpsr_value >> 12u) & 15u) != 0u;
     cpu->ici_valid = ici;
     cpu->ici_register = ici ? (uint8_t)((xpsr_value >> 12u) & 15u) : 0u;
@@ -368,6 +385,8 @@ void cortex_m4_exception_advanced_load_xpsr(CortexM4* cpu, uint32_t xpsr_value) 
         cpu->ici_address = 0;
     }
     if (ici) {
+        cpu->it_state = 0;
+    } else if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M) {
         cpu->it_state = 0;
     }
 }

@@ -189,9 +189,54 @@ static bool load32(uint16_t first) {
     return (first & 0x0010u) != 0;
 }
 
+static bool armv6_m_single_cycle_io(const CortexM4* cpu) {
+    if (!cpu->timing_last_access_valid)
+        return false;
+    const uint32_t address = cpu->timing_last_access_address - 1u;
+    return address >= 0xf8000000u && address < 0xf9000000u;
+}
+
+static uint32_t armv6_m_instruction_cycles(const CortexM4* cpu, uint16_t first, uint16_t second,
+                                           bool wide, bool executed, uint32_t sequential_pc) {
+    if (!executed)
+        return 1u;
+    if (wide) {
+        if (first == 0xf3bfu && (second & 0xff0fu) == 0x8f0fu)
+            return ((second >> 4u) & 15u) == 6u ? 1u : 3u;
+        if (first == 0xf3efu || (first & 0xfff0u) == 0xf380u)
+            return 3u;
+        return 3u;
+    }
+    if ((first & 0xf000u) == 0xd000u && ((first >> 8u) & 15u) < 14u)
+        return cpu->registers[15] != sequential_pc ? 2u : 1u;
+    if ((first & 0xf800u) == 0xe000u || (first & 0xff00u) == 0x4700u)
+        return 2u;
+    if ((first & 0xfc00u) == 0x4400u) {
+        const uint8_t operation = (uint8_t)((first >> 8u) & 3u);
+        const uint8_t destination = (uint8_t)((first & 7u) | ((first >> 4u) & 8u));
+        if (destination == 15u && (operation == 0u || operation == 2u))
+            return 2u;
+    }
+    uint32_t transfer_count = 0u;
+    bool loads_program_counter = false;
+    if (multiple16(first, &transfer_count, &loads_program_counter)) {
+        const uint32_t base = 1u + transfer_count;
+        return loads_program_counter ? base + 2u : base;
+    }
+    bool is_load = false;
+    if (memory16(first, &is_load))
+        return armv6_m_single_cycle_io(cpu) ? 1u : 2u;
+    if (first == 0xbf20u || first == 0xbf30u)
+        return 2u;
+    return 1u;
+}
+
 static uint32_t calculate_instruction_cycles(const CortexM4* cpu, uint16_t first, uint16_t second,
                                              bool is_wide_instruction, bool instruction_executed,
                                              uint32_t sequential_pc) {
+    if (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M)
+        return armv6_m_instruction_cycles(cpu, first, second, is_wide_instruction,
+                                          instruction_executed, sequential_pc);
     if (!instruction_executed) {
         return 1;
     }
@@ -423,12 +468,12 @@ void cortex_m4_timing_exception(CortexM4* cpu, CortexM4ExceptionTiming transitio
     if (cpu == NULL) {
         return;
     }
-    uint32_t cycles = 12;
+    uint32_t cycles = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 15u : 12u;
     if (transition == CORTEX_M4_TIMING_EXCEPTION_FP_ENTRY) {
         cycles = 29;
     }
     if (transition == CORTEX_M4_TIMING_EXCEPTION_RETURN) {
-        cycles = 10;
+        cycles = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 15u : 10u;
     }
     if (transition == CORTEX_M4_TIMING_EXCEPTION_FP_RETURN) {
         cycles = 27;

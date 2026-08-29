@@ -39,6 +39,8 @@ enum {
     I2C_D = 0x04,
     I2C_C2 = 0x05,
     I2C_FLT = 0x06,
+    I2C_RA = 0x07,
+    I2C_SMB = 0x08,
     I2C_A2 = 0x09,
 };
 
@@ -48,7 +50,8 @@ bool kinetis_serial_internal_fifo_push(KinetisSerialFifo* fifo, uint16_t capacit
 bool kinetis_serial_internal_read_i2c(KinetisSerial* serial, KinetisSerialI2c* i2c,
                                       uint32_t register_offset, uint8_t byte_count,
                                       uint32_t* output_value);
-bool kinetis_serial_internal_read_spi(KinetisSerialSpi* spi, uint32_t register_offset,
+bool kinetis_serial_internal_read_spi(KinetisSerial* serial, KinetisSerialSpi* spi,
+                                      uint32_t register_offset,
                                       uint8_t byte_count, uint32_t* output_value);
 bool kinetis_serial_internal_read_uart(KinetisSerialUart* uart, bool lpuart,
                                        uint32_t register_offset, uint8_t byte_count,
@@ -56,7 +59,8 @@ bool kinetis_serial_internal_read_uart(KinetisSerialUart* uart, bool lpuart,
 bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* i2c,
                                        uint32_t register_offset, uint8_t byte_count,
                                        uint32_t write_value);
-bool kinetis_serial_internal_write_spi(KinetisSerialSpi* spi, uint32_t register_offset,
+bool kinetis_serial_internal_write_spi(KinetisSerial* serial, KinetisSerialSpi* spi,
+                                       uint32_t register_offset,
                                        uint8_t byte_count, uint32_t write_value);
 bool kinetis_serial_internal_write_uart(KinetisSerialUart* uart, bool lpuart,
                                         uint32_t register_offset, uint8_t byte_count,
@@ -68,8 +72,12 @@ KinetisSerialSpi* kinetis_serial_internal_spi_at(KinetisSerial* serial, uint32_t
 KinetisSerialUart* kinetis_serial_internal_uart_at(KinetisSerial* serial, uint32_t address,
                                                    bool* lpuart, uint32_t* offset);
 uint32_t kinetis_serial_internal_load32(const uint8_t* bytes);
+uint8_t kinetis_serial_internal_spi_receive_capacity(const KinetisSerialSpi* spi);
+bool kinetis_serial_internal_spi_running(const KinetisSerial* serial,
+                                         const KinetisSerialSpi* spi);
+uint8_t kinetis_serial_internal_spi_transmit_capacity(const KinetisSerialSpi* spi);
 uint8_t kinetis_serial_internal_uart_capacity(const KinetisSerialUart* uart);
-void kinetis_serial_internal_refresh_spi(KinetisSerialSpi* spi);
+void kinetis_serial_internal_refresh_spi(const KinetisSerial* serial, KinetisSerialSpi* spi);
 void kinetis_serial_internal_refresh_uart(KinetisSerialUart* uart, bool lpuart);
 void kinetis_serial_internal_store32(uint8_t* bytes, uint32_t value);
 

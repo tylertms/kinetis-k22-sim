@@ -413,6 +413,72 @@ static void test_exception_and_sleep_timing(TestState* state) {
     expect(state, cpu.timing_pending_store_cycles == 0, "cpu.timing_pending_store_cycles == 0");
 }
 
+static void test_armv6_m_timing(TestState* state) {
+    CortexM4 cpu;
+    TimingFixture fixture;
+    reset_cpu(&cpu, &fixture);
+    cpu.architecture = CORTEX_M4_ARCHITECTURE_ARMV6_M;
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xbf00u, 0u, false, true, 0x102u);
+    expect(state, cpu.cycles == 1u, "ARMv6-M NOP takes one cycle");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xbf30u, 0u, false, true, 0x104u);
+    expect(state, cpu.cycles == 3u, "ARMv6-M WFI takes two cycles");
+
+    cpu.registers[15] = 0x106u;
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xd000u, 0u, false, true, 0x106u);
+    expect(state, cpu.cycles == 4u, "untaken ARMv6-M conditional branch takes one cycle");
+
+    cpu.registers[15] = 0x120u;
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xd000u, 0u, false, true, 0x108u);
+    expect(state, cpu.cycles == 6u, "taken ARMv6-M conditional branch takes two cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xe000u, 0u, false, true, 0x10au);
+    expect(state, cpu.cycles == 8u, "ARMv6-M B takes two cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xf000u, 0xd000u, true, true, 0x10eu);
+    expect(state, cpu.cycles == 11u, "ARMv6-M BL takes three cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xf3efu, 0x8000u, true, true, 0x112u);
+    expect(state, cpu.cycles == 14u, "ARMv6-M MRS takes three cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    cortex_m4_timing_access(&cpu, 0x20000000u, 4u, CORTEX_M4_ACCESS_DATA, false);
+    complete(&cpu, 0x6808u, 0u, false, true, 0x114u);
+    expect(state, cpu.cycles == 16u, "ARMv6-M SRAM load takes two cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    cortex_m4_timing_access(&cpu, 0xf8000000u, 4u, CORTEX_M4_ACCESS_DATA, false);
+    complete(&cpu, 0x6808u, 0u, false, true, 0x116u);
+    expect(state, cpu.cycles == 17u, "ARMv6-M single-cycle I/O load takes one cycle");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xbd03u, 0u, false, true, 0x118u);
+    expect(state, cpu.cycles == 23u, "ARMv6-M POP with PC takes 3+N cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xf3bfu, 0x8f5fu, true, true, 0x11cu);
+    expect(state, cpu.cycles == 26u, "ARMv6-M DMB takes three cycles");
+
+    cortex_m4_timing_begin_instruction(&cpu);
+    complete(&cpu, 0xf3bfu, 0x8f6fu, true, true, 0x120u);
+    expect(state, cpu.cycles == 29u, "ARMv6-M ISB takes three cycles");
+
+    cortex_m4_timing_exception(&cpu, CORTEX_M4_TIMING_EXCEPTION_ENTRY);
+    expect(state, cpu.cycles == 44u, "ARMv6-M exception entry takes fifteen cycles");
+    cortex_m4_timing_exception(&cpu, CORTEX_M4_TIMING_EXCEPTION_TAIL_CHAIN);
+    expect(state, cpu.cycles == 50u, "ARMv6-M tail chaining takes six cycles");
+    cortex_m4_timing_exception(&cpu, CORTEX_M4_TIMING_EXCEPTION_RETURN);
+    expect(state, cpu.cycles == 65u, "ARMv6-M exception return takes fifteen cycles");
+}
+
 int main(void) {
     TestState state = {0};
     test_wait_states(&state);
@@ -423,5 +489,6 @@ int main(void) {
     test_guards(&state);
     test_exclusive_monitor(&state);
     test_exception_and_sleep_timing(&state);
+    test_armv6_m_timing(&state);
     return test_finish(&state);
 }

@@ -5,6 +5,7 @@
 
 const KinetisRegisterManifest* kinetis_mk22fn12810_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mkv30f12810_register_manifest(void);
+const KinetisRegisterManifest* kinetis_mkv10z1287_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mk22fn12812_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mk22fn25612_register_manifest(void);
 const KinetisRegisterManifest* kinetis_mk22fn256cap12_register_manifest(void);

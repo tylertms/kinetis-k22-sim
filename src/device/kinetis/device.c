@@ -26,11 +26,26 @@ static void write_little_endian(uint8_t* output_bytes, uint8_t byte_count, uint3
     }
 }
 
-static bool is_flash_access_allowed(const Kinetis* device, CortexM4Access access, uint8_t master,
-                                    bool write_access) {
-    if (access == CORTEX_M4_ACCESS_DEBUG) {
+static bool is_flash_access_allowed(const Kinetis* device, uint32_t address,
+                                    CortexM4Access access, uint8_t master, bool write_access) {
+    if (access != CORTEX_M4_ACCESS_DEBUG &&
+        !kinetis_timing_flash_access_enabled(&device->timing))
+        return false;
+    if (access == CORTEX_M4_ACCESS_DEBUG)
         return true;
+    if (device->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+        address < device->profile->program_flash_size) {
+        const bool unprivileged = access == CORTEX_M4_ACCESS_UNPRIVILEGED_DATA ||
+                                  (access == CORTEX_M4_ACCESS_INSTRUCTION &&
+                                   (cortex_m4_get_xpsr(device->cpu) & 0x1ffu) == 0u &&
+                                   (cortex_m4_get_control(device->cpu) & 1u) != 0u);
+        if (!kinetis_data_flash_access_allowed(device->data, address,
+                                               access == CORTEX_M4_ACCESS_INSTRUCTION,
+                                               unprivileged))
+            return false;
     }
+    if (!kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_FMC))
+        return true;
     const uint32_t offset = 0x4001f000u - KINETIS_PERIPHERAL_BASE;
     const uint32_t protection = read_little_endian(device->peripheral + offset, 4u);
     const uint8_t permission = (uint8_t)((protection >> (master * 2u)) & 3u);
@@ -80,6 +95,8 @@ static void fmc_clear_cache(Kinetis* device) {
 }
 
 static void fmc_invalidate_line(Kinetis* device, uint8_t flash_bank, uint32_t flash_offset) {
+    if (!kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_FMC))
+        return;
     const uint8_t line_size = device->profile->fmc_line_size;
     const uint8_t cache_set =
         (uint8_t)((flash_offset / line_size) % device->profile->fmc_set_count);
@@ -184,6 +201,8 @@ static uint8_t fmc_cached_byte(Kinetis* device, uint8_t flash_bank, uint32_t fla
 }
 
 static bool fmc_cache_enabled(const Kinetis* device, uint8_t bank, CortexM4Access access) {
+    if (!kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_FMC))
+        return false;
     if (access == CORTEX_M4_ACCESS_DEBUG)
         return false;
     const uint32_t cache_control = fmc_raw_load(device, 0x4001f004u + (uint32_t)bank * 4u);
@@ -204,9 +223,18 @@ static bool sysmpu_access_allowed(Kinetis* device, uint32_t address, uint8_t acc
 static bool memory_read_unprotected(Kinetis* device, uint32_t address, uint8_t access_size,
                                     CortexM4Access access, uint8_t flash_master_id,
                                     uint32_t* output_value) {
+    if (address >= 0xf8000000u && address < 0xf8000118u &&
+        ((address - 0xf8000000u) & 0x3fu) < 0x18u) {
+        const KinetisRegisterDescriptor* descriptor =
+            kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
+        if (descriptor == NULL || (descriptor->access & KINETIS_REGISTER_ACCESS_READ) == 0u)
+            return false;
+        const uint32_t gpio_address = 0x400ff000u + address - 0xf8000000u;
+        return kinetis_io_read(&device->io, gpio_address, access_size, output_value);
+    }
     if (valid_memory_range(address, access_size, KINETIS_FLASH_BASE,
                            device->configuration.flash_size)) {
-        if (!is_flash_access_allowed(device, access, flash_master_id, false)) {
+        if (!is_flash_access_allowed(device, address, access, flash_master_id, false)) {
             return false;
         }
         if (!kinetis_data_flash_read(device->data, false, address, access_size)) {
@@ -248,7 +276,7 @@ static bool memory_read_unprotected(Kinetis* device, uint32_t address, uint8_t a
     if (device->profile->flexnvm_size != 0u &&
         valid_memory_range(address, access_size, device->profile->flexnvm_address,
                            device->profile->flexnvm_size)) {
-        if (!is_flash_access_allowed(device, access, flash_master_id, false))
+        if (!is_flash_access_allowed(device, address, access, flash_master_id, false))
             return false;
         const uint32_t offset = address - device->profile->flexnvm_address;
         if (!kinetis_data_flash_read(device->data, true, offset, access_size)) {
@@ -268,7 +296,7 @@ static bool memory_read_unprotected(Kinetis* device, uint32_t address, uint8_t a
     if (device->profile->flexram_size != 0u &&
         valid_memory_range(address, access_size, device->profile->flexram_address,
                            device->profile->flexram_size)) {
-        if (!is_flash_access_allowed(device, access, flash_master_id, false))
+        if (!is_flash_access_allowed(device, address, access, flash_master_id, false))
             return false;
         return kinetis_data_read(device->data, address, access_size, output_value);
     }
@@ -285,6 +313,17 @@ static bool memory_read_unprotected(Kinetis* device, uint32_t address, uint8_t a
 static bool memory_write_unprotected(Kinetis* device, uint32_t address, uint8_t access_size,
                                      CortexM4Access access, uint8_t flash_master_id,
                                      uint32_t write_value) {
+    if (address >= 0xf8000000u && address < 0xf8000118u &&
+        ((address - 0xf8000000u) & 0x3fu) < 0x18u) {
+        const KinetisRegisterDescriptor* descriptor =
+            kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
+        if (descriptor == NULL)
+            return false;
+        if ((descriptor->access & KINETIS_REGISTER_ACCESS_WRITE) == 0u)
+            return true;
+        const uint32_t gpio_address = 0x400ff000u + address - 0xf8000000u;
+        return kinetis_io_write(&device->io, gpio_address, access_size, write_value);
+    }
     if (valid_memory_range(address, access_size, KINETIS_FLASH_BASE,
                            device->configuration.flash_size)) {
         if (access != CORTEX_M4_ACCESS_DEBUG) {
@@ -319,7 +358,7 @@ static bool memory_write_unprotected(Kinetis* device, uint32_t address, uint8_t 
     if (device->profile->flexram_size != 0u &&
         valid_memory_range(address, access_size, device->profile->flexram_address,
                            device->profile->flexram_size)) {
-        if (!is_flash_access_allowed(device, access, flash_master_id, true))
+        if (!is_flash_access_allowed(device, address, access, flash_master_id, true))
             return false;
         return kinetis_data_write(device->data, address, access_size, write_value);
     }
@@ -338,6 +377,11 @@ bool kinetis_memory_read(Kinetis* device, uint32_t address, uint8_t access_size,
     if (device == NULL || output_value == NULL ||
         (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
+    if (cortex_m4_access_is_unprivileged_data(device->cpu, access) &&
+        kinetis_internal_mtb_unprivileged_ram_blocked(device, address, access_size)) {
+        *output_value = 0u;
+        return true;
+    }
     if (access != CORTEX_M4_ACCESS_DEBUG) {
         const uint8_t master_id = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
         const bool supervisor = access != CORTEX_M4_ACCESS_UNPRIVILEGED_DATA &&
@@ -350,20 +394,33 @@ bool kinetis_memory_read(Kinetis* device, uint32_t address, uint8_t access_size,
             return false;
     }
     const uint8_t master_id = access == CORTEX_M4_ACCESS_INSTRUCTION ? 0u : 1u;
-    return memory_read_unprotected(device, address, access_size, access, master_id, output_value);
+    const bool succeeded =
+        memory_read_unprotected(device, address, access_size, access, master_id, output_value);
+    if (succeeded && (access == CORTEX_M4_ACCESS_DATA ||
+                      access == CORTEX_M4_ACCESS_UNPRIVILEGED_DATA))
+        kinetis_internal_mtbdwt_data_access(device, address, access_size, false, *output_value);
+    return succeeded;
 }
 
 bool kinetis_memory_write(Kinetis* device, uint32_t address, uint8_t access_size,
                           CortexM4Access access, uint32_t write_value) {
     if (device == NULL || (access_size != 1u && access_size != 2u && access_size != 4u))
         return false;
+    if (cortex_m4_access_is_unprivileged_data(device->cpu, access) &&
+        kinetis_internal_mtb_unprivileged_ram_blocked(device, address, access_size))
+        return true;
     if (access != CORTEX_M4_ACCESS_DEBUG) {
         const bool supervisor = access != CORTEX_M4_ACCESS_UNPRIVILEGED_DATA;
         if (!sysmpu_access_allowed(device, address, access_size, 1u, supervisor,
                                    KINETIS_SYSMPU_WRITE))
             return false;
     }
-    return memory_write_unprotected(device, address, access_size, access, 1u, write_value);
+    const bool succeeded =
+        memory_write_unprotected(device, address, access_size, access, 1u, write_value);
+    if (succeeded && (access == CORTEX_M4_ACCESS_DATA ||
+                      access == CORTEX_M4_ACCESS_UNPRIVILEGED_DATA))
+        kinetis_internal_mtbdwt_data_access(device, address, access_size, true, write_value);
+    return succeeded;
 }
 
 bool kinetis_dma_read(Kinetis* device, uint32_t address, uint8_t access_size,
@@ -392,6 +449,17 @@ bool kinetis_flash_controller_write(Kinetis* device, uint32_t address, uint8_t a
                             device->configuration.flash_size))
         return false;
     write_little_endian(device->flash + address, access_size, write_value);
+    return true;
+}
+
+bool kinetis_flash_controller_read(Kinetis* device, uint32_t address, uint8_t access_size,
+                                   uint32_t* output_value) {
+    if (device == NULL || output_value == NULL ||
+        (access_size != 1u && access_size != 2u && access_size != 4u) ||
+        !valid_memory_range(address, access_size, KINETIS_FLASH_BASE,
+                            device->configuration.flash_size))
+        return false;
+    *output_value = read_little_endian(device->flash + address, access_size);
     return true;
 }
 
@@ -474,11 +542,91 @@ static bool bit_band_write(Kinetis* device, uint32_t address, CortexM4Access acc
                                     access, register_value);
 }
 
+static bool bme_access(const Kinetis* device, uint32_t address, uint8_t access_size,
+                       CortexM4Access access) {
+    return device->profile->id == KINETIS_PROFILE_MKV10Z1287 && address >= 0x44000000u &&
+           address < 0x60000000u && (access == CORTEX_M4_ACCESS_DATA ||
+                                     access == CORTEX_M4_ACCESS_UNPRIVILEGED_DATA) &&
+           (address & (access_size - 1u)) == 0u;
+}
+
+static uint32_t bme_peripheral_address(uint32_t address, bool bit_field) {
+    uint32_t peripheral_address =
+        address & (bit_field ? 0xe007ffffu : 0xe00fffffu);
+    if (peripheral_address >= 0x4000f000u && peripheral_address < 0x4000f118u)
+        peripheral_address += 0x000f0000u;
+    return peripheral_address;
+}
+
+static uint32_t bme_field_mask(uint32_t address, uint8_t access_size) {
+    const uint8_t container_bits = (uint8_t)(access_size * 8u);
+    const uint8_t bit = (uint8_t)((address >> 23u) & (container_bits - 1u));
+    uint8_t width = (uint8_t)(((address >> 19u) & 15u) + 1u);
+    if (width > container_bits - bit)
+        width = (uint8_t)(container_bits - bit);
+    const uint32_t field = width == 32u ? UINT32_MAX : (1u << width) - 1u;
+    return field << bit;
+}
+
+static bool bme_read(Kinetis* device, uint32_t address, uint8_t access_size,
+                     CortexM4Access access, uint32_t* output_value) {
+    const bool bit_field = (address & 0x10000000u) != 0u;
+    const uint8_t operation = (uint8_t)((address >> 26u) & 7u);
+    if (!bit_field && operation != 2u && operation != 3u)
+        return false;
+    const uint32_t peripheral_address = bme_peripheral_address(address, bit_field);
+    uint32_t peripheral_value;
+    if (!kinetis_peripheral_read(device, peripheral_address, access_size, access,
+                                 &peripheral_value))
+        return false;
+    if (bit_field) {
+        const uint8_t bit = (uint8_t)((address >> 23u) & (access_size * 8u - 1u));
+        *output_value = (peripheral_value & bme_field_mask(address, access_size)) >> bit;
+        return true;
+    }
+    const uint8_t bit = (uint8_t)((address >> 21u) & (access_size * 8u - 1u));
+    const uint32_t mask = 1u << bit;
+    *output_value = (peripheral_value & mask) != 0u;
+    const uint32_t updated_value =
+        operation == 2u ? peripheral_value & ~mask : peripheral_value | mask;
+    return kinetis_peripheral_write(device, peripheral_address, access_size, access,
+                                    updated_value);
+}
+
+static bool bme_write(Kinetis* device, uint32_t address, uint8_t access_size,
+                      CortexM4Access access, uint32_t write_value) {
+    const bool bit_field = (address & 0x10000000u) != 0u;
+    const uint8_t operation = (uint8_t)((address >> 26u) & 7u);
+    if (!bit_field && operation != 1u && operation != 2u && operation != 3u)
+        return false;
+    const uint32_t peripheral_address = bme_peripheral_address(address, bit_field);
+    uint32_t peripheral_value;
+    if (!kinetis_peripheral_read(device, peripheral_address, access_size, access,
+                                 &peripheral_value))
+        return false;
+    uint32_t updated_value;
+    if (bit_field) {
+        const uint32_t mask = bme_field_mask(address, access_size);
+        updated_value = (peripheral_value & ~mask) | (write_value & mask);
+    } else if (operation == 1u) {
+        updated_value = peripheral_value & write_value;
+    } else if (operation == 2u) {
+        updated_value = peripheral_value | write_value;
+    } else {
+        updated_value = peripheral_value ^ write_value;
+    }
+    return kinetis_peripheral_write(device, peripheral_address, access_size, access,
+                                    updated_value);
+}
+
 static bool kinetis_read_bus(void* context, uint32_t address, uint8_t access_size,
                              CortexM4Access access, uint32_t* output_value) {
     Kinetis* device = context;
+    if (bme_access(device, address, access_size, access))
+        return bme_read(device, address, access_size, access, output_value);
     if (address >= KINETIS_BIT_BAND_BASE &&
-        address < KINETIS_BIT_BAND_BASE + KINETIS_BIT_BAND_SIZE) {
+        address < KINETIS_BIT_BAND_BASE + KINETIS_BIT_BAND_SIZE &&
+        device->profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M) {
         if (access_size != 1u && access_size != 2u && access_size != 4u)
             return false;
         return bit_band_read(device, address, access, output_value);
@@ -489,8 +637,11 @@ static bool kinetis_read_bus(void* context, uint32_t address, uint8_t access_siz
 static bool kinetis_write_bus(void* context, uint32_t address, uint8_t access_size,
                               CortexM4Access access, uint32_t write_value) {
     Kinetis* device = context;
+    if (bme_access(device, address, access_size, access))
+        return bme_write(device, address, access_size, access, write_value);
     if (address >= KINETIS_BIT_BAND_BASE &&
-        address < KINETIS_BIT_BAND_BASE + KINETIS_BIT_BAND_SIZE) {
+        address < KINETIS_BIT_BAND_BASE + KINETIS_BIT_BAND_SIZE &&
+        device->profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M) {
         if (access_size != 1u && access_size != 2u && access_size != 4u)
             return false;
         return bit_band_write(device, address, access, write_value);
@@ -510,7 +661,7 @@ static bool kinetis_core_clock_running(void* context) {
     Kinetis* device = context;
     kinetis_timing_set_cpu_sleeping(&device->timing, device->cpu->sleeping,
                                     (device->cpu->scr & 4u) != 0u);
-    return device->timing.core_clock_hz != 0u;
+    return !device->timing.reset_pin_held && device->timing.core_clock_hz != 0u;
 }
 
 KinetisConfiguration kinetis_configuration(KinetisProfile profile_id) {
@@ -599,6 +750,7 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
     device->profile = profile;
     device->package = package_selection;
     device->manifest = manifest;
+    device->reset_pin_enabled = true;
     device->sram_base = configuration.sram_size == profile_sram_size
                             ? profile->sram_lower_address
                             : KINETIS_SRAM_CENTER - (uint32_t)(configuration.sram_size / 2u);
@@ -635,12 +787,26 @@ Kinetis* kinetis_create(KinetisConfiguration configuration) {
         return NULL;
     }
     cortex_m4_set_clock(device->cpu, kinetis_core_clock_running, device);
+    cortex_m4_set_wait_states(device->cpu, kinetis_internal_wait_states, device);
+    if (kinetis_profile_has_peripheral(profile, KINETIS_PERIPHERAL_MTB))
+        cortex_m4_set_hardware_trace(device->cpu, kinetis_internal_mtb_trace, device);
+    if (kinetis_profile_has_peripheral(profile, KINETIS_PERIPHERAL_MCM))
+        cortex_m4_set_exception_vector(device->cpu, kinetis_internal_exception_vector, device);
+    CortexM4Architecture architecture = profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV6_M
+                                            ? CORTEX_M4_ARCHITECTURE_ARMV6_M
+                                            : CORTEX_M4_ARCHITECTURE_ARMV7E_M;
+    if (!cortex_m4_configure_architecture(device->cpu, architecture)) {
+        destroy_partial_device(device);
+        return NULL;
+    }
     if (!cortex_m4_configure_implementation(device->cpu, profile->cpu.external_irq_count,
                                             profile->cpu.nvic_priority_bits,
                                             profile->cpu.has_mpu ? 8u : 0u)) {
         destroy_partial_device(device);
         return NULL;
     }
+    cortex_m4_set_core_revision(device->cpu, profile->cpu.core_revision_major,
+                                profile->cpu.core_revision_minor);
     return device;
 }
 
@@ -670,7 +836,7 @@ static void clear_sram_range(Kinetis* device, size_t offset, size_t size) {
 }
 
 static void apply_vlls_sram_retention(Kinetis* device) {
-    if (device->timing.smc[3] != 0x40u)
+    if (kinetis_timing_power_status(&device->timing) != 0x40u)
         return;
 
     uint32_t retained_size;
@@ -735,6 +901,8 @@ bool kinetis_reset(Kinetis* device) {
     device->cycles = 0;
     device->timing.elapsed_core_cycles = 0;
     sync_flash_configuration(device);
+    device->reset_pin_enabled = device->profile->id != KINETIS_PROFILE_MKV10Z1287 ||
+                                (device->flash[0x40du] & 8u) != 0u;
     kinetis_peripheral_reset(device);
     kinetis_timing_reset(&device->timing, 0x82u, 0);
     kinetis_sync_clock_gates(device);
@@ -850,10 +1018,13 @@ bool kinetis_copy(Kinetis* destination, const Kinetis* source) {
     memcpy(destination->sram_initialized, source->sram_initialized,
            source->configuration.sram_size);
     memcpy(destination->peripheral, source->peripheral, KINETIS_PERIPHERAL_SIZE);
+    memcpy(destination->private_peripheral, source->private_peripheral,
+           KINETIS_PRIVATE_PERIPHERAL_SIZE);
     destination->configuration = source->configuration;
     destination->uninitialized_sram_read_count = source->uninitialized_sram_read_count;
     destination->first_uninitialized_sram_read = source->first_uninitialized_sram_read;
     destination->cycles = source->cycles;
+    destination->reset_pin_enabled = source->reset_pin_enabled;
     destination->cmt_cycles = source->cmt_cycles;
     destination->cmt_bus_remainder = source->cmt_bus_remainder;
     destination->cmt_mark_ticks = source->cmt_mark_ticks;
@@ -871,9 +1042,23 @@ bool kinetis_copy(Kinetis* destination, const Kinetis* source) {
     memcpy(destination->fmc_bank, source->fmc_bank, sizeof(destination->fmc_bank));
     memcpy(destination->fmc_age, source->fmc_age, sizeof(destination->fmc_age));
     destination->fmc_access_count = source->fmc_access_count;
+    destination->mmdvsq_pending_result = source->mmdvsq_pending_result;
+    destination->mmdvsq_pending_control = source->mmdvsq_pending_control;
+    destination->mmdvsq_cycles_remaining = source->mmdvsq_cycles_remaining;
+    destination->mmdvsq_stall_cycles = source->mmdvsq_stall_cycles;
+    destination->mtb_previous_address = source->mtb_previous_address;
+    destination->mtb_previous_opcode = source->mtb_previous_opcode;
+    destination->mtb_previous_lr = source->mtb_previous_lr;
+    destination->mtb_previous_exception = source->mtb_previous_exception;
+    destination->mtb_previous_valid = source->mtb_previous_valid;
+    destination->mtb_first_packet = source->mtb_first_packet;
+    destination->mtb_autostop_latched = source->mtb_autostop_latched;
+    destination->mtb_stop_pending = source->mtb_stop_pending;
     (void)kinetis_usbdcd_copy(&destination->usbdcd, &source->usbdcd);
     memcpy(destination->comparator_output, source->comparator_output,
            sizeof(destination->comparator_output));
+    memcpy(destination->data_interrupt, source->data_interrupt,
+           sizeof(destination->data_interrupt));
     memcpy(destination->events, source->events, sizeof(destination->events));
     destination->event_read_index = source->event_read_index;
     destination->event_write_index = source->event_write_index;

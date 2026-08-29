@@ -249,6 +249,8 @@ bool kinetis_io_flexbus_transfer(KinetisIo* io, uint32_t address, uint8_t access
     return false;
 }
 static bool mcm_offset_valid(const KinetisIo* io, uint32_t offset) {
+    if (io->configuration.profile->id == KINETIS_PROFILE_MKV10Z1287)
+        return offset == 8u || offset == 0x0au || offset == 0x0cu || offset == 0x40u;
     if (offset == 0 || offset == 2u || offset == 4u || offset == 8u)
         return true;
     const bool large_profile = io->configuration.profile->id == KINETIS_PROFILE_MK22FN1M012 ||
@@ -294,6 +296,12 @@ bool kinetis_io_internal_read_direct(KinetisIo* io, uint32_t address, uint8_t si
     if (location.id == KINETIS_PERIPHERAL_MCM) {
         if (!mcm_offset_valid(io, location.offset))
             return false;
+        if (size == 2u && (location.offset & 1u) == 0u) {
+            const uint8_t* bytes = (const uint8_t*)io->mcm;
+            *output_value = (uint32_t)bytes[location.offset] |
+                            (uint32_t)bytes[location.offset + 1u] << 8u;
+            return true;
+        }
         if (location.offset == 0 && size == 4) {
             *output_value = io->mcm[0];
             return true;

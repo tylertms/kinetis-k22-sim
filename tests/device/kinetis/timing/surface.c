@@ -139,9 +139,17 @@ static void test_control_surface(TestState* state, KinetisTiming* timing,
     expect(state, kinetis_timing_core_clock_hz(timing) == 4000000u,
            "kinetis_timing_core_clock_hz(timing) == 4000000u");
     kinetis_timing_test_expect_write(state, timing, 0x40065000u, 1, 0x80u);
-    kinetis_timing_test_expect_write(state, timing, 0x40065002u, 1, 3u);
     kinetis_timing_test_expect_read(state, timing, 0x40065000u, 1, 0x80u);
-    kinetis_timing_test_expect_read(state, timing, 0x40065002u, 1, 3u);
+    KinetisPeripheralLocation osc_div;
+    if (kinetis_profile_resolve_peripheral(timing->profile, 0x40065002u, 1u, &osc_div)) {
+        kinetis_timing_test_expect_write(state, timing, 0x40065002u, 1, 3u);
+        kinetis_timing_test_expect_read(state, timing, 0x40065002u, 1, 3u);
+    } else {
+        expect(state, !kinetis_timing_write(timing, 0x40065002u, 1u, 3u),
+               "absent OSC divider rejects writes");
+        expect(state, !kinetis_timing_read(timing, 0x40065002u, 1u, &(uint32_t){0}),
+               "absent OSC divider rejects reads");
+    }
     for (uint32_t offset = 0; offset < 10u; offset++) {
         if (offset != 7u)
             kinetis_timing_test_expect_write(state, timing, 0x4007c000u + offset, 1, 0x55u);
@@ -192,12 +200,11 @@ static void test_timer_register_surface(TestState* state, KinetisTiming* timing)
     for (size_t index = 0; index < sizeof(pdb_offsets) / sizeof(pdb_offsets[0]); index++) {
         const uint32_t address = PDB_SC + pdb_offsets[index];
         kinetis_timing_test_expect_write(state, timing, address, 4, (uint32_t)index);
-        kinetis_timing_test_expect_read(
-            state, timing, address, 4,
-            pdb_offsets[index] == 0x14u || pdb_offsets[index] == 0x3cu ? 0u : (uint32_t)index);
+        kinetis_timing_test_expect_read(state, timing, address, 4,
+                                        timing->pdb_registers[0][pdb_offsets[index] >> 2u]);
     }
-    kinetis_timing_test_expect_read(state, timing, PDB_MOD, 4, timing->pdb_mod);
-    kinetis_timing_test_expect_read(state, timing, PDB_IDLY, 4, timing->pdb_idly);
+    kinetis_timing_test_expect_read(state, timing, PDB_MOD, 4, timing->pdb_mod[0]);
+    kinetis_timing_test_expect_read(state, timing, PDB_IDLY, 4, timing->pdb_idly[0]);
     kinetis_timing_test_expect_write(state, timing, PDB_CNT, 4, 123u);
     expect(state, !kinetis_timing_read(timing, PDB_SC + 0x48u, 4, &(uint32_t){0}),
            "!kinetis_timing_read(timing, PDB_SC + 0x48u, 4, &(uint32_t){0})");
@@ -406,6 +413,7 @@ int main(void) {
     kinetis_timing_test_test_rtc_protection_and_compensation(&state, profile);
     kinetis_timing_test_test_pdb(&state, &timing, &observations);
     kinetis_timing_test_test_ftm(&state, &timing, &observations);
+    kinetis_timing_test_test_mkv10_ftm_dma(&state);
     kinetis_timing_test_test_ftm_clock_sources(&state, profile);
     kinetis_timing_test_test_ftm_input_capture(&state, profile);
     kinetis_timing_test_test_ftm_output(&state, profile);

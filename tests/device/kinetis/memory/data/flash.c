@@ -394,11 +394,11 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     kinetis_data_test_clear_flash_status(state, data);
     kinetis_data_test_flash_command(state, data, 0x06u, 0x2001u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
-           "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u");
+           "unaligned Program Longword sets ACCERR");
     kinetis_data_test_clear_flash_status(state, data);
     kinetis_data_test_flash_command(state, data, 0x07u, 0x3000u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u,
-           "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 0x20u) != 0u");
+           "unsupported Program Phrase sets ACCERR");
     kinetis_data_test_clear_flash_status(state, data);
 
     kinetis_data_test_write_fccob(state, data, 1u, 0u);

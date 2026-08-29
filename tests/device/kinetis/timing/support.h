@@ -124,19 +124,22 @@ typedef struct {
     uint32_t adc_triggers;
     uint32_t dac_triggers;
     uint32_t alternate_triggers;
+    uint32_t pdb_ftm_triggers;
     uint8_t last_trigger_instance;
     uint8_t last_trigger_channel;
+    uint8_t last_trigger_source;
 } Observations;
 
 uint64_t kinetis_timing_internal_clock_ticks(uint64_t* remainder, uint32_t cycles,
                                              uint32_t source_hz, uint32_t core_hz);
 uint32_t kinetis_timing_internal_fixed_clock_hz(const KinetisTiming* timing);
-void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint32_t cycles);
+void kinetis_timing_internal_advance_pdb(KinetisTiming* timing, uint8_t instance, uint32_t cycles);
 
 KinetisTimingSignals kinetis_timing_test_signals(Observations* observations);
 uint32_t kinetis_timing_test_cycles_for_ticks(const KinetisTiming* timing, uint32_t ticks,
                                               uint32_t clock_hz);
 void kinetis_timing_test_disable_watchdog_fixture(KinetisTiming* timing);
+void kinetis_timing_internal_ftm_dma_complete(KinetisTiming* timing, uint8_t request_source);
 void kinetis_timing_test_expect_read(TestState* state, KinetisTiming* timing, uint32_t address,
                                      uint8_t size, uint32_t expected);
 void kinetis_timing_test_expect_write(TestState* state, KinetisTiming* timing, uint32_t address,
@@ -145,6 +148,7 @@ void kinetis_timing_test_test_clock_tree_and_power(TestState* state, KinetisTimi
 void kinetis_timing_test_test_ftm_input_capture(TestState* state,
                                                 const KinetisDeviceProfile* profile);
 void kinetis_timing_test_test_ftm_output(TestState* state, const KinetisDeviceProfile* profile);
+void kinetis_timing_test_test_mkv10_ftm_dma(TestState* state);
 void kinetis_timing_test_test_ftm(TestState* state, KinetisTiming* timing,
                                   Observations* observations);
 void kinetis_timing_test_test_ftm_clock_sources(TestState* state,

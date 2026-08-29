@@ -36,6 +36,10 @@ typedef struct {
     uint16_t dma_active;
     uint32_t dma_write_values[32];
     uint8_t dma_write_count;
+    uint32_t dma_control_on_write;
+    uint8_t dma_request_on_write;
+    bool dma_control_write_pending;
+    bool dma_request_write_pending;
     KinetisData* data;
 } TestBus;
 

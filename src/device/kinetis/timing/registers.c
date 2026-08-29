@@ -31,6 +31,18 @@ static uint32_t ftm_write_protection_mask(uint8_t register_index) {
     return protection_masks[register_index];
 }
 
+static bool ftm_dual_capture_mode(const KinetisFtmState* ftm, uint8_t channel) {
+    const uint8_t shift = (uint8_t)((channel / 2u) * 8u);
+    return (ftm->sc & (1u << 5u)) == 0u && ((ftm->registers[4] >> shift) & 5u) == 4u;
+}
+
+static void ftm_reset_cleared_dual_capture(KinetisFtmState* ftm, uint8_t channel) {
+    const uint8_t first = channel & 0xfeu;
+    if ((ftm->channel_sc[first] & 0x80u) == 0u &&
+        (ftm->channel_sc[first + 1u] & 0x80u) == 0u)
+        ftm->dual_capture_waiting_final[first / 2u] = false;
+}
+
 static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t offset,
                                uint8_t size, uint32_t write_value) {
     if (size != 4 || (offset & 3u) != 0) {
@@ -66,7 +78,7 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
             kinetis_timing_internal_ftm_trigger(timing, instance);
     } else if (offset == 8) {
         ftm->modulo_buffer = (uint16_t)write_value;
-        if ((ftm->sc & 0x18u) == 0u) {
+        if (kinetis_timing_internal_ftm_bypass_buffers(timing, ftm)) {
             ftm->modulo = ftm->modulo_buffer;
             ftm->modulo_pending = false;
         } else {
@@ -82,10 +94,12 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
                 channel_flag = 0u;
             ftm->channel_sc[channel] = channel_flag | (write_value & 0x7fu);
             ftm->channel_flag_read[channel] = false;
+            ftm_reset_cleared_dual_capture(ftm, channel);
             kinetis_timing_internal_update_ftm_irq(timing, instance);
-        } else if (!kinetis_timing_internal_ftm_input_capture_mode(ftm, channel)) {
+        } else if (!kinetis_timing_internal_ftm_input_capture_mode(ftm, channel) &&
+                   !ftm_dual_capture_mode(ftm, channel)) {
             ftm->channel_value_buffer[channel] = (uint16_t)write_value;
-            if ((ftm->sc & 0x18u) == 0u) {
+            if (kinetis_timing_internal_ftm_bypass_buffers(timing, ftm)) {
                 ftm->channel_value[channel] = ftm->channel_value_buffer[channel];
                 ftm->channel_value_pending[channel] = false;
             } else {
@@ -94,7 +108,7 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
         }
     } else if (offset == 0x4cu) {
         ftm->initial_buffer = (uint16_t)write_value;
-        if ((ftm->sc & 0x18u) == 0u) {
+        if (kinetis_timing_internal_ftm_bypass_buffers(timing, ftm)) {
             ftm->initial = ftm->initial_buffer;
             ftm->initial_pending = false;
         } else {
@@ -108,6 +122,8 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
                 ftm->channel_flag_read[channel] = false;
             }
         }
+        for (uint8_t channel = 0u; channel < channels; channel += 2u)
+            ftm_reset_cleared_dual_capture(ftm, channel);
         kinetis_timing_internal_update_ftm_irq(timing, instance);
     } else if (offset >= 0x54u && offset <= 0x98u) {
         const uint8_t register_index = (uint8_t)((offset - 0x54u) / 4u);
@@ -199,6 +215,13 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
             if ((ftm->registers[0] & 4u) == 0u)
                 write_value = (write_value & ~protected_mask) |
                               (ftm->registers[register_index] & protected_mask);
+            if (register_index == 4u) {
+                const uint32_t changed = ftm->registers[4] ^ write_value;
+                for (uint8_t pair = 0u; pair < 4u; pair++) {
+                    if ((changed & (0x0du << (pair * 8u))) != 0u)
+                        ftm->dual_capture_waiting_final[pair] = false;
+                }
+            }
             ftm->registers[register_index] = write_value;
         }
         if (offset == 0x54u || offset == 0x7cu || offset == 0x88u) {
@@ -375,19 +398,30 @@ static bool read_timed_register(KinetisTiming* timing, uint32_t address, uint8_t
     if (address >= RTC_BASE && address <= RTC_BASE + 0x804u && size == 4 &&
         kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC))
         return rtc_read(timing, address - RTC_BASE, output_value);
-    if (address >= PDB_BASE && address < PDB_BASE + 0x1a0u && size == 4 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PDB0)) {
-        const uint32_t offset = address - PDB_BASE;
+    uint8_t pdb_instance = 0u;
+    uint32_t pdb_base = PDB0_BASE;
+    KinetisPeripheralId pdb_peripheral = KINETIS_PERIPHERAL_PDB0;
+    if (address >= PDB1_BASE && address < PDB1_BASE + 0x1a0u) {
+        pdb_instance = 1u;
+        pdb_base = PDB1_BASE;
+        pdb_peripheral = KINETIS_PERIPHERAL_PDB1;
+    }
+    if (address >= pdb_base && address < pdb_base + 0x1a0u && size == 4 &&
+        kinetis_timing_internal_has(timing, pdb_peripheral)) {
+        const uint32_t offset = address - pdb_base;
+        const bool reserved_mkv10_dac =
+            timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+            (offset == 0x158u || offset == 0x15cu);
         if (offset == 0)
-            *output_value = timing->pdb_sc;
+            *output_value = timing->pdb_sc[pdb_instance];
         else if (offset == 4)
-            *output_value = timing->pdb_mod;
+            *output_value = timing->pdb_mod[pdb_instance];
         else if (offset == 8)
-            *output_value = timing->pdb_counter;
+            *output_value = timing->pdb_counter[pdb_instance];
         else if (offset == 12)
-            *output_value = timing->pdb_idly;
-        else if (kinetis_timing_internal_pdb_auxiliary_offset(offset)) {
-            *output_value = timing->pdb_registers[offset >> 2u];
+            *output_value = timing->pdb_idly[pdb_instance];
+        else if (!reserved_mkv10_dac && kinetis_timing_internal_pdb_auxiliary_offset(offset)) {
+            *output_value = timing->pdb_registers[pdb_instance][offset >> 2u];
         } else
             return false;
         return true;
@@ -420,15 +454,28 @@ static bool write_timed_register(KinetisTiming* timing, uint32_t address, uint8_
                 timing->lptmr_counter = 0;
                 timing->lptmr_latched_counter = 0;
                 timing->lptmr_remainder = 0u;
+                timing->lptmr_prescaler_remainder = 0u;
                 timing->lptmr_filter_remainder = 0u;
                 timing->lptmr_filter_ticks = 0u;
+                timing->lptmr_sync_ticks = 0u;
+                timing->lptmr_prescaler_output = false;
             } else if (!was_enabled) {
                 timing->lptmr_observed_active =
                     kinetis_timing_internal_lptmr_selected_active(timing);
                 timing->lptmr_filter_ticks = 0u;
+                timing->lptmr_remainder = 0u;
+                timing->lptmr_prescaler_remainder = 0u;
+                timing->lptmr_prescaler_output = false;
+                timing->lptmr_sync_ticks =
+                    timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+                            (((timing->lptmr_csr & 2u) == 0u) ||
+                             (timing->lptmr_psr & 4u) == 0u)
+                        ? 2u
+                        : 0u;
             }
-            kinetis_timing_internal_set_irq(timing, IRQ_LPTMR,
-                                            (timing->lptmr_csr & 0xc0u) == 0xc0u);
+            kinetis_timing_internal_set_irq(
+                timing, kinetis_timing_internal_profile_irq(timing, IRQ_LPTMR, 28u),
+                (timing->lptmr_csr & 0xc0u) == 0xc0u);
             return true;
         }
         case 4:
@@ -449,27 +496,102 @@ static bool write_timed_register(KinetisTiming* timing, uint32_t address, uint8_
     if (address >= RTC_BASE && address <= RTC_BASE + 0x804u && size == 4 &&
         kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_RTC))
         return rtc_write(timing, address - RTC_BASE, write_value);
-    if (address >= PDB_BASE && address < PDB_BASE + 0x1a0u && size == 4 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PDB0)) {
-        const uint32_t offset = address - PDB_BASE;
+    uint8_t pdb_instance = 0u;
+    uint32_t pdb_base = PDB0_BASE;
+    KinetisPeripheralId pdb_peripheral = KINETIS_PERIPHERAL_PDB0;
+    if (address >= PDB1_BASE && address < PDB1_BASE + 0x1a0u) {
+        pdb_instance = 1u;
+        pdb_base = PDB1_BASE;
+        pdb_peripheral = KINETIS_PERIPHERAL_PDB1;
+    }
+    if (address >= pdb_base && address < pdb_base + 0x1a0u && size == 4 &&
+        kinetis_timing_internal_has(timing, pdb_peripheral)) {
+        const uint32_t offset = address - pdb_base;
+        const bool reserved_mkv10_dac =
+            timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+            (offset == 0x158u || offset == 0x15cu);
         if (offset == 0) {
-            if ((write_value & (1u << 6u)) == 0)
-                kinetis_timing_internal_set_irq(timing, IRQ_PDB, false);
-            timing->pdb_sc =
-                (timing->pdb_sc & write_value & (1u << 6u)) | (write_value & ~(1u << 6u));
-            if ((write_value & (1u << 16u)) != 0)
-                timing->pdb_counter = 0;
-        } else if (offset == 4)
-            timing->pdb_mod = (uint16_t)write_value;
+            const uint32_t old_sc = timing->pdb_sc[pdb_instance];
+            timing->pdb_sc[pdb_instance] = (old_sc & write_value & (1u << 6u)) |
+                                                   (old_sc & 1u) | (write_value & 0xeffaeu);
+            if ((write_value & 0x81u) == 0x81u)
+                timing->pdb_sc[pdb_instance] |= 1u;
+            if ((timing->pdb_sc[pdb_instance] & 0x80u) == 0u)
+                timing->pdb_sc[pdb_instance] &= ~1u;
+            if ((timing->pdb_sc[pdb_instance] & 0x80u) == 0u) {
+                timing->pdb_running[pdb_instance] = false;
+                timing->pdb_bypass_cycles[pdb_instance] = 0u;
+                timing->pdb_counter[pdb_instance] = 0u;
+                timing->pdb_remainder[pdb_instance] = 0u;
+                timing->pdb_bus_remainder[pdb_instance] = 0u;
+                timing->pdb_prescaler_cycles[pdb_instance] = 0u;
+                memset(timing->pdb_adc_locks[pdb_instance], 0,
+                       sizeof(timing->pdb_adc_locks[pdb_instance]));
+                memset(timing->pdb_back_to_back_pending[pdb_instance], 0,
+                       sizeof(timing->pdb_back_to_back_pending[pdb_instance]));
+                memset(timing->pdb_back_to_back_cycles[pdb_instance], 0,
+                       sizeof(timing->pdb_back_to_back_cycles[pdb_instance]));
+                memset(timing->pdb_delayed_pending[pdb_instance], 0,
+                       sizeof(timing->pdb_delayed_pending[pdb_instance]));
+                memset(timing->pdb_delayed_cycles[pdb_instance], 0,
+                       sizeof(timing->pdb_delayed_cycles[pdb_instance]));
+                memset(timing->pdb_channel_trigger_pending[pdb_instance], 0,
+                       sizeof(timing->pdb_channel_trigger_pending[pdb_instance]));
+                memset(timing->pdb_channel_trigger_cycles[pdb_instance], 0,
+                       sizeof(timing->pdb_channel_trigger_cycles[pdb_instance]));
+            } else if ((timing->pdb_sc[pdb_instance] & 1u) != 0u &&
+                       ((timing->pdb_sc[pdb_instance] >> 18u) & 3u) == 0u) {
+                kinetis_timing_internal_load_pdb(timing, pdb_instance);
+            }
+            if ((write_value & (1u << 16u)) != 0u &&
+                ((timing->pdb_sc[pdb_instance] >> 8u) & 15u) == 15u)
+                kinetis_timing_internal_trigger_pdb(timing, pdb_instance, 15u);
+            kinetis_timing_internal_refresh_pdb_irq(timing);
+        } else if (offset == 4) {
+            if ((timing->pdb_sc[pdb_instance] & 1u) == 0u)
+                timing->pdb_mod_buffer[pdb_instance] = (uint16_t)write_value;
+        }
         else if (offset == 8)
             return true;
-        else if (offset == 12)
-            timing->pdb_idly = (uint16_t)write_value;
-        else if (kinetis_timing_internal_pdb_auxiliary_offset(offset)) {
-            if (offset == 0x14u || offset == 0x3cu)
-                timing->pdb_registers[offset >> 2u] &= ~write_value;
-            else
-                timing->pdb_registers[offset >> 2u] = write_value;
+        else if (offset == 12) {
+            if ((timing->pdb_sc[pdb_instance] & 1u) == 0u)
+                timing->pdb_idly_buffer[pdb_instance] = (uint16_t)write_value;
+        }
+        else if (!reserved_mkv10_dac && kinetis_timing_internal_pdb_auxiliary_offset(offset)) {
+            if (offset == 0x14u || offset == 0x3cu) {
+                timing->pdb_registers[pdb_instance][offset >> 2u] &= write_value;
+                kinetis_timing_internal_refresh_pdb_irq(timing);
+            } else if (offset == 0x10u || offset == 0x38u) {
+                const uint8_t channel = offset == 0x10u ? 0u : 1u;
+                timing->pdb_registers[pdb_instance][offset >> 2u] = write_value;
+                const uint8_t enabled = (uint8_t)write_value & 3u;
+                timing->pdb_adc_locks[pdb_instance][channel] &= enabled;
+                timing->pdb_channel_trigger_pending[pdb_instance][channel] &= enabled;
+                timing->pdb_delayed_pending[pdb_instance][channel] &= enabled;
+                timing->pdb_back_to_back_pending[pdb_instance][channel] &= enabled;
+                for (uint8_t pretrigger = 0u; pretrigger < 2u; pretrigger++) {
+                    if ((enabled & (1u << pretrigger)) == 0u)
+                        timing->pdb_delayed_cycles[pdb_instance][channel][pretrigger] = 0u;
+                }
+                if (timing->pdb_channel_trigger_pending[pdb_instance][channel] == 0u)
+                    timing->pdb_channel_trigger_cycles[pdb_instance][channel] = 0u;
+                if (timing->pdb_back_to_back_pending[pdb_instance][channel] == 0u)
+                    timing->pdb_back_to_back_cycles[pdb_instance][channel] = 0u;
+                kinetis_timing_internal_refresh_pdb_irq(timing);
+            } else if (kinetis_timing_internal_pdb_buffered_offset(offset)) {
+                if ((timing->pdb_sc[pdb_instance] & 1u) == 0u)
+                    timing->pdb_register_buffers[pdb_instance][offset >> 2u] = write_value;
+            }
+            else {
+                timing->pdb_registers[pdb_instance][offset >> 2u] = write_value;
+                if (offset == 0x190u) {
+                    for (uint8_t output = 0u; output < 2u; output++) {
+                        if ((write_value & (1u << output)) == 0u)
+                            kinetis_timing_internal_set_pdb_pulse(timing, pdb_instance, output,
+                                                                  false);
+                    }
+                }
+            }
         } else
             return false;
         return true;
@@ -495,6 +617,8 @@ bool kinetis_timing_init(KinetisTiming* timing, const KinetisDeviceProfile* prof
     timing->slow_irc_hz = 32768u;
     timing->fast_irc_hz = 4000000u;
     timing->lpo_hz = 1000u;
+    timing->reset_pin_input_high = true;
+    timing->reset_pin_filtered_high = true;
     kinetis_timing_reset(timing, 0x82u, 0);
     return true;
 }
@@ -512,6 +636,11 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     const uint8_t sim_sdid_pin_id = timing->sim_sdid_pin_id;
     const uint8_t sticky0 = timing->rcm[8];
     const uint8_t sticky1 = timing->rcm[9];
+    const uint8_t reset_pin_filter_control = timing->rcm[4];
+    const uint8_t reset_pin_filter_width = timing->rcm[5];
+    const bool reset_pin_input_high = timing->reset_pin_input_high;
+    const bool reset_pin_filtered_high = timing->reset_pin_filtered_high;
+    const bool reset_pin_held = timing->reset_pin_held;
     memset(timing, 0, sizeof(*timing));
     timing->profile = profile;
     timing->sim_sdid_pin_id = sim_sdid_pin_id;
@@ -532,8 +661,15 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
         timing->sim_sopt1 = 0x3000u;
         timing->sim_scgc5 = 0x00040180u;
         timing->sim_scgc6 = 1u;
+    } else if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        timing->sim_sopt1 = 0u;
+        timing->sim_sopt2 = 0u;
+        timing->sim_scgc4 = 0xf0000030u;
+        timing->sim_scgc5 = 0x00040180u;
+        timing->sim_scgc6 = 1u;
     }
-    timing->sim_scgc7 = timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
+    timing->sim_scgc7 = timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 0x100u
+                        : timing->profile->id == KINETIS_PROFILE_MK22FN1M012 ||
                                 timing->profile->id == KINETIS_PROFILE_MK22FX51212
                             ? 6u
                             : 2u;
@@ -554,6 +690,14 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     timing->smc_run_status = 1u;
     timing->rcm[0] = srs0;
     timing->rcm[1] = srs1;
+    if (srs0 != 0x82u || srs1 != 0u) {
+        timing->rcm[4] = reset_pin_filter_control;
+        timing->rcm[5] = reset_pin_filter_width;
+    }
+    timing->reset_pin_input_high = reset_pin_input_high;
+    timing->reset_pin_filtered_high =
+        srs0 == 0x82u && srs1 == 0u ? true : reset_pin_filtered_high;
+    timing->reset_pin_held = srs0 == 0x82u && srs1 == 0u ? false : reset_pin_held;
     if (srs0 == 0x82u && srs1 == 0) {
         timing->rcm[8] = srs0;
         timing->rcm[9] = srs1;
@@ -570,12 +714,19 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     timing->rtc_ier = 7u;
     timing->rtc_war = kinetis_timing_internal_rtc_access_reset(timing);
     timing->rtc_rar = kinetis_timing_internal_rtc_access_reset(timing);
-    timing->pdb_mod = 0xffffu;
-    timing->pdb_idly = 0xffffu;
-    for (uint8_t instance = 0; instance < 4; instance++) {
+    for (uint8_t instance = 0u; instance < 2u; instance++) {
+        timing->pdb_mod[instance] = 0xffffu;
+        timing->pdb_mod_buffer[instance] = 0xffffu;
+        timing->pdb_idly[instance] = 0xffffu;
+        timing->pdb_idly_buffer[instance] = 0xffffu;
+    }
+    for (uint8_t instance = 0; instance < KINETIS_FTM_COUNT; instance++) {
         timing->ftm[instance].modulo = 0;
         timing->ftm[instance].registers[0] = 4u;
-        timing->ftm[instance].quadrature_capable = instance == 1u || instance == 2u;
+        timing->ftm[instance].quadrature_capable =
+            instance == 1u || instance == 2u ||
+            (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+             (instance == 4u || instance == 5u));
     }
     timing->wdog[0] = 0x01d3u;
     timing->wdog[1] = 1u;
@@ -593,7 +744,8 @@ void kinetis_timing_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
     kinetis_timing_internal_update_clocks(timing);
     kinetis_timing_internal_update_rtc_irq(timing);
     kinetis_timing_internal_set_irq(timing, IRQ_RTC_SECONDS, false);
-    kinetis_timing_internal_set_irq(timing, IRQ_WDOG_EWM, false);
+    kinetis_timing_internal_set_irq(
+        timing, kinetis_timing_internal_profile_irq(timing, IRQ_WDOG_EWM, 23u), false);
 }
 
 void kinetis_timing_warm_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1) {
@@ -615,13 +767,29 @@ void kinetis_timing_warm_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1
     const uint16_t lptmr_counter = timing->lptmr_counter;
     const uint16_t lptmr_latched_counter = timing->lptmr_latched_counter;
     const uint64_t lptmr_remainder = timing->lptmr_remainder;
+    const uint64_t lptmr_prescaler_remainder = timing->lptmr_prescaler_remainder;
     const uint64_t lptmr_filter_remainder = timing->lptmr_filter_remainder;
     const uint32_t lptmr_filter_ticks = timing->lptmr_filter_ticks;
+    const uint8_t lptmr_sync_ticks = timing->lptmr_sync_ticks;
     const bool lptmr_input[3] = {timing->lptmr_input[0], timing->lptmr_input[1],
                                  timing->lptmr_input[2]};
     const bool lptmr_observed_active = timing->lptmr_observed_active;
+    const bool lptmr_prescaler_output = timing->lptmr_prescaler_output;
     const uint16_t wdog_reset_count = timing->wdog[10];
+    const uint8_t smc_pmprot = timing->smc[0];
+    const uint8_t smc_pmctrl = timing->smc[1];
+    const uint8_t smc_stopctrl = timing->smc[2];
+    const bool smc_pmprot_written = timing->smc_pmprot_written;
+    const bool vlls_reset = timing->smc_stop_status == 0x40u;
     kinetis_timing_reset(timing, srs0, srs1);
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+        timing->smc[1] = smc_pmctrl;
+        timing->smc[2] = smc_stopctrl;
+        if (vlls_reset) {
+            timing->smc[0] = smc_pmprot;
+            timing->smc_pmprot_written = smc_pmprot_written;
+        }
+    }
     timing->rtc_tsr = tsr;
     timing->rtc_tpr = tpr;
     timing->rtc_tar = tar;
@@ -643,13 +811,18 @@ void kinetis_timing_warm_reset(KinetisTiming* timing, uint8_t srs0, uint8_t srs1
         timing->lptmr_counter = lptmr_counter;
         timing->lptmr_latched_counter = lptmr_latched_counter;
         timing->lptmr_remainder = lptmr_remainder;
+        timing->lptmr_prescaler_remainder = lptmr_prescaler_remainder;
         timing->lptmr_filter_remainder = lptmr_filter_remainder;
         timing->lptmr_filter_ticks = lptmr_filter_ticks;
+        timing->lptmr_sync_ticks = lptmr_sync_ticks;
         timing->lptmr_input[0] = lptmr_input[0];
         timing->lptmr_input[1] = lptmr_input[1];
         timing->lptmr_input[2] = lptmr_input[2];
         timing->lptmr_observed_active = lptmr_observed_active;
-        kinetis_timing_internal_set_irq(timing, IRQ_LPTMR, (timing->lptmr_csr & 0xc0u) == 0xc0u);
+        timing->lptmr_prescaler_output = lptmr_prescaler_output;
+        kinetis_timing_internal_set_irq(timing,
+                                        kinetis_timing_internal_profile_irq(timing, IRQ_LPTMR, 28u),
+                                        (timing->lptmr_csr & 0xc0u) == 0xc0u);
     }
 }
 
@@ -662,25 +835,27 @@ bool kinetis_timing_read(KinetisTiming* timing, uint32_t address, uint8_t size,
         kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_SIM)) {
         return kinetis_timing_internal_read_sim(timing, address, size, output_value);
     }
-    if (address >= MCG_BASE && address < MCG_BASE + 14u &&
+    if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_MCG, address, size) &&
         kinetis_timing_internal_mcg_register(address - MCG_BASE) &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_MCG)) {
+        !(timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && address == MCG_BASE + 4u)) {
         return kinetis_timing_internal_read_byte_block(timing->mcg, MCG_BASE, 14u, address, size,
                                                        output_value);
     }
     if (address == OSC_BASE && size == 1 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_OSC)) {
+        kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_OSC, address, size)) {
         *output_value = timing->osc_cr;
         return true;
     }
     if (address == OSC_BASE + 2u && size == 1 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_OSC)) {
+        kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_OSC, address, size)) {
         *output_value = timing->osc_div;
         return true;
     }
     if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_LLWU, address, size))
-        return kinetis_timing_internal_read_byte_block(timing->llwu, LLWU_BASE, 11u, address, size,
-                                                       output_value);
+        return kinetis_timing_internal_read_byte_block(
+            timing->llwu, LLWU_BASE,
+            timing->profile->id == KINETIS_PROFILE_MKV10Z1287 ? 16u : 11u, address, size,
+            output_value);
     if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_PMC, address, size))
         return kinetis_timing_internal_read_byte_block(timing->pmc, PMC_BASE, 3u, address, size,
                                                        output_value);
@@ -701,33 +876,62 @@ bool kinetis_timing_read(KinetisTiming* timing, uint32_t address, uint8_t size,
 
 static bool write_control_register(KinetisTiming* timing, uint32_t address, uint8_t size,
                                    uint32_t write_value) {
-    if (address >= MCG_BASE && address < MCG_BASE + 14u &&
+    if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_MCG, address, size) &&
         kinetis_timing_internal_mcg_register(address - MCG_BASE) && size == 1 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_MCG)) {
-        if (address != MCG_BASE + 6u)
-            timing->mcg[address - MCG_BASE] = (uint8_t)write_value;
+        !(timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && address == MCG_BASE + 4u)) {
+        const uint8_t offset = (uint8_t)(address - MCG_BASE);
+        const bool trim_active = (timing->mcg[8] & 0x80u) != 0u;
+        if (trim_active && (offset == 0u || offset == 2u || offset == 3u || offset == 8u))
+            kinetis_timing_internal_abort_mcg_trim(timing);
+        if (address == MCG_BASE + 8u && timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+            const uint8_t flags = timing->mcg[8] & 0x21u & (uint8_t)~write_value;
+            timing->mcg[8] = flags | ((uint8_t)write_value & 0x5eu);
+            if (trim_active)
+                timing->mcg[8] |= 0x20u;
+            if (!trim_active && ((uint8_t)write_value & 0x80u) != 0u)
+                kinetis_timing_internal_start_mcg_trim(timing);
+            if ((timing->mcg[8] & 1u) == 0u)
+                kinetis_timing_internal_set_irq(timing, 27u, false);
+        } else if (address == MCG_BASE + 8u) {
+            const uint8_t clock_loss = timing->mcg[8] & 1u & (uint8_t)~write_value;
+            timing->mcg[8] = ((uint8_t)write_value & 0xfeu) | clock_loss;
+            if (clock_loss == 0u)
+                kinetis_timing_internal_set_irq(timing, 27u, false);
+        } else if (address != MCG_BASE + 6u) {
+            timing->mcg[offset] = (uint8_t)write_value;
+        }
         kinetis_timing_internal_update_clocks(timing);
         return true;
     }
     if (address == OSC_BASE && size == 1 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_OSC)) {
+        kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_OSC, address, size)) {
         timing->osc_cr = (uint8_t)write_value;
         return true;
     }
     if (address == OSC_BASE + 2u && size == 1 &&
-        kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_OSC)) {
+        kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_OSC, address, size)) {
         timing->osc_div = (uint8_t)write_value;
         return true;
     }
     if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_LLWU, address, size)) {
         const uint8_t offset = (uint8_t)(address - LLWU_BASE);
-        if (offset == 5u || offset == 6u)
-            timing->llwu[offset] &= (uint8_t)~write_value;
-        else if (offset == 8u || offset == 9u)
-            timing->llwu[offset] = (timing->llwu[offset] & 0x80u & (uint8_t)~write_value) |
-                                   ((uint8_t)write_value & 0x6fu);
-        else if (offset != 7u)
-            timing->llwu[offset] = (uint8_t)write_value;
+        if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287) {
+            if (offset >= 9u && offset <= 12u)
+                timing->llwu[offset] &= (uint8_t)~write_value;
+            else if (offset == 14u || offset == 15u)
+                timing->llwu[offset] = (timing->llwu[offset] & 0x80u & (uint8_t)~write_value) |
+                                       ((uint8_t)write_value & 0x7fu);
+            else if (offset != 13u)
+                timing->llwu[offset] = (uint8_t)write_value;
+        } else {
+            if (offset == 5u || offset == 6u)
+                timing->llwu[offset] &= (uint8_t)~write_value;
+            else if (offset == 8u || offset == 9u)
+                timing->llwu[offset] = (timing->llwu[offset] & 0x80u & (uint8_t)~write_value) |
+                                       ((uint8_t)write_value & 0x6fu);
+            else if (offset != 7u)
+                timing->llwu[offset] = (uint8_t)write_value;
+        }
         kinetis_timing_internal_update_llwu_irq(timing);
         return true;
     }
@@ -759,11 +963,34 @@ static bool write_control_register(KinetisTiming* timing, uint32_t address, uint
     }
     if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_SMC, address, size)) {
         const uint8_t offset = (uint8_t)(address - SMC_BASE);
-        if (offset == 0u)
-            timing->smc[0] |= (uint8_t)write_value & 0xaau;
+        const bool mkv10 = timing->profile->id == KINETIS_PROFILE_MKV10Z1287;
+        if (offset == 0u) {
+            if (!mkv10 || !timing->smc_pmprot_written) {
+                timing->smc[0] |= (uint8_t)write_value & (mkv10 ? 0x22u : 0xaau);
+                if (mkv10)
+                    timing->smc[1] &= 0xf8u;
+                timing->smc_pmprot_written = true;
+            }
+        }
         else if (offset == 1u) {
-            timing->smc[1] = (uint8_t)write_value & 0xe7u;
-            const uint8_t mode = (uint8_t)write_value & 0x60u;
+            if (mkv10) {
+                const uint8_t previous = timing->smc[1];
+                const uint8_t requested_stop = (uint8_t)write_value & 7u;
+                const bool stop_allowed = requested_stop == 0u ||
+                                          (requested_stop == 2u && (timing->smc[0] & 0x20u) != 0u) ||
+                                          (requested_stop == 4u && (timing->smc[0] & 2u) != 0u);
+                const uint8_t requested_run = (uint8_t)write_value & 0x60u;
+                const bool run_allowed = requested_run == 0u ||
+                                         (requested_run == 0x40u &&
+                                          (timing->smc[0] & 0x20u) != 0u);
+                timing->smc[1] = (previous & 0x0fu) | (run_allowed ? requested_run
+                                                                  : previous & 0x60u);
+                if (stop_allowed)
+                    timing->smc[1] = (timing->smc[1] & 0x68u) | requested_stop;
+            } else {
+                timing->smc[1] = (uint8_t)write_value & 0xe7u;
+            }
+            const uint8_t mode = timing->smc[1] & 0x60u;
             if (mode == 0x40u && (timing->smc[0] & 0x20u) != 0u)
                 timing->smc_run_status = 4u;
             else if (mode == 0x60u && (timing->smc[0] & 0x80u) != 0u)
@@ -772,15 +999,30 @@ static bool write_control_register(KinetisTiming* timing, uint32_t address, uint
                 timing->smc_run_status = 1u;
             if (!timing->cpu_sleeping)
                 timing->smc[3] = timing->smc_run_status;
-        } else if (offset == 2u)
-            timing->smc[2] = (uint8_t)write_value;
+        } else if (offset == 2u) {
+            if (mkv10) {
+                const uint8_t vlls_mode = (uint8_t)write_value & 7u;
+                if (vlls_mode == 0u || vlls_mode == 1u || vlls_mode == 3u)
+                    timing->smc[2] = (uint8_t)write_value & 0xe7u;
+            } else {
+                timing->smc[2] = (uint8_t)write_value;
+            }
+        }
         return true;
     }
     if (kinetis_timing_internal_contains(timing, KINETIS_PERIPHERAL_RCM, address, size)) {
         const uint8_t offset = (uint8_t)(address - RCM_BASE);
-        if (offset == 4u || offset == 5u)
-            timing->rcm[offset] = (uint8_t)write_value;
-        else if (offset == 8u || offset == 9u)
+        if (offset == 4u) {
+            timing->rcm[offset] = timing->profile->id == KINETIS_PROFILE_MKV10Z1287
+                                      ? (uint8_t)write_value & 7u
+                                      : (uint8_t)write_value;
+            kinetis_timing_internal_reset_pin_filter(timing);
+        } else if (offset == 5u) {
+            timing->rcm[offset] = timing->profile->id == KINETIS_PROFILE_MKV10Z1287
+                                      ? (uint8_t)write_value & 0x1fu
+                                      : (uint8_t)write_value;
+            kinetis_timing_internal_reset_pin_filter(timing);
+        } else if (offset == 8u || offset == 9u)
             timing->rcm[offset] &= (uint8_t)~write_value;
         else
             return false;
@@ -813,15 +1055,21 @@ void kinetis_timing_advance(KinetisTiming* timing, uint32_t core_cycles) {
         return;
     }
     timing->elapsed_core_cycles += core_cycles;
+    if (kinetis_timing_internal_advance_reset_pin(timing, core_cycles))
+        return;
+    if (timing->reset_pin_held)
+        return;
     kinetis_timing_internal_advance_pll(timing, core_cycles);
+    kinetis_timing_internal_advance_mcg_trim(timing, core_cycles);
     kinetis_timing_internal_advance_wdog(timing, core_cycles);
     kinetis_timing_internal_advance_ewm(timing, core_cycles);
     kinetis_timing_internal_advance_pit(timing, core_cycles);
     kinetis_timing_internal_advance_lptmr(timing, core_cycles);
     kinetis_timing_internal_advance_rtc(timing, core_cycles);
-    kinetis_timing_internal_advance_pdb(timing, core_cycles);
-    for (uint8_t instance = 0; instance < 4; instance++) {
-        const KinetisPeripheralId id = (KinetisPeripheralId)(KINETIS_PERIPHERAL_FTM0 + instance);
+    for (uint8_t instance = 0u; instance < 2u; instance++)
+        kinetis_timing_internal_advance_pdb(timing, instance, core_cycles);
+    for (uint8_t instance = 0; instance < KINETIS_FTM_COUNT; instance++) {
+        const KinetisPeripheralId id = kinetis_timing_internal_ftm_peripheral(instance);
         if (kinetis_timing_internal_has(timing, id))
             kinetis_timing_internal_advance_ftm(timing, instance, core_cycles);
     }
@@ -830,6 +1078,8 @@ void kinetis_timing_advance(KinetisTiming* timing, uint32_t core_cycles) {
 void kinetis_timing_set_debug_halted(KinetisTiming* timing, bool halted) {
     if (timing == NULL || timing->debug_halted == halted)
         return;
+    if (halted)
+        kinetis_timing_internal_ftm_capture_debug_outputs(timing);
     timing->debug_halted = halted;
     if (halted && timing->wdog_initial_unlock_required &&
         timing->wdog_bus_cycles <= timing->wdog_update_deadline) {
@@ -847,7 +1097,8 @@ bool kinetis_timing_trigger_low_voltage_warning(KinetisTiming* timing) {
     if (timing == NULL || timing->profile == NULL ||
         !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PMC))
         return false;
-    if (timing->smc[3] != 1u && timing->smc[3] != 2u && timing->smc[3] != 0x80u)
+    const uint8_t power_status = kinetis_timing_power_status(timing);
+    if (power_status != 1u && power_status != 2u && power_status != 0x80u)
         return true;
     timing->pmc[1] |= 0x80u;
     kinetis_timing_internal_update_pmc_irq(timing);
@@ -858,7 +1109,8 @@ bool kinetis_timing_trigger_low_voltage_detect(KinetisTiming* timing) {
     if (timing == NULL || timing->profile == NULL ||
         !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_PMC))
         return false;
-    if (timing->smc[3] != 1u && timing->smc[3] != 2u && timing->smc[3] != 0x80u)
+    const uint8_t power_status = kinetis_timing_power_status(timing);
+    if (power_status != 1u && power_status != 2u && power_status != 0x80u)
         return true;
     timing->pmc[0] |= 0x80u;
     if ((timing->pmc[0] & 0x10u) != 0u)
@@ -874,18 +1126,22 @@ static bool llwu_edge_detected(uint8_t edge, bool previous, bool high) {
 }
 
 static bool llwu_low_leakage(const KinetisTiming* timing) {
-    return timing->smc[3] == 0x20u || timing->smc[3] == 0x40u;
+    const uint8_t power_status = kinetis_timing_power_status(timing);
+    return power_status == 0x20u || power_status == 0x40u;
 }
 
 static void llwu_wake(KinetisTiming* timing) {
-    if (timing->smc[3] == 0x40u)
+    if (kinetis_timing_power_status(timing) == 0x40u)
         kinetis_timing_internal_signal_reset(timing, 1u, 0u);
     else
         kinetis_timing_internal_update_llwu_irq(timing);
 }
 
 bool kinetis_timing_set_llwu_pin(KinetisTiming* timing, uint8_t pin, bool high) {
-    if (timing == NULL || timing->profile == NULL || pin >= 16u ||
+    const bool mkv10 = timing != NULL && timing->profile != NULL &&
+                       timing->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    if (timing == NULL || timing->profile == NULL || pin >= (mkv10 ? 32u : 16u) ||
+        (mkv10 && (UINT32_C(0x0038fff9) & (UINT32_C(1) << pin)) == 0u) ||
         !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_LLWU))
         return false;
     const bool previous = timing->llwu_pin_level[pin];
@@ -895,13 +1151,15 @@ bool kinetis_timing_set_llwu_pin(KinetisTiming* timing, uint8_t pin, bool high) 
     bool wake = false;
     const uint8_t pin_edge = (timing->llwu[pin / 4u] >> ((pin & 3u) * 2u)) & 3u;
     if (llwu_edge_detected(pin_edge, previous, high)) {
-        timing->llwu[5u + pin / 8u] |= (uint8_t)(1u << (pin & 7u));
+        timing->llwu[(mkv10 ? 9u : 5u) + pin / 8u] |= (uint8_t)(1u << (pin & 7u));
         wake = true;
     }
     for (uint8_t filter = 0u; filter < 2u; filter++) {
-        const uint8_t control = timing->llwu[8u + filter];
-        if ((control & 15u) == pin && llwu_edge_detected((control >> 5u) & 3u, previous, high)) {
-            timing->llwu[8u + filter] |= 0x80u;
+        const uint8_t filter_index = (uint8_t)((mkv10 ? 14u : 8u) + filter);
+        const uint8_t control = timing->llwu[filter_index];
+        if ((control & (mkv10 ? 31u : 15u)) == pin &&
+            llwu_edge_detected((control >> 5u) & 3u, previous, high)) {
+            timing->llwu[filter_index] |= 0x80u;
             wake = true;
         }
     }
@@ -914,8 +1172,9 @@ bool kinetis_timing_trigger_llwu_module(KinetisTiming* timing, uint8_t module) {
     if (timing == NULL || timing->profile == NULL || module >= 8u ||
         !kinetis_timing_internal_has(timing, KINETIS_PERIPHERAL_LLWU))
         return false;
-    if (llwu_low_leakage(timing) && (timing->llwu[4] & (1u << module)) != 0u) {
-        timing->llwu[7] |= (uint8_t)(1u << module);
+    const bool mkv10 = timing->profile->id == KINETIS_PROFILE_MKV10Z1287;
+    if (llwu_low_leakage(timing) && (timing->llwu[mkv10 ? 8u : 4u] & (1u << module)) != 0u) {
+        timing->llwu[mkv10 ? 13u : 7u] |= (uint8_t)(1u << module);
         llwu_wake(timing);
     }
     return true;
@@ -933,17 +1192,21 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
         timing->ewm_service_deadline = timing->wdog_bus_cycles + timing->ewm_service_remaining;
         timing->ewm_service_paused = false;
     }
+    const bool previous_deep_sleeping = timing->deep_sleeping;
     const bool pee_before_sleep =
         (timing->mcg[0] & 0xc0u) == 0u && (timing->mcg[5] & 0x40u) != 0u && timing->pll_locked;
     timing->cpu_sleeping = sleeping;
     timing->deep_sleeping = sleeping && deep_sleep;
+    if (timing->deep_sleeping != previous_deep_sleeping)
+        kinetis_timing_internal_reset_pin_filter(timing);
     if (!sleeping) {
         if (timing->pll_wake_to_pbe) {
             timing->mcg[0] = (timing->mcg[0] & 0x3fu) | 0x80u;
             timing->pll_wake_to_pbe = false;
         }
-        if (timing->smc[3] != 0x40u)
+        if (timing->smc_stop_status != 0x40u)
             timing->smc[3] = timing->smc_run_status;
+        timing->smc_stop_status = 0u;
         kinetis_timing_internal_update_clocks(timing);
         return;
     }
@@ -951,15 +1214,28 @@ void kinetis_timing_set_cpu_sleeping(KinetisTiming* timing, bool sleeping, bool 
         timing->smc[3] = timing->smc_run_status == 4u ? 8u : timing->smc_run_status;
         return;
     }
+    kinetis_timing_internal_abort_mcg_trim(timing);
     const uint8_t stop_mode = timing->smc[1] & 7u;
+    timing->smc[1] &= 0xf7u;
+    if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+        !((stop_mode == 0u) || (stop_mode == 2u && (timing->smc[0] & 0x20u) != 0u) ||
+          (stop_mode == 4u && (timing->smc[0] & 2u) != 0u))) {
+        timing->smc[1] |= 8u;
+        timing->cpu_sleeping = false;
+        timing->deep_sleeping = false;
+        timing->smc_stop_status = 0u;
+        return;
+    }
     if (stop_mode == 0u)
-        timing->smc[3] = 2u;
+        timing->smc_stop_status = 2u;
     else if (stop_mode == 2u && (timing->smc[0] & 0x20u) != 0u)
-        timing->smc[3] = 0x10u;
+        timing->smc_stop_status = 0x10u;
     else if (stop_mode == 3u && (timing->smc[0] & 8u) != 0u)
-        timing->smc[3] = 0x20u;
+        timing->smc_stop_status = 0x20u;
     else if (stop_mode == 4u && (timing->smc[0] & 2u) != 0u)
-        timing->smc[3] = 0x40u;
+        timing->smc_stop_status = 0x40u;
+    if (!timing->debug_halted && (timing->smc[2] & 0xc0u) == 0u)
+        timing->smc[3] = timing->smc_stop_status;
     kinetis_timing_internal_update_clocks(timing);
     timing->pll_wake_to_pbe = pee_before_sleep && !timing->pll_locked;
 }
@@ -995,12 +1271,56 @@ uint32_t kinetis_timing_bus_clock_hz(const KinetisTiming* timing) {
     return timing == NULL ? 0 : timing->bus_clock_hz;
 }
 
+uint8_t kinetis_timing_power_status(const KinetisTiming* timing) {
+    if (timing == NULL)
+        return 0u;
+    return timing->deep_sleeping && timing->smc_stop_status != 0u ? timing->smc_stop_status
+                                                                  : timing->smc[3];
+}
+
+uint32_t kinetis_timing_adc_alt_clock_hz(const KinetisTiming* timing, uint8_t instance) {
+    if (timing == NULL || instance >= 2u)
+        return 0u;
+    switch ((timing->sim_sopt7 >> (24u + instance * 2u)) & 3u) {
+    case 0u:
+        if ((timing->sim_clkdiv1 & (1u << 15u)) == 0u)
+            return 0u;
+        return timing->core_clock_hz / (((timing->sim_clkdiv1 >> 12u) & 7u) + 1u);
+    case 1u:
+        return kinetis_timing_internal_mcgir_clock_hz(timing);
+    case 2u:
+        return kinetis_timing_internal_oscer_clock_hz(timing);
+    default:
+        return 0u;
+    }
+}
+
 bool kinetis_timing_system_clock_running(const KinetisTiming* timing) {
-    return timing != NULL && !timing->deep_sleeping;
+    return timing != NULL && !timing->deep_sleeping && !timing->cpu_only;
 }
 
 bool kinetis_timing_bus_clock_running(const KinetisTiming* timing) {
-    if (timing == NULL || !timing->deep_sleeping)
-        return timing != NULL;
+    if (timing == NULL || timing->cpu_only)
+        return false;
+    if (!timing->deep_sleeping)
+        return true;
     return (timing->smc[1] & 7u) == 0u && ((timing->smc[2] >> 6u) & 3u) == 2u;
+}
+
+bool kinetis_timing_flash_access_enabled(const KinetisTiming* timing) {
+    if (timing == NULL || timing->profile == NULL)
+        return false;
+    if (timing->profile->id != KINETIS_PROFILE_MKV10Z1287)
+        return true;
+    if ((timing->sim_fcfg1 & 1u) != 0u)
+        return false;
+    const uint8_t power_status = kinetis_timing_power_status(timing);
+    const bool dozing = timing->cpu_only ||
+                        (timing->cpu_sleeping && (power_status == 1u || power_status == 2u));
+    return (timing->sim_fcfg1 & 2u) == 0u || !dozing;
+}
+
+void kinetis_timing_set_cpu_only(KinetisTiming* timing, bool cpu_only) {
+    if (timing != NULL)
+        timing->cpu_only = cpu_only;
 }

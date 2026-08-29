@@ -4,6 +4,35 @@
 
 #define BLOCK(peripheral, base, length) {KINETIS_PERIPHERAL_##peripheral, base, length}
 
+static const KinetisPeripheralBlock mkv10z1287_blocks[] = {
+    BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1100u),
+    BLOCK(FTFA, 0x40020000u, 0x2cu),         BLOCK(DMAMUX, 0x40021000u, 0x08u),
+    BLOCK(FTM3, 0x40026000u, 0x9cu),         BLOCK(FTM4, 0x40027000u, 0x9cu),
+    BLOCK(FTM5, 0x40028000u, 0x9cu),         BLOCK(SPI0, 0x4002c000u, 0x140u),
+    BLOCK(PDB1, 0x40031000u, 0x19cu),        BLOCK(CRC, 0x40032000u, 0x0cu),
+    BLOCK(PDB0, 0x40036000u, 0x19cu),        BLOCK(FTM0, 0x40038000u, 0x9cu),
+    BLOCK(FTM1, 0x40039000u, 0x9cu),         BLOCK(FTM2, 0x4003a000u, 0x9cu),
+    BLOCK(ADC0, 0x4003b000u, 0x70u),         BLOCK(ADC1, 0x4003c000u, 0x70u),
+    BLOCK(DAC0, 0x4003f000u, 0x24u),         BLOCK(LPTMR0, 0x40040000u, 0x10u),
+    BLOCK(SIM, 0x40047000u, 0x1104u),        BLOCK(PORTA, 0x40049000u, 0xa4u),
+    BLOCK(PORTB, 0x4004a000u, 0xa4u),        BLOCK(PORTC, 0x4004b000u, 0xa4u),
+    BLOCK(PORTD, 0x4004c000u, 0xa4u),        BLOCK(PORTE, 0x4004d000u, 0xa4u),
+    BLOCK(WDOG, 0x40052000u, 0x18u),         BLOCK(EWM, 0x40061000u, 0x06u),
+    BLOCK(MCG, 0x40064000u, 0x0cu),          BLOCK(OSC, 0x40065000u, 0x01u),
+    BLOCK(I2C0, 0x40066000u, 0x0cu),         BLOCK(UART0, 0x4006a000u, 0x17u),
+    BLOCK(UART1, 0x4006b000u, 0x17u),        BLOCK(CMP0, 0x40073000u, 0x06u),
+    BLOCK(CMP1, 0x40073008u, 0x06u),         BLOCK(LLWU, 0x4007c000u, 0x10u),
+    BLOCK(PMC, 0x4007d000u, 0x03u),          BLOCK(SMC, 0x4007e000u, 0x04u),
+    BLOCK(RCM, 0x4007f000u, 0x06u),          BLOCK(GPIOA, 0x400ff000u, 0x18u),
+    BLOCK(GPIOB, 0x400ff040u, 0x18u),        BLOCK(GPIOC, 0x400ff080u, 0x18u),
+    BLOCK(GPIOD, 0x400ff0c0u, 0x18u),        BLOCK(GPIOE, 0x400ff100u, 0x18u),
+    BLOCK(MTB, 0xf0000000u, 0x1000u),        BLOCK(MTBDWT, 0xf0001000u, 0x1000u),
+    BLOCK(ROM, 0xf0002000u, 0x1000u),        BLOCK(MCM, 0xf0003000u, 0x44u),
+    BLOCK(MMDVSQ, 0xf0004000u, 0x14u),       BLOCK(FGPIOA, 0xf8000000u, 0x18u),
+    BLOCK(FGPIOB, 0xf8000040u, 0x18u),       BLOCK(FGPIOC, 0xf8000080u, 0x18u),
+    BLOCK(FGPIOD, 0xf80000c0u, 0x18u),       BLOCK(FGPIOE, 0xf8000100u, 0x18u),
+};
+
 static const KinetisPeripheralBlock mkv30f12810_blocks[] = {
     BLOCK(FLASH_CONFIG, 0x00000400u, 0x0eu), BLOCK(DMA, 0x40008000u, 0x1080u),
     BLOCK(FMC, 0x4001f000u, 0x300u),         BLOCK(FTFA, 0x40020000u, 0x2cu),
@@ -168,6 +197,19 @@ static const KinetisPeripheralBlock mk22f12_blocks[] = {
      .has_systick = true,                                                                          \
      .maximum_core_clock_hz = clock}
 
+#define CPU_M0_PLUS(clock, irqs)                                                                   \
+    {.architecture = KINETIS_CPU_ARCHITECTURE_ARMV6_M,                                             \
+     .core_revision_major = 0,                                                                     \
+     .core_revision_minor = 1,                                                                     \
+     .nvic_priority_bits = 2,                                                                      \
+     .external_irq_count = irqs,                                                                   \
+     .little_endian = true,                                                                        \
+     .has_fpu = false,                                                                             \
+     .has_mpu = false,                                                                             \
+     .has_vtor = true,                                                                             \
+     .has_systick = true,                                                                          \
+     .maximum_core_clock_hz = clock}
+
 static const KinetisDeviceProfile profiles[KINETIS_PROFILE_COUNT] = {
     {.id = KINETIS_PROFILE_MK22FN12810,
      .name = "MK22FN12810",
@@ -205,6 +247,22 @@ static const KinetisDeviceProfile profiles[KINETIS_PROFILE_COUNT] = {
      .cpu = CPU(100000000u, 74u),
      .peripheral_blocks = mkv30f12810_blocks,
      .peripheral_block_count = COUNT(mkv30f12810_blocks)},
+    {.id = KINETIS_PROFILE_MKV10Z1287,
+     .name = "MKV10Z1287",
+     .program_flash_size = 0x20000u,
+     .program_flash_block_count = 1u,
+     .sram_lower_address = 0x1ffff000u,
+     .sram_lower_size = 0x1000u,
+     .sram_upper_address = 0x20000000u,
+     .sram_upper_size = 0x3000u,
+     .vlls2_sram_upper_size = 0x3000u,
+     .vlls2_sram_upper_size_with_ram2 = 0x3000u,
+     .sim_sdid_reset = 0x10650080u,
+     .sim_sdid_mask = 0xfffffff0u,
+     .sim_clkdiv1_reset = 0x00011000u,
+     .cpu = CPU_M0_PLUS(75000000u, 32u),
+     .peripheral_blocks = mkv10z1287_blocks,
+     .peripheral_block_count = COUNT(mkv10z1287_blocks)},
     {.id = KINETIS_PROFILE_MK22FN12812,
      .name = "MK22FN12812",
      .program_flash_size = 0x20000u,

@@ -36,6 +36,8 @@ typedef enum {
     CORTEX_M4_INSTRUCTION_BREAKPOINT,
 } CortexM4InstructionDisposition;
 
+typedef void (*CortexM4ExceptionVector)(void* context);
+
 typedef enum {
     CORTEX_M4_FLAGS_UNCHANGED,
     CORTEX_M4_FLAGS_IMPLICIT,
@@ -134,9 +136,15 @@ typedef struct {
 
 struct CortexM4 {
     CortexM4Bus bus;
+    CortexM4Architecture architecture;
+    uint32_t cpuid;
     CortexM4Coverage* coverage;
     CortexM4Trace trace;
     void* trace_context;
+    CortexM4Trace hardware_trace;
+    void* hardware_trace_context;
+    CortexM4ExceptionVector exception_vector;
+    void* exception_vector_context;
     CortexM4ClockRunning clock_running;
     void* clock_context;
     CortexM4WaitStates wait_states;
@@ -178,6 +186,7 @@ struct CortexM4 {
     uint32_t systick_reload;
     uint32_t systick_current;
     uint32_t systick_calibration;
+    uint8_t systick_external_phase;
     uint32_t irq_enabled[CORTEX_M4_IRQ_WORD_COUNT];
     uint32_t irq_pending[CORTEX_M4_IRQ_WORD_COUNT];
     uint32_t irq_active[CORTEX_M4_IRQ_WORD_COUNT];
@@ -227,6 +236,11 @@ struct CortexM4 {
     bool exception_frame_memory_management_fault;
     CortexM4Debug debug;
 };
+
+void cortex_m4_set_hardware_trace(CortexM4* cpu, CortexM4Trace trace, void* context);
+void cortex_m4_set_exception_vector(CortexM4* cpu, CortexM4ExceptionVector vector, void* context);
+void cortex_m4_set_core_revision(CortexM4* cpu, uint8_t major, uint8_t minor);
+void cortex_m4_exception_vector_fetch(CortexM4* cpu);
 
 void cortex_m4_coverage_record(CortexM4Coverage* coverage, uint32_t address, bool executed);
 void cortex_m4_coverage_record_branch(CortexM4Coverage* coverage, uint32_t address, bool taken);
@@ -361,6 +375,7 @@ void cortex_m4_debug_folded_instruction(CortexM4* cpu);
 bool cortex_m4_debug_execution_allowed(CortexM4* cpu);
 void cortex_m4_debug_instruction_retired(CortexM4* cpu);
 void cortex_m4_debug_breakpoint(CortexM4* cpu);
+void cortex_m4_debug_request_halt(CortexM4* cpu);
 void cortex_m4_debug_exception(CortexM4* cpu, uint16_t exception);
 void cortex_m4_debug_instruction_access(CortexM4* cpu, uint32_t address);
 void cortex_m4_debug_memory_access(CortexM4* cpu, uint32_t address, uint8_t size, bool write,
@@ -374,6 +389,7 @@ bool cortex_m4_internal_read_data(CortexM4* cpu, uint32_t address, uint8_t size,
 bool cortex_m4_internal_write_data(CortexM4* cpu, uint32_t address, uint8_t size, uint32_t value);
 int32_t cortex_m4_internal_sign_extend(uint32_t value, uint8_t width);
 uint32_t cortex_m4_internal_visible_pc32(const CortexM4* cpu);
+void cortex_m4_internal_exchange_write_pc(CortexM4* cpu, uint32_t value);
 void cortex_m4_internal_load_write_pc(CortexM4* cpu, uint32_t value);
 void cortex_m4_internal_set_logic_flags(CortexM4* cpu, uint32_t value, bool carry);
 void cortex_m4_internal_write_pc(CortexM4* cpu, uint32_t value);

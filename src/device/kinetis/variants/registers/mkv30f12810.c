@@ -576,15 +576,15 @@ static const KinetisRegisterDescriptor mkv30f12810_registers[] = {
      8u, (KinetisRegisterAccess)3},
     {0x40032000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 8u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032000u, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 8u,
+    {0x40032000u, 0x0000ffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 8u,
      32u, (KinetisRegisterAccess)3},
     {0x40032001u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
+    {0x40032002u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 8u,
+    {0x40032002u, 0x00000000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 8u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032003u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
+    {0x40032003u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
      8u, (KinetisRegisterAccess)3},
     {0x40032004u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 8u,
      8u, (KinetisRegisterAccess)3},
@@ -1701,7 +1701,7 @@ static const KinetisRegisterDescriptor mkv30f12810_registers[] = {
 const KinetisRegisterManifest* kinetis_mkv30f12810_register_manifest(void) {
     static const KinetisRegisterManifest manifest = {
         KINETIS_PROFILE_MKV30F12810,  mkv30f12810_registers,          COUNT(mkv30f12810_registers),
-        mkv30f12810_peripherals,      COUNT(mkv30f12810_peripherals), UINT64_C(0xaf626954d1053605),
+        mkv30f12810_peripherals,      COUNT(mkv30f12810_peripherals), UINT64_C(0xd6d75b2e43ad69f9),
         UINT64_C(0xd8518b27c443ecb1),
     };
     return &manifest;

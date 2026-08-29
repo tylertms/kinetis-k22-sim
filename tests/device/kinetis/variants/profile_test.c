@@ -8,15 +8,20 @@
 
 static void expect_cpu(TestState* state, const KinetisDeviceProfile* profile,
                        const KinetisExpectedProfile* expected) {
-    expect(state, profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M,
-           "profile->cpu.architecture == KINETIS_CPU_ARCHITECTURE_ARMV7E_M");
+    const bool armv6_m = profile->id == KINETIS_PROFILE_MKV10Z1287;
+    expect(state,
+           profile->cpu.architecture ==
+               (armv6_m ? KINETIS_CPU_ARCHITECTURE_ARMV6_M : KINETIS_CPU_ARCHITECTURE_ARMV7E_M),
+           "profile->cpu.architecture matches the device");
     expect(state, profile->cpu.core_revision_major == 0, "profile->cpu.core_revision_major == 0");
-    expect(state, profile->cpu.core_revision_minor == 1, "profile->cpu.core_revision_minor == 1");
-    expect(state, profile->cpu.nvic_priority_bits == 4, "profile->cpu.nvic_priority_bits == 4");
+    expect(state, profile->cpu.core_revision_minor == 1u,
+           "profile->cpu.core_revision_minor matches the device");
+    expect(state, profile->cpu.nvic_priority_bits == (armv6_m ? 2u : 4u),
+           "profile->cpu.nvic_priority_bits matches the device");
     expect(state, profile->cpu.external_irq_count == expected->external_irq_count,
            "profile->cpu.external_irq_count == expected->external_irq_count");
     expect(state, profile->cpu.little_endian, "profile->cpu.little_endian");
-    expect(state, profile->cpu.has_fpu, "profile->cpu.has_fpu");
+    expect(state, profile->cpu.has_fpu == !armv6_m, "profile->cpu.has_fpu matches the device");
     expect(state, !profile->cpu.has_mpu, "!profile->cpu.has_mpu");
     expect(state, profile->cpu.has_vtor, "profile->cpu.has_vtor");
     expect(state, profile->cpu.has_systick, "profile->cpu.has_systick");

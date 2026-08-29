@@ -30,9 +30,13 @@ typedef struct {
     uint8_t registers[ADC_REGISTER_SIZE];
     uint16_t inputs[KINETIS_ADC_MUX_COUNT][32];
     uint64_t clock_remainder;
+    int64_t average_sum;
     uint32_t remaining_cycles;
     uint8_t active_slot;
+    uint8_t average_remaining;
+    uint8_t average_count;
     bool converting;
+    bool calibrating;
 } KinetisAdc;
 
 typedef struct {
@@ -43,6 +47,14 @@ typedef struct {
 typedef struct {
     uint8_t registers[CMP_REGISTER_SIZE];
     uint8_t inputs[8];
+    uint64_t filter_remainder;
+    uint32_t trigger_cycles;
+    uint32_t filter_bus_cycles;
+    uint8_t filter_samples;
+    bool filter_candidate;
+    bool sample_input;
+    bool window_latch;
+    bool trigger_pending;
 } KinetisCmp;
 
 struct KinetisData {
@@ -59,8 +71,10 @@ struct KinetisData {
     uint8_t dma_last_channel;
     uint32_t core_clock_hz;
     uint32_t bus_clock_hz;
+    uint32_t adc_alt_clock_hz[2];
     bool bus_clock_running;
     bool debug_halted;
+    KinetisDataStopMode stop_mode;
     uint8_t dmamux[DMA_CHANNEL_COUNT];
     uint8_t dmamux_count;
     KinetisAdc adc[2];
@@ -96,6 +110,9 @@ struct KinetisData {
     uint8_t flash_swap_next_block;
     bool flash_key_blocked;
     bool flash_partitioned;
+    bool flash_access_control_disabled;
+    bool flash_execute_access_programmed;
+    bool vlp_mode;
     bool flexram_eeprom;
     uint8_t* flexnvm;
     uint8_t* flexram;
@@ -121,6 +138,7 @@ bool kinetis_data_internal_dac_write(KinetisData* data, uint8_t instance, uint32
 bool kinetis_data_internal_dma_priorities_valid(const KinetisData* data);
 bool kinetis_data_internal_dma_read(KinetisData* data, uint32_t address, uint8_t byte_count,
                                     uint32_t* output_value);
+bool kinetis_data_internal_dma_service_request(KinetisData* data, uint8_t channel);
 bool kinetis_data_internal_dma_service_channel(KinetisData* data, uint8_t channel);
 bool kinetis_data_internal_dma_source_always_enabled(const KinetisData* data,
                                                      uint8_t request_source);
@@ -148,12 +166,20 @@ uint32_t kinetis_data_internal_load_bytes(const uint8_t* input_bytes, uint32_t b
                                           uint8_t byte_count);
 uint32_t kinetis_data_internal_rng_next(uint32_t seed_value);
 uint8_t kinetis_data_internal_dma_select_channel(const KinetisData* data);
+uint8_t kinetis_data_internal_dma_select_channel_from_mask(const KinetisData* data,
+                                                           uint16_t request_mask);
 void kinetis_data_internal_adc_complete(KinetisData* data, uint8_t instance);
 uint32_t kinetis_data_internal_adc_elapsed_cycles(KinetisData* data, KinetisAdc* adc,
                                                   uint32_t core_cycles);
 void kinetis_data_internal_adc_reset_registers(KinetisAdc* adc);
-void kinetis_data_internal_adc_start(KinetisAdc* adc, uint8_t slot);
+void kinetis_data_internal_adc_start(KinetisData* data, KinetisAdc* adc, uint8_t slot);
 void kinetis_data_internal_cmp_evaluate(KinetisData* data, uint8_t instance);
+void kinetis_data_internal_cmp_advance(KinetisData* data, uint8_t instance,
+                                       uint32_t core_cycles);
+void kinetis_data_internal_cmp_set_sample(KinetisData* data, uint8_t instance, bool high);
+void kinetis_data_internal_dac_trigger(KinetisData* data, uint8_t instance,
+                                       bool software_trigger);
+void kinetis_data_internal_dac_dma_complete(KinetisData* data, uint8_t request_source);
 void kinetis_data_internal_dac_flags(KinetisData* data, uint8_t instance, uint8_t event_flags);
 void kinetis_data_internal_dac_update_output(KinetisData* data, uint8_t instance);
 void kinetis_data_internal_dma_error(KinetisData* data, uint8_t channel, uint32_t error_reason);

@@ -49,9 +49,7 @@ static const GateCase cases[] = {
     {KINETIS_PERIPHERAL_CMP2, SIM_SCGC4, 19u},   {KINETIS_PERIPHERAL_VREF, SIM_SCGC4, 20u},
     {KINETIS_PERIPHERAL_PORTA, SIM_SCGC5, 9u},   {KINETIS_PERIPHERAL_PORTB, SIM_SCGC5, 10u},
     {KINETIS_PERIPHERAL_PORTC, SIM_SCGC5, 11u},  {KINETIS_PERIPHERAL_PORTD, SIM_SCGC5, 12u},
-    {KINETIS_PERIPHERAL_PORTE, SIM_SCGC5, 13u},  {KINETIS_PERIPHERAL_GPIOA, SIM_SCGC5, 9u},
-    {KINETIS_PERIPHERAL_GPIOB, SIM_SCGC5, 10u},  {KINETIS_PERIPHERAL_GPIOC, SIM_SCGC5, 11u},
-    {KINETIS_PERIPHERAL_GPIOD, SIM_SCGC5, 12u},  {KINETIS_PERIPHERAL_GPIOE, SIM_SCGC5, 13u},
+    {KINETIS_PERIPHERAL_PORTE, SIM_SCGC5, 13u},
 };
 
 static const GateCase secondary_profile_cases[] = {
@@ -147,6 +145,23 @@ static void test_cases(TestState* state, Kinetis* device, const GateCase* gate_c
     }
 }
 
+static void test_ungated_gpio(TestState* state, Kinetis* device) {
+    const KinetisPeripheralId gpio[] = {
+        KINETIS_PERIPHERAL_GPIOA, KINETIS_PERIPHERAL_GPIOB, KINETIS_PERIPHERAL_GPIOC,
+        KINETIS_PERIPHERAL_GPIOD, KINETIS_PERIPHERAL_GPIOE,
+    };
+    clear_gates(state, device);
+    for (size_t index = 0u; index < sizeof(gpio) / sizeof(gpio[0]); index++) {
+        const RegisterAccess access = readable_register(device, gpio[index]);
+        expect(state, access.access_size != 0u, "access.access_size != 0u");
+        uint32_t value = 0u;
+        expect(state,
+               kinetis_peripheral_read(device, access.register_address, access.access_size,
+                                        CORTEX_M4_ACCESS_DATA, &value),
+               "GPIO remains accessible when the corresponding PORT clock is disabled");
+    }
+}
+
 int main(void) {
     TestState state = {0};
     Kinetis* primary_profile_device =
@@ -154,6 +169,7 @@ int main(void) {
     Kinetis* secondary_profile_device =
         create_device(&state, KINETIS_PROFILE_MK22FN51212, KINETIS_PACKAGE_DC_121_XFBGA);
     test_cases(&state, primary_profile_device, cases, sizeof(cases) / sizeof(cases[0]));
+    test_ungated_gpio(&state, primary_profile_device);
     test_cases(&state, secondary_profile_device, secondary_profile_cases,
                sizeof(secondary_profile_cases) / sizeof(secondary_profile_cases[0]));
     kinetis_destroy(primary_profile_device);

@@ -1181,15 +1181,15 @@ static const KinetisRegisterDescriptor mk22f51212_registers[] = {
      8u, (KinetisRegisterAccess)3},
     {0x40032000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 19u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032000u, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 19u,
+    {0x40032000u, 0x0000ffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0x00000000u, 19u,
      32u, (KinetisRegisterAccess)3},
     {0x40032001u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
+    {0x40032002u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
      8u, (KinetisRegisterAccess)3},
-    {0x40032002u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 19u,
+    {0x40032002u, 0x00000000u, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x0000ffffu, 0x00000000u, 19u,
      16u, (KinetisRegisterAccess)3},
-    {0x40032003u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
+    {0x40032003u, 0x00000000u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
      8u, (KinetisRegisterAccess)3},
     {0x40032004u, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x000000ffu, 0x00000000u, 19u,
      8u, (KinetisRegisterAccess)3},
@@ -2562,7 +2562,7 @@ static const KinetisRegisterDescriptor mk22f51212_registers[] = {
 const KinetisRegisterManifest* kinetis_mk22fn51212_register_manifest(void) {
     static const KinetisRegisterManifest manifest = {
         KINETIS_PROFILE_MK22FN51212,  mk22f51212_registers,          COUNT(mk22f51212_registers),
-        mk22f51212_peripherals,       COUNT(mk22f51212_peripherals), UINT64_C(0x888f32dea7d49bde),
+        mk22f51212_peripherals,       COUNT(mk22f51212_peripherals), UINT64_C(0xb37a7721f90e467e),
         UINT64_C(0xcb5f795ba1e30ea8),
     };
     return &manifest;
@@ -2571,7 +2571,7 @@ const KinetisRegisterManifest* kinetis_mk22fn51212_register_manifest(void) {
 const KinetisRegisterManifest* kinetis_mk22fn256cap12_register_manifest(void) {
     static const KinetisRegisterManifest manifest = {
         KINETIS_PROFILE_MK22FN256CAP12, mk22f51212_registers,          COUNT(mk22f51212_registers),
-        mk22f51212_peripherals,         COUNT(mk22f51212_peripherals), UINT64_C(0x888f32dea7d49bde),
+        mk22f51212_peripherals,         COUNT(mk22f51212_peripherals), UINT64_C(0xb37a7721f90e467e),
         UINT64_C(0xcb5f795ba1e30ea8),
     };
     return &manifest;

@@ -116,12 +116,13 @@ typedef struct {
     KinetisPeripheralId peripheral;
     uint32_t base;
     uint32_t block_size;
-    uint32_t registers[0x8c / 4];
+    uint32_t registers[0x140 / 4];
     KinetisSerialFifo receive;
     KinetisSerialFifo transmit;
     KinetisSerialFifo wire_receive;
     KinetisSerialFifo wire_transmit;
     uint32_t transfer_cycles;
+    uint32_t transfer_delay_cycles;
     uint16_t push_command;
     uint8_t fifo_depth;
     bool present;
@@ -143,6 +144,7 @@ typedef struct {
     bool acknowledge;
     bool transfer_pending;
     bool read_pending;
+    bool slave_addressed;
     bool slave_transmit;
 } KinetisSerialI2c;
 
@@ -155,6 +157,7 @@ typedef struct {
     uint64_t lpuart_cycle_remainder;
     bool system_clock_running;
     bool bus_clock_running;
+    bool debug_halted;
     KinetisSerialUart lpuart0;
     KinetisSerialUart uart[6];
     KinetisSerialSpi spi[3];
@@ -172,6 +175,7 @@ void kinetis_serial_set_clocks(KinetisSerial* serial, uint32_t core_clock_hz, ui
                                uint32_t lpuart_clock_hz);
 void kinetis_serial_set_clock_domains(KinetisSerial* serial, bool system_clock_running,
                                       bool bus_clock_running);
+void kinetis_serial_set_debug_halted(KinetisSerial* serial, bool halted);
 bool kinetis_serial_set_clock_gate(KinetisSerial* serial, KinetisPeripheralId peripheral,
                                    bool enabled);
 bool kinetis_serial_read(KinetisSerial* serial, uint32_t address, uint8_t byte_count,

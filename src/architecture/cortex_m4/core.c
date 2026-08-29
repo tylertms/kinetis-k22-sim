@@ -36,6 +36,8 @@ CortexM4* cortex_m4_create(CortexM4Bus bus) {
         return NULL;
     }
     cpu->bus = bus;
+    cpu->architecture = CORTEX_M4_ARCHITECTURE_ARMV7E_M;
+    cpu->cpuid = 0x410fc241u;
     cpu->systick_calibration = 0;
     cpu->external_irq_count = CORTEX_M4_IRQ_COUNT;
     cpu->priority_bits = 8u;
@@ -47,6 +49,7 @@ void cortex_m4_destroy(CortexM4* cpu) { free(cpu); }
 
 bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     if (destination == NULL || source == NULL ||
+        destination->architecture != source->architecture ||
         destination->external_irq_count != source->external_irq_count ||
         destination->priority_bits != source->priority_bits ||
         destination->mpu_region_count != source->mpu_region_count) {
@@ -56,6 +59,10 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     CortexM4Coverage* const coverage = destination->coverage;
     const CortexM4Trace trace = destination->trace;
     void* const trace_context = destination->trace_context;
+    const CortexM4Trace hardware_trace = destination->hardware_trace;
+    void* const hardware_trace_context = destination->hardware_trace_context;
+    const CortexM4ExceptionVector exception_vector = destination->exception_vector;
+    void* const exception_vector_context = destination->exception_vector_context;
     const CortexM4ClockRunning clock_running = destination->clock_running;
     void* const clock_context = destination->clock_context;
     const CortexM4WaitStates wait_states = destination->wait_states;
@@ -68,6 +75,10 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     destination->coverage = coverage;
     destination->trace = trace;
     destination->trace_context = trace_context;
+    destination->hardware_trace = hardware_trace;
+    destination->hardware_trace_context = hardware_trace_context;
+    destination->exception_vector = exception_vector;
+    destination->exception_vector_context = exception_vector_context;
     destination->clock_running = clock_running;
     destination->clock_context = clock_context;
     destination->wait_states = wait_states;
@@ -78,10 +89,27 @@ bool cortex_m4_copy(CortexM4* destination, const CortexM4* source) {
     return true;
 }
 
+bool cortex_m4_configure_architecture(CortexM4* cpu, CortexM4Architecture architecture) {
+    if (cpu == NULL || (architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M &&
+                        architecture != CORTEX_M4_ARCHITECTURE_ARMV7E_M)) {
+        return false;
+    }
+    cpu->architecture = architecture;
+    cpu->cpuid = architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0x410cc601u : 0x410fc241u;
+    return true;
+}
+
+void cortex_m4_set_core_revision(CortexM4* cpu, uint8_t major, uint8_t minor) {
+    if (cpu != NULL)
+        cpu->cpuid = (cpu->cpuid & 0xff0ffff0u) | ((uint32_t)(major & 0x0fu) << 20u) |
+                     (minor & 0x0fu);
+}
+
 bool cortex_m4_configure_implementation(CortexM4* cpu, uint16_t external_irq_count,
                                         uint8_t priority_bits, uint8_t mpu_region_count) {
     if (cpu == NULL || external_irq_count == 0 || external_irq_count > CORTEX_M4_IRQ_COUNT ||
-        priority_bits < 3u || priority_bits > 8u || mpu_region_count > CORTEX_M4_MPU_REGION_COUNT) {
+        priority_bits < (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 2u : 3u) ||
+        priority_bits > 8u || mpu_region_count > CORTEX_M4_MPU_REGION_COUNT) {
         return false;
     }
     const uint8_t priority_mask = (uint8_t)(0xffu << (8u - priority_bits));
@@ -133,6 +161,10 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     CortexM4Coverage* const coverage = cpu->coverage;
     const CortexM4Trace trace = cpu->trace;
     void* const trace_context = cpu->trace_context;
+    const CortexM4Trace hardware_trace = cpu->hardware_trace;
+    void* const hardware_trace_context = cpu->hardware_trace_context;
+    const CortexM4ExceptionVector exception_vector = cpu->exception_vector;
+    void* const exception_vector_context = cpu->exception_vector_context;
     const CortexM4ClockRunning clock_running = cpu->clock_running;
     void* const clock_context = cpu->clock_context;
     const CortexM4WaitStates wait_states = cpu->wait_states;
@@ -141,6 +173,8 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     const uint16_t external_irq_count = cpu->external_irq_count;
     const uint8_t priority_bits = cpu->priority_bits;
     const uint8_t mpu_region_count = cpu->mpu_region_count;
+    const CortexM4Architecture architecture = cpu->architecture;
+    const uint32_t cpuid = cpu->cpuid;
     uint32_t breakpoints[8];
     memcpy(breakpoints, cpu->breakpoints, sizeof(breakpoints));
     const uint8_t breakpoint_enabled = cpu->breakpoint_enabled;
@@ -149,8 +183,14 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     cpu->coverage = coverage;
     cpu->trace = trace;
     cpu->trace_context = trace_context;
+    cpu->hardware_trace = hardware_trace;
+    cpu->hardware_trace_context = hardware_trace_context;
+    cpu->exception_vector = exception_vector;
+    cpu->exception_vector_context = exception_vector_context;
     cpu->clock_running = clock_running;
     cpu->clock_context = clock_context;
+    cpu->architecture = architecture;
+    cpu->cpuid = cpuid;
     cpu->external_irq_count = external_irq_count;
     cpu->priority_bits = priority_bits;
     cpu->mpu_region_count = mpu_region_count;
@@ -160,7 +200,9 @@ bool cortex_m4_reset(CortexM4* cpu, uint32_t vector_table_address) {
     cpu->wait_states = wait_states;
     cpu->wait_state_context = wait_state_context;
     cpu->exclusive_granule = exclusive_granule;
-    cpu->vtor = vector_table_address & 0xffffff80u;
+    cpu->vtor = vector_table_address &
+                (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 0xffffff00u
+                                                                      : 0xffffff80u);
     cpu->xpsr = CORTEX_M4_XPSR_T;
     cpu->stop = CORTEX_M4_STOP_RUNNING;
     uint32_t stack_pointer = 0;
@@ -267,6 +309,10 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
                        should_execute);
         }
+        if (cpu->hardware_trace != NULL) {
+            cpu->hardware_trace(cpu->hardware_trace_context, instruction_address,
+                                cpu->current_opcode, should_execute);
+        }
         cortex_m4_timing_prepare_instruction(cpu, first_halfword, second_halfword, true);
         const CortexM4InstructionDisposition disposition =
             cortex_m4_check_instruction_constraints(cpu, first_halfword, second_halfword, true);
@@ -283,6 +329,10 @@ CortexM4Result cortex_m4_step(CortexM4* cpu) {
         if (cpu->trace != NULL) {
             cpu->trace(cpu->trace_context, instruction_address, cpu->current_opcode,
                        should_execute);
+        }
+        if (cpu->hardware_trace != NULL) {
+            cpu->hardware_trace(cpu->hardware_trace_context, instruction_address,
+                                cpu->current_opcode, should_execute);
         }
         cortex_m4_timing_prepare_instruction(cpu, first_halfword, 0, false);
         const CortexM4InstructionDisposition disposition =
@@ -374,6 +424,25 @@ void cortex_m4_set_trace(CortexM4* cpu, CortexM4Trace trace, void* context) {
     }
 }
 
+void cortex_m4_set_hardware_trace(CortexM4* cpu, CortexM4Trace trace, void* context) {
+    if (cpu != NULL) {
+        cpu->hardware_trace = trace;
+        cpu->hardware_trace_context = context;
+    }
+}
+
+void cortex_m4_set_exception_vector(CortexM4* cpu, CortexM4ExceptionVector vector, void* context) {
+    if (cpu != NULL) {
+        cpu->exception_vector = vector;
+        cpu->exception_vector_context = context;
+    }
+}
+
+void cortex_m4_exception_vector_fetch(CortexM4* cpu) {
+    if (cpu != NULL && cpu->exception_vector != NULL)
+        cpu->exception_vector(cpu->exception_vector_context);
+}
+
 void cortex_m4_set_coverage(CortexM4* cpu, CortexM4Coverage* coverage) {
     if (cpu != NULL) {
         cpu->coverage = coverage;
@@ -431,13 +500,17 @@ void cortex_m4_set_register(CortexM4* cpu, uint8_t index, uint32_t value) {
 }
 
 uint32_t cortex_m4_xpsr_value(const CortexM4* cpu) {
-    const uint32_t it_state =
-        ((uint32_t)(cpu->it_state & 3u) << 25) | ((uint32_t)(cpu->it_state & 0xfcu) << 8);
+    const uint32_t it_state = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                                  ? 0u
+                                  : ((uint32_t)(cpu->it_state & 3u) << 25) |
+                                        ((uint32_t)(cpu->it_state & 0xfcu) << 8);
     return cortex_m4_exception_advanced_xpsr(cpu, cpu->xpsr | it_state);
 }
 
 void cortex_m4_load_xpsr(CortexM4* cpu, uint32_t value) {
-    cpu->it_state = (uint8_t)(((value >> 25) & 3u) | ((value >> 8) & 0xfcu));
+    cpu->it_state = cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M
+                        ? 0u
+                        : (uint8_t)(((value >> 25) & 3u) | ((value >> 8) & 0xfcu));
     cpu->xpsr = (value & ~0x0600fe00u) | CORTEX_M4_XPSR_T;
     cortex_m4_exception_advanced_load_xpsr(cpu, value);
 }
@@ -456,13 +529,18 @@ uint32_t cortex_m4_get_control(const CortexM4* cpu) { return cpu == NULL ? 0 : c
 
 void cortex_m4_set_control(CortexM4* cpu, uint32_t value) {
     if (cpu != NULL && (cpu->xpsr & 0x1ffu) == 0) {
-        cpu->control = value & 7u;
+        cpu->control =
+            value & (cpu->architecture == CORTEX_M4_ARCHITECTURE_ARMV6_M ? 3u : 7u);
     }
 }
 
-uint32_t cortex_m4_get_fault_status(const CortexM4* cpu) { return cpu == NULL ? 0 : cpu->cfsr; }
+uint32_t cortex_m4_get_fault_status(const CortexM4* cpu) {
+    return cpu == NULL ? 0u : cpu->cfsr;
+}
 
-uint32_t cortex_m4_get_fault_address(const CortexM4* cpu) { return cpu == NULL ? 0 : cpu->bfar; }
+uint32_t cortex_m4_get_fault_address(const CortexM4* cpu) {
+    return cpu == NULL ? 0u : cpu->bfar;
+}
 
 uint64_t cortex_m4_get_instruction_count(const CortexM4* cpu) {
     return cpu == NULL ? 0 : cpu->instructions;

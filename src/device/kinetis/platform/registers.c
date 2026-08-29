@@ -5,7 +5,7 @@ static bool manifest_read(Kinetis* device, uint32_t address, uint8_t access_size
     const KinetisRegisterDescriptor* descriptor =
         kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
     if (descriptor == NULL || (descriptor->access & KINETIS_REGISTER_ACCESS_READ) == 0 ||
-        address < KINETIS_PERIPHERAL_BASE) {
+        (address < KINETIS_PERIPHERAL_BASE && address < KINETIS_PRIVATE_PERIPHERAL_BASE)) {
         return false;
     }
     *output_value =
@@ -20,7 +20,8 @@ static bool manifest_write(Kinetis* device, uint32_t address, uint8_t access_siz
                            uint32_t write_value) {
     const KinetisRegisterDescriptor* descriptor =
         kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
-    if (descriptor == NULL || address < KINETIS_PERIPHERAL_BASE) {
+    if (descriptor == NULL ||
+        (address < KINETIS_PERIPHERAL_BASE && address < KINETIS_PRIVATE_PERIPHERAL_BASE)) {
         return false;
     }
     if ((descriptor->access & KINETIS_REGISTER_ACCESS_WRITE) == 0) {
@@ -90,6 +91,17 @@ bool kinetis_peripheral_read(Kinetis* device, uint32_t address, uint8_t access_s
         !kinetis_package_has_peripheral(device->package, location.id)) {
         return false;
     }
+    if ((location.id == KINETIS_PERIPHERAL_MTB || location.id == KINETIS_PERIPHERAL_MTBDWT ||
+         location.id == KINETIS_PERIPHERAL_ROM) &&
+        access_size != 4u)
+        return false;
+    if (address == 0xf0003040u && access == CORTEX_M4_ACCESS_DEBUG)
+        return false;
+    const bool fast_gpio =
+        location.id >= KINETIS_PERIPHERAL_FGPIOA && location.id <= KINETIS_PERIPHERAL_FGPIOE;
+    if (access != CORTEX_M4_ACCESS_DEBUG && location.id != KINETIS_PERIPHERAL_MCM && !fast_gpio &&
+        (kinetis_internal_raw_load(device, 0xf0003040u, 4u) & 2u) != 0u)
+        return false;
     descriptor = kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
     if (location.id != KINETIS_PERIPHERAL_MCM &&
         !kinetis_internal_manifest_extension(location.id) &&
@@ -107,6 +119,8 @@ bool kinetis_peripheral_read(Kinetis* device, uint32_t address, uint8_t access_s
                              kinetis_internal_enable_debug_clock(device, location.id);
     bool handled =
         kinetis_internal_semantic_read(device, location.id, address, access_size, output_value);
+    if (location.id == KINETIS_PERIPHERAL_MMDVSQ)
+        return handled;
     if (!handled) {
         handled = manifest_read(device, address, access_size, output_value);
     }
@@ -127,6 +141,17 @@ bool kinetis_peripheral_write(Kinetis* device, uint32_t address, uint8_t access_
         !kinetis_package_has_peripheral(device->package, location.id)) {
         return false;
     }
+    if ((location.id == KINETIS_PERIPHERAL_MTB || location.id == KINETIS_PERIPHERAL_MTBDWT ||
+         location.id == KINETIS_PERIPHERAL_ROM) &&
+        access_size != 4u)
+        return false;
+    if (address == 0xf0003040u && access == CORTEX_M4_ACCESS_DEBUG)
+        return false;
+    const bool fast_gpio =
+        location.id >= KINETIS_PERIPHERAL_FGPIOA && location.id <= KINETIS_PERIPHERAL_FGPIOE;
+    if (access != CORTEX_M4_ACCESS_DEBUG && location.id != KINETIS_PERIPHERAL_MCM && !fast_gpio &&
+        (kinetis_internal_raw_load(device, 0xf0003040u, 4u) & 2u) != 0u)
+        return false;
     descriptor = kinetis_internal_manifest_descriptor_for_access(device, address, access_size);
     if (location.id != KINETIS_PERIPHERAL_MCM &&
         !kinetis_internal_manifest_extension(location.id) && descriptor == NULL) {
@@ -138,6 +163,20 @@ bool kinetis_peripheral_write(Kinetis* device, uint32_t address, uint8_t access_
     if (descriptor != NULL) {
         write_value &= kinetis_internal_manifest_access_mask(
             descriptor, address, descriptor->write_mask & descriptor->implemented_mask);
+    }
+    if (location.id == KINETIS_PERIPHERAL_MTB &&
+        cortex_m4_access_is_unprivileged_data(device->cpu, access) &&
+        (kinetis_internal_raw_load(device, 0xf0000004u, 4u) & (1u << 7u)) != 0u) {
+        return true;
+    }
+    if (device->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+        cortex_m4_access_is_unprivileged_data(device->cpu, access)) {
+        const bool restricted =
+            location.id == KINETIS_PERIPHERAL_MCG || location.id == KINETIS_PERIPHERAL_RCM ||
+            location.id == KINETIS_PERIPHERAL_SIM || location.id == KINETIS_PERIPHERAL_SMC ||
+            location.id == KINETIS_PERIPHERAL_LLWU || location.id == KINETIS_PERIPHERAL_PMC;
+        if (restricted)
+            return false;
     }
     if (!kinetis_internal_aips_access_allowed(device, address, access, true) ||
         (location.id == KINETIS_PERIPHERAL_AXBS &&
@@ -171,14 +210,19 @@ bool kinetis_peripheral_write(Kinetis* device, uint32_t address, uint8_t access_
 
 static void reset_manifest(Kinetis* device) {
     memset(device->peripheral, 0, KINETIS_PERIPHERAL_SIZE);
+    memset(device->private_peripheral, 0, KINETIS_PRIVATE_PERIPHERAL_SIZE);
 
     for (size_t register_index = 0; register_index < device->manifest->register_count;
          register_index++) {
         const KinetisRegisterDescriptor* descriptor = &device->manifest->registers[register_index];
         const uint8_t register_size = (uint8_t)(descriptor->width / 8u);
-        if (descriptor->address >= KINETIS_PERIPHERAL_BASE &&
-            descriptor->address - KINETIS_PERIPHERAL_BASE <=
-                (uint32_t)KINETIS_PERIPHERAL_SIZE - register_size) {
+        const bool regular = descriptor->address >= KINETIS_PERIPHERAL_BASE &&
+                             descriptor->address - KINETIS_PERIPHERAL_BASE <=
+                                 (uint32_t)KINETIS_PERIPHERAL_SIZE - register_size;
+        const bool private = descriptor->address >= KINETIS_PRIVATE_PERIPHERAL_BASE &&
+                             descriptor->address - KINETIS_PRIVATE_PERIPHERAL_BASE <=
+                                 (uint32_t)KINETIS_PRIVATE_PERIPHERAL_SIZE - register_size;
+        if (regular || private) {
             kinetis_internal_raw_store(device, descriptor->address, register_size,
                                        descriptor->reset_value & descriptor->implemented_mask);
         }
@@ -203,6 +247,19 @@ void kinetis_peripheral_reset(Kinetis* device) {
     memset(device->fmc_bank, 0, sizeof(device->fmc_bank));
     memset(device->fmc_age, 0, sizeof(device->fmc_age));
     device->fmc_access_count = 0u;
+    device->mmdvsq_pending_result = 0u;
+    device->mmdvsq_pending_control = 0u;
+    device->mmdvsq_cycles_remaining = 0u;
+    device->mmdvsq_stall_cycles = 0u;
+    device->mtb_previous_address = 0u;
+    device->mtb_previous_opcode = 0u;
+    device->mtb_previous_lr = 0u;
+    device->mtb_previous_exception = 0u;
+    device->mtb_previous_valid = false;
+    device->mtb_first_packet = false;
+    device->mtb_autostop_latched = false;
+    device->mtb_stop_pending = false;
+    device->cpo_entry_pending = false;
     device->cmt_eoc_read = false;
     device->cmt_running = false;
     device->cmt_stop_pending = false;
@@ -210,6 +267,7 @@ void kinetis_peripheral_reset(Kinetis* device) {
     device->cmt_extended_space = false;
     device->cmt_dma_pending = false;
     memset(device->comparator_output, 0, sizeof(device->comparator_output));
+    memset(device->data_interrupt, 0, sizeof(device->data_interrupt));
     kinetis_data_reset(device->data);
     kinetis_serial_reset(&device->serial);
     kinetis_sdhc_reset(&device->sdhc);
@@ -226,15 +284,41 @@ void kinetis_peripheral_reset(Kinetis* device) {
 }
 
 void kinetis_peripheral_advance(Kinetis* device, uint32_t cycle_count) {
+    uint32_t cpo = kinetis_internal_raw_load(device, 0xf0003040u, 4u);
+    const bool dma_busy = kinetis_data_dma_busy(device->data);
+    if (dma_busy && (cpo & 2u) != 0u) {
+        cpo &= ~2u;
+        kinetis_internal_raw_store(device, 0xf0003040u, 4u, cpo);
+        device->cpo_entry_pending = true;
+    } else if (!dma_busy && device->cpo_entry_pending && (cpo & 1u) != 0u) {
+        cpo |= 2u;
+        kinetis_internal_raw_store(device, 0xf0003040u, 4u, cpo);
+        device->cpo_entry_pending = false;
+    }
+    kinetis_timing_set_cpu_only(&device->timing,
+                                (cpo & 2u) != 0u && !dma_busy);
     kinetis_timing_set_cpu_sleeping(&device->timing, device->cpu != NULL && device->cpu->sleeping,
                                     device->cpu != NULL && (device->cpu->scr & 4u) != 0u);
     kinetis_timing_set_debug_halted(&device->timing,
                                     device->cpu != NULL && device->cpu->debug.halted);
     kinetis_data_set_clocks(device->data, kinetis_timing_core_clock_hz(&device->timing),
                             kinetis_timing_bus_clock_hz(&device->timing),
+                            kinetis_timing_adc_alt_clock_hz(&device->timing, 0u),
+                            kinetis_timing_adc_alt_clock_hz(&device->timing, 1u),
                             kinetis_timing_bus_clock_running(&device->timing) &&
                                 kinetis_timing_bus_clock_hz(&device->timing) != 0u,
-                            device->timing.deep_sleeping);
+                            !device->timing.deep_sleeping ? KINETIS_DATA_STOP_NONE
+                            : kinetis_timing_power_status(&device->timing) == 2u
+                                ? KINETIS_DATA_STOP_NORMAL
+                            : kinetis_timing_power_status(&device->timing) == 0x10u
+                                ? KINETIS_DATA_STOP_VLPS
+                            : (device->timing.smc[2] & 7u) == 0u ? KINETIS_DATA_STOP_VLLS0
+                            : (device->timing.smc[2] & 7u) == 1u ? KINETIS_DATA_STOP_VLLS1
+                                                                 : KINETIS_DATA_STOP_VLLS3);
+    const uint8_t power_status = kinetis_timing_power_status(&device->timing);
+    kinetis_data_set_vlp_mode(device->data, power_status == 4u || power_status == 8u ||
+                                               power_status == 0x10u || power_status == 0x20u ||
+                                               power_status == 0x40u);
     kinetis_data_set_debug_halted(device->data, device->cpu != NULL && device->cpu->debug.halted);
     kinetis_serial_set_clocks(&device->serial, kinetis_timing_core_clock_hz(&device->timing),
                               kinetis_timing_bus_clock_hz(&device->timing),
@@ -242,10 +326,17 @@ void kinetis_peripheral_advance(Kinetis* device, uint32_t cycle_count) {
     kinetis_serial_set_clock_domains(&device->serial,
                                      kinetis_timing_system_clock_running(&device->timing),
                                      kinetis_timing_bus_clock_running(&device->timing));
+    kinetis_serial_set_debug_halted(&device->serial,
+                                    device->cpu != NULL && device->cpu->debug.halted);
     kinetis_timing_advance(&device->timing, cycle_count);
     kinetis_data_advance(device->data, cycle_count);
     kinetis_serial_advance(&device->serial, cycle_count);
     kinetis_io_advance(&device->io, cycle_count);
+    const uint32_t mmdvsq_cycles = cycle_count > device->mmdvsq_stall_cycles
+                                      ? cycle_count - device->mmdvsq_stall_cycles
+                                      : 0u;
+    device->mmdvsq_stall_cycles = 0u;
+    kinetis_internal_mmdvsq_advance(device, mmdvsq_cycles);
     if (kinetis_profile_has_peripheral(device->profile, KINETIS_PERIPHERAL_CMT) &&
         kinetis_internal_peripheral_clock_enabled(device, KINETIS_PERIPHERAL_CMT)) {
         kinetis_internal_cmt_advance(device, cycle_count);
@@ -255,6 +346,14 @@ void kinetis_peripheral_advance(Kinetis* device, uint32_t cycle_count) {
         kinetis_usbdcd_advance(&device->usbdcd, cycle_count);
         if (device->cpu != NULL)
             cortex_m4_set_irq_level(device->cpu, 54u, kinetis_usbdcd_irq(&device->usbdcd));
+    }
+    cpo = kinetis_internal_raw_load(device, 0xf0003040u, 4u);
+    if ((cpo & 1u) != 0u && !kinetis_data_dma_busy(device->data)) {
+        if ((cpo & 2u) == 0u) {
+            kinetis_internal_raw_store(device, 0xf0003040u, 4u, cpo | 2u);
+            device->cpo_entry_pending = false;
+        }
+        kinetis_timing_set_cpu_only(&device->timing, true);
     }
     kinetis_refresh_signals(device);
 }

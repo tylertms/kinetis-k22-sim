@@ -145,7 +145,7 @@ static void access_census(TestState* state, CortexM4* cpu) {
     }
     const bool census_matches = census.accepted == 134u && census.rejected == 6970u &&
                                 census.outside == 576u &&
-                                census.fingerprint == UINT64_C(2045753942671157353);
+                                census.fingerprint == UINT64_C(16405023221591894121);
     if (!census_matches) {
         fprintf(stderr,
                 "[census] accepted=%" PRIu32 " rejected=%" PRIu32 " outside=%" PRIu32

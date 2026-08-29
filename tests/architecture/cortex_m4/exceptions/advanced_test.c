@@ -580,6 +580,45 @@ static void test_ici_push_pop_execution(TestState* state) {
     cortex_m4_destroy(cpu);
 }
 
+static void test_armv6_multiple_restart(TestState* state) {
+    TestBus bus = {0};
+    CortexM4* cpu = prepare_ici_execution(state, &bus, 0xb403u, 0u);
+    expect(state, cortex_m4_configure_architecture(cpu, CORTEX_M4_ARCHITECTURE_ARMV6_M),
+           "ARMv6-M restart test configures the architecture");
+    cpu->control = CORTEX_M4_CONTROL_SPSEL;
+    cpu->psp = 0x900u;
+    cpu->registers[0] = 0x11223344u;
+    cpu->registers[1] = 0x55667788u;
+    write_word(&bus, 0x8fcu, 0xdecafbadu);
+    bus.interrupt_address = 0x8f8u;
+    bus.inject_interrupt = true;
+
+    cortex_m4_step(cpu);
+    expect(state, cpu->registers[15] == 0x100u && cpu->psp == 0x900u && !cpu->ici_valid,
+           "ARMv6-M abandons interrupted PUSH without writeback or ICI state");
+    expect(state, read_word(&bus, 0x8f8u) == 0x11223344u &&
+                      read_word(&bus, 0x8fcu) == 0xdecafbadu,
+           "ARMv6-M preserves completed memory accesses before abandoning PUSH");
+
+    cortex_m4_step(cpu);
+    expect(state, cpu->registers[15] == 0x100u && cpu->psp == 0x900u,
+           "ARMv6-M services the interrupt using the original process stack pointer");
+    cortex_m4_step(cpu);
+    expect(state, cpu->registers[15] == 0x102u && cpu->psp == 0x8f8u &&
+                      read_word(&bus, 0x8f8u) == 0x11223344u &&
+                      read_word(&bus, 0x8fcu) == 0x55667788u,
+           "ARMv6-M repeats all PUSH accesses and commits writeback after restart");
+
+    cpu->it_state = 0xffu;
+    cpu->ici_valid = true;
+    expect(state, (cortex_m4_xpsr_value(cpu) & 0x0600fc00u) == 0u,
+           "ARMv6-M xPSR omits unsupported IT and ICI state");
+    cortex_m4_load_xpsr(cpu, CORTEX_M4_XPSR_T | 0x0600fc00u);
+    expect(state, cpu->it_state == 0u && !cpu->ici_valid,
+           "ARMv6-M ignores unsupported stacked IT and ICI state");
+    cortex_m4_destroy(cpu);
+}
+
 static void test_ici_increment_after_execution(TestState* state) {
     for (uint8_t load = 0u; load <= 1u; load++) {
         TestBus bus = {0};
@@ -746,6 +785,7 @@ int main(void) {
     test_ici_state(&state);
     test_ici_execution_address(&state);
     test_ici_push_pop_execution(&state);
+    test_armv6_multiple_restart(&state);
     test_ici_increment_after_execution(&state);
     test_ici_decrement_before_execution(&state);
     test_faultmask_and_sleep(&state);

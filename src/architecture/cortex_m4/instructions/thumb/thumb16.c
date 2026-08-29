@@ -20,12 +20,16 @@ bool cortex_m4_internal_write_data(CortexM4* cpu, uint32_t address, uint8_t size
 }
 
 void cortex_m4_internal_write_pc(CortexM4* cpu, uint32_t value) {
+    cpu->registers[15] = value & ~1u;
+}
+
+void cortex_m4_internal_exchange_write_pc(CortexM4* cpu, uint32_t value) {
     if ((value & 1u) == 0) {
         cpu->cfsr |= 1u << 17;
         cortex_m4_raise_fault(cpu, 6);
         return;
     }
-    cpu->registers[15] = value & ~1u;
+    cortex_m4_internal_write_pc(cpu, value);
 }
 
 void cortex_m4_internal_load_write_pc(CortexM4* cpu, uint32_t value) {
@@ -33,7 +37,7 @@ void cortex_m4_internal_load_write_pc(CortexM4* cpu, uint32_t value) {
         cortex_m4_exception_return(cpu, value);
         return;
     }
-    cortex_m4_internal_write_pc(cpu, value);
+    cortex_m4_internal_exchange_write_pc(cpu, value);
 }
 
 void cortex_m4_internal_set_logic_flags(CortexM4* cpu, uint32_t value, bool carry) {
@@ -208,7 +212,7 @@ static bool execute_high_register(CortexM4* cpu, uint16_t opcode) {
         if ((opcode & 0x0080u) != 0) {
             cpu->registers[14] = cpu->registers[15] | 1u;
         }
-        cortex_m4_internal_write_pc(cpu, source_value);
+        cortex_m4_internal_exchange_write_pc(cpu, source_value);
     }
     return true;
 }
@@ -337,7 +341,8 @@ static bool execute_push_pop(CortexM4* cpu, uint16_t opcode) {
                     next = 14u;
                 }
                 if (cortex_m4_exception_advanced_multiple_suspend(cpu, next, 2u, address)) {
-                    cortex_m4_write_register_internal(cpu, 13, new_stack);
+                    if (cpu->architecture != CORTEX_M4_ARCHITECTURE_ARMV6_M)
+                        cortex_m4_write_register_internal(cpu, 13, new_stack);
                     return true;
                 }
             }

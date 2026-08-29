@@ -98,6 +98,26 @@ bool kinetis_trigger_ftm_hardware(Kinetis* device, uint8_t instance, uint8_t tri
     return kinetis_timing_trigger_ftm_hardware(&device->timing, instance, trigger);
 }
 
+bool kinetis_trigger_pdb_input(Kinetis* device, uint8_t input) {
+    if (device == NULL)
+        return false;
+    return kinetis_timing_trigger_pdb_input(&device->timing, input);
+}
+
+bool kinetis_trigger_pdb_dac_input(Kinetis* device, uint8_t instance, uint8_t dac) {
+    if (device == NULL)
+        return false;
+    return kinetis_timing_trigger_pdb_dac_input(&device->timing, instance, dac);
+}
+
+bool kinetis_get_pdb_pulse_output(const Kinetis* device, uint8_t instance, uint8_t output,
+                                  bool* output_high) {
+    if (device == NULL || output_high == NULL || instance >= 2u || output >= 2u)
+        return false;
+    *output_high = kinetis_timing_pdb_pulse_output(&device->timing, instance, output);
+    return true;
+}
+
 bool kinetis_get_ftm_output(const Kinetis* device, uint8_t instance, uint8_t channel,
                             bool* output_high) {
     if (device == NULL)
@@ -132,6 +152,11 @@ bool kinetis_set_reset_state(Kinetis* device, uint8_t srs0, bool ackiso) {
     if (device == NULL)
         return false;
     return kinetis_timing_set_reset_state(&device->timing, srs0, ackiso);
+}
+
+bool kinetis_set_reset_pin(Kinetis* device, bool high) {
+    return device != NULL && device->reset_pin_enabled &&
+           kinetis_timing_set_reset_pin(&device->timing, high);
 }
 
 void kinetis_rng_seed(Kinetis* device, uint32_t seed_value) {
@@ -456,12 +481,16 @@ bool kinetis_i2c0_receive(Kinetis* device, uint8_t received_value) {
 }
 
 KinetisDataBus kinetis_data_bus(Kinetis* device) {
-    const KinetisDataBus bus = {device,
-                                kinetis_internal_data_bus_read,
-                                kinetis_internal_data_bus_write,
-                                kinetis_internal_flash_bus_write,
-                                kinetis_internal_data_interrupt,
-                                kinetis_internal_data_dma_complete};
+    const KinetisDataBus bus = {
+        .context = device,
+        .read = kinetis_internal_data_bus_read,
+        .write = kinetis_internal_data_bus_write,
+        .flash_read = kinetis_internal_flash_bus_read,
+        .program = kinetis_internal_flash_bus_write,
+        .interrupt = kinetis_internal_data_interrupt,
+        .dma_complete = kinetis_internal_data_dma_complete,
+        .adc_complete = kinetis_internal_data_adc_complete,
+    };
     return bus;
 }
 
@@ -479,6 +508,7 @@ KinetisTimingSignals kinetis_timing_signals(Kinetis* device) {
         .reset = kinetis_internal_timing_reset,
         .trigger = kinetis_internal_timing_trigger,
         .dma_trigger = kinetis_internal_timing_dma_trigger,
+        .pdb_pulse = kinetis_internal_timing_pdb_pulse,
     };
     return signals;
 }
