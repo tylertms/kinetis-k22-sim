@@ -95,10 +95,13 @@ static void initialize_symbol_image(uint8_t* image) {
     write32(image, section + 36, 16);
 
     section += ELF_SECTION_SIZE;
+    write32(image, section + 4, 3);
     write32(image, section + 16, STRING_OFFSET);
     write32(image, section + 20, 6);
     write32(image, SYMBOL_OFFSET, 1);
     write32(image, SYMBOL_OFFSET + 4, 0x12345678u);
+    write32(image, SYMBOL_OFFSET + 8, 4u);
+    image[SYMBOL_OFFSET + 12] = 2u;
     memcpy(image + STRING_OFFSET, "\0test", 6);
 }
 
@@ -214,10 +217,30 @@ static void test_symbol(TestState* state) {
            "!cortex_m4_elf_symbol_data(image, sizeof(image), missing, &address)");
     expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address),
            "!cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address)");
+    CortexM4Coverage* coverage = cortex_m4_coverage_create(0x12345678u, 4u);
+    expect(state, coverage != NULL, "symbol coverage is created");
+    expect(state, cortex_m4_coverage_define_instruction(coverage, 0x12345678u, false),
+           "first symbol instruction is defined");
+    expect(state, cortex_m4_coverage_define_instruction(coverage, 0x1234567au, false),
+           "second symbol instruction is defined");
+    expect(state,
+           cortex_m4_coverage_select_elf_functions_data(coverage, image, sizeof(image), "te") == 1u,
+           "function prefix selects the symbol");
+    expect(state, cortex_m4_coverage_selected_result(coverage).total_instructions == 2u,
+           "selected coverage includes the function range");
+    expect(state,
+           cortex_m4_coverage_select_elf_functions_data(coverage, image, sizeof(image), "other") ==
+               0u,
+           "function prefix rejects other symbols");
+    cortex_m4_coverage_destroy(coverage);
     expect(state, write_file(symbol_path, image, sizeof(image)), "write symbol ELF file");
     expect(state, cortex_m4_elf_symbol(symbol_path, "test", &address),
            "cortex_m4_elf_symbol(symbol_path, test, &address)");
     expect(state, address == 0x12345678u, "file symbol address == 0x12345678u");
+    coverage = cortex_m4_coverage_create(0x12345678u, 4u);
+    expect(state, cortex_m4_coverage_select_elf_functions(coverage, symbol_path, "test") == 1u,
+           "file function prefix selects the symbol");
+    cortex_m4_coverage_destroy(coverage);
     expect(state, !cortex_m4_elf_symbol(symbol_path, "missing", &address),
            "file symbol lookup rejects a missing name");
     expect(state, !cortex_m4_elf_symbol("kinetis_missing_symbol.elf", "test", &address),

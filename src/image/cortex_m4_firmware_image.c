@@ -381,6 +381,56 @@ CortexM4Coverage* cortex_m4_coverage_create_elf_data(const void* image_data, siz
     return coverage;
 }
 
+size_t cortex_m4_coverage_select_elf_functions_data(CortexM4Coverage* coverage,
+                                                    const void* image_data, size_t image_size,
+                                                    const char* name_prefix) {
+    if (coverage == NULL || image_data == NULL || name_prefix == NULL) {
+        return 0u;
+    }
+    const uint8_t* bytes = image_data;
+    uint32_t table_offset;
+    uint16_t section_count;
+    if (!section_table(bytes, image_size, &table_offset, &section_count)) {
+        return 0u;
+    }
+    const uint16_t entry_size = read_u16(bytes + 46u);
+    const size_t prefix_length = strlen(name_prefix);
+    size_t selected = 0u;
+    for (uint16_t section_index = 0u; section_index < section_count; section_index++) {
+        const ElfSection symbols = read_section(bytes, table_offset, entry_size, section_index);
+        if (symbols.type != ELF_SECTION_SYMTAB || symbols.entry_size < ELF_SYMBOL_SIZE ||
+            symbols.entry_size > symbols.size || symbols.linked_section >= section_count ||
+            !range_valid(image_size, symbols.file_offset, symbols.size)) {
+            continue;
+        }
+        const ElfSection strings =
+            read_section(bytes, table_offset, entry_size, (uint16_t)symbols.linked_section);
+        if (strings.type != ELF_SECTION_STRTAB ||
+            !range_valid(image_size, strings.file_offset, strings.size)) {
+            continue;
+        }
+        for (uint32_t offset = 0u; offset <= symbols.size - symbols.entry_size;
+             offset += symbols.entry_size) {
+            const uint8_t* symbol = bytes + symbols.file_offset + offset;
+            const uint32_t string_offset = read_u32(symbol);
+            const uint32_t address = read_u32(symbol + 4u) & ~1u;
+            const uint32_t size = read_u32(symbol + 8u);
+            const uint8_t type = symbol[12u] & 15u;
+            if (type != 2u || size == 0u || (size & 1u) != 0u || string_offset >= strings.size) {
+                continue;
+            }
+            const char* name = (const char*)bytes + strings.file_offset + string_offset;
+            const size_t available = strings.size - string_offset;
+            if (memchr(name, '\0', available) != NULL &&
+                strncmp(name, name_prefix, prefix_length) == 0 &&
+                cortex_m4_coverage_select_range(coverage, address, size)) {
+                selected++;
+            }
+        }
+    }
+    return selected;
+}
+
 bool cortex_m4_load_elf(Kinetis* device, const char* path, uint32_t* entry_address) {
     uint8_t* image_data = NULL;
     size_t image_size = 0;
@@ -424,4 +474,17 @@ CortexM4Coverage* cortex_m4_coverage_create_elf(const char* path) {
     CortexM4Coverage* coverage = cortex_m4_coverage_create_elf_data(image_data, image_size);
     free(image_data);
     return coverage;
+}
+
+size_t cortex_m4_coverage_select_elf_functions(CortexM4Coverage* coverage, const char* path,
+                                               const char* name_prefix) {
+    uint8_t* image_data = NULL;
+    size_t image_size = 0u;
+    if (!load_file(path, &image_data, &image_size)) {
+        return 0u;
+    }
+    const size_t selected =
+        cortex_m4_coverage_select_elf_functions_data(coverage, image_data, image_size, name_prefix);
+    free(image_data);
+    return selected;
 }

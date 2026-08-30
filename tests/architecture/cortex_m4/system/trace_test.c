@@ -151,6 +151,28 @@ int main(void) {
            "coverage counts defined branch sites");
     expect(&state, coverage_result.branch_coverage_percent == 100.0,
            "coverage calculates the branch percentage");
+    expect(&state, coverage_result.covered_branch_outcomes == 6u,
+           "coverage counts covered branch outcomes");
+    expect(&state, coverage_result.total_branch_outcomes == 6u,
+           "coverage counts total branch outcomes");
+    expect(&state, coverage_result.branch_outcome_coverage_percent == 100.0,
+           "coverage calculates the branch outcome percentage");
+    expect(&state, cortex_m4_coverage_select_range(coverage, 0x100u, 8u),
+           "coverage selects an address range");
+    CortexM4CoverageResult selected = cortex_m4_coverage_selected_result(coverage);
+    expect(&state, selected.covered_instructions == 2u,
+           "selected coverage counts covered instructions");
+    expect(&state, selected.total_instructions == 2u, "selected coverage counts instructions");
+    expect(&state, selected.covered_branch_outcomes == 4u,
+           "selected coverage counts branch outcomes");
+    expect(&state, selected.total_branch_outcomes == 4u,
+           "selected coverage counts possible branch outcomes");
+    expect(&state, selected.branch_outcome_coverage_percent == 100.0,
+           "selected coverage calculates branch outcome coverage");
+    expect(&state, !cortex_m4_coverage_select_range(coverage, 0x101u, 2u),
+           "coverage rejects an odd selected address");
+    expect(&state, !cortex_m4_coverage_select_range(coverage, 0x100u, 3u),
+           "coverage rejects an odd selected size");
     expect(&state,
            cortex_m4_coverage_flags(coverage, 0x100u) ==
                (CORTEX_M4_COVERAGE_EXECUTED | CORTEX_M4_COVERAGE_BRANCH_TAKEN |

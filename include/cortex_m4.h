@@ -88,6 +88,9 @@ typedef struct {
     size_t covered_branch_sites;
     size_t total_branch_sites;
     double branch_coverage_percent;
+    size_t covered_branch_outcomes;
+    size_t total_branch_outcomes;
+    double branch_outcome_coverage_percent;
 } CortexM4CoverageResult;
 
 CortexM4Coverage* cortex_m4_coverage_create(uint32_t address, size_t size);
@@ -95,7 +98,9 @@ void cortex_m4_coverage_destroy(CortexM4Coverage* coverage);
 void cortex_m4_coverage_clear(CortexM4Coverage* coverage);
 bool cortex_m4_coverage_define_instruction(CortexM4Coverage* coverage, uint32_t address,
                                            bool conditional_branch);
+bool cortex_m4_coverage_select_range(CortexM4Coverage* coverage, uint32_t address, size_t size);
 CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverage);
+CortexM4CoverageResult cortex_m4_coverage_selected_result(const CortexM4Coverage* coverage);
 uint8_t cortex_m4_coverage_flags(const CortexM4Coverage* coverage, uint32_t address);
 
 CortexM4* cortex_m4_create(CortexM4Bus bus);

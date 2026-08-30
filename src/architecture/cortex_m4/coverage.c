@@ -25,7 +25,8 @@ struct CortexM4Coverage {
 enum {
     COVERAGE_DEFINED = 1u << 4,
     COVERAGE_CONDITIONAL_BRANCH = 1u << 5,
-    COVERAGE_DEFINITION_MASK = COVERAGE_DEFINED | COVERAGE_CONDITIONAL_BRANCH,
+    COVERAGE_SELECTED = 1u << 6,
+    COVERAGE_DEFINITION_MASK = COVERAGE_DEFINED | COVERAGE_CONDITIONAL_BRANCH | COVERAGE_SELECTED,
 };
 
 static size_t coverage_slot(const CortexM4Coverage* coverage, uint32_t address) {
@@ -96,6 +97,19 @@ bool cortex_m4_coverage_define_instruction(CortexM4Coverage* coverage, uint32_t 
              (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN)) != 0u) {
             coverage->covered_branch_sites++;
         }
+    }
+    return true;
+}
+
+bool cortex_m4_coverage_select_range(CortexM4Coverage* coverage, uint32_t address, size_t size) {
+    if (coverage == NULL || (address & 1u) != 0u || size == 0u || (size & 1u) != 0u ||
+        address < coverage->address || size > coverage->size ||
+        (size_t)(address - coverage->address) > coverage->size - size) {
+        return false;
+    }
+    const size_t first = coverage_slot(coverage, address);
+    for (size_t slot = first; slot < first + size / 2u; slot++) {
+        coverage->slots[slot] |= COVERAGE_SELECTED;
     }
     return true;
 }
@@ -174,7 +188,52 @@ CortexM4CoverageResult cortex_m4_coverage_result(const CortexM4Coverage* coverag
                                        ? 0.0
                                        : 100.0 * (double)coverage->covered_branch_sites /
                                              (double)coverage->total_branch_sites,
+        .covered_branch_outcomes = coverage->observed_branch_outcomes,
+        .total_branch_outcomes = coverage->total_branch_sites * 2u,
+        .branch_outcome_coverage_percent = coverage->total_branch_sites == 0u
+                                               ? 0.0
+                                               : 50.0 * (double)coverage->observed_branch_outcomes /
+                                                     (double)coverage->total_branch_sites,
     };
+    return result;
+}
+
+CortexM4CoverageResult cortex_m4_coverage_selected_result(const CortexM4Coverage* coverage) {
+    CortexM4CoverageResult result = {0};
+    if (coverage == NULL) {
+        return result;
+    }
+    for (size_t slot = 0u; slot < coverage->size / 2u; slot++) {
+        const uint8_t flags = coverage->slots[slot];
+        if ((flags & (COVERAGE_SELECTED | COVERAGE_DEFINED)) !=
+            (COVERAGE_SELECTED | COVERAGE_DEFINED)) {
+            continue;
+        }
+        result.total_instructions++;
+        result.covered_instructions += (flags & CORTEX_M4_COVERAGE_EXECUTED) != 0u;
+        if ((flags & COVERAGE_CONDITIONAL_BRANCH) == 0u) {
+            continue;
+        }
+        result.total_branch_sites++;
+        const uint8_t outcomes =
+            flags & (CORTEX_M4_COVERAGE_BRANCH_TAKEN | CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN);
+        result.covered_branch_sites += outcomes != 0u;
+        result.covered_branch_outcomes += (outcomes & CORTEX_M4_COVERAGE_BRANCH_TAKEN) != 0u;
+        result.covered_branch_outcomes += (outcomes & CORTEX_M4_COVERAGE_BRANCH_NOT_TAKEN) != 0u;
+    }
+    result.total_branch_outcomes = result.total_branch_sites * 2u;
+    result.instruction_coverage_percent =
+        result.total_instructions == 0u
+            ? 0.0
+            : 100.0 * (double)result.covered_instructions / (double)result.total_instructions;
+    result.branch_coverage_percent =
+        result.total_branch_sites == 0u
+            ? 0.0
+            : 100.0 * (double)result.covered_branch_sites / (double)result.total_branch_sites;
+    result.branch_outcome_coverage_percent =
+        result.total_branch_outcomes == 0u
+            ? 0.0
+            : 100.0 * (double)result.covered_branch_outcomes / (double)result.total_branch_outcomes;
     return result;
 }
 
