@@ -239,10 +239,11 @@ void kinetis_data_internal_adc_complete(KinetisData* data, uint8_t instance) {
     adc->converting = false;
     adc->registers[0x20] &= 0x7fu;
     if (adc_compare(adc, conversion_result)) {
+        const bool completion_edge = (adc->registers[conversion_slot * 4u] & 0x80u) == 0u;
         kinetis_data_internal_store_bytes(adc->registers, 0x10u + conversion_slot * 4u, 2u,
                                           conversion_result);
         adc->registers[conversion_slot * 4u] |= 0x80u;
-        if (data->bus.adc_complete != NULL)
+        if (completion_edge && data->bus.adc_complete != NULL)
             data->bus.adc_complete(data->bus.context, instance, conversion_slot);
         adc_refresh_interrupt(data, instance);
         if ((adc->registers[0x20] & 0x04u) != 0)

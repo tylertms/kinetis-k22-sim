@@ -96,7 +96,7 @@ static bool write_ftm_register(KinetisTiming* timing, uint8_t instance, uint32_t
             ftm->channel_flag_read[channel] = false;
             ftm_reset_cleared_dual_capture(ftm, channel);
             kinetis_timing_internal_update_ftm_irq(timing, instance);
-        } else if (!kinetis_timing_internal_ftm_input_capture_mode(ftm, channel) &&
+        } else if (!kinetis_timing_internal_ftm_input_capture_mode(timing, instance, channel) &&
                    !ftm_dual_capture_mode(ftm, channel)) {
             ftm->channel_value_buffer[channel] = (uint16_t)write_value;
             if (kinetis_timing_internal_ftm_bypass_buffers(timing, ftm)) {

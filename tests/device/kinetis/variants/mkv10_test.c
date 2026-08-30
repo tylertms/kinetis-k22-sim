@@ -797,16 +797,50 @@ static void test_ftm_external_clock_mux(TestState* state, Kinetis* device) {
 }
 
 static void test_ftm_crossbar(TestState* state, Kinetis* device) {
+    write32(state, device, TEST_SIM_SOPT4, 0u);
+    expect(state, kinetis_set_ftm_input(device, 2u, 0u, true), "set FTM2 channel 0 pin");
+    kinetis_sync_clock_gates(device);
+    expect(state, device->timing.ftm[2].channel_input[0],
+           "FTM2 channel 0 pin survives peripheral route refresh");
+    expect(state, kinetis_set_ftm_input(device, 2u, 0u, false), "clear FTM2 channel 0 pin");
+
     write32(state, device, TEST_SIM_SOPT4, 1u << 22u);
     expect(state, kinetis_set_ftm_input(device, 1u, 1u, true), "set FTM1 channel 1 pin");
     expect(state, kinetis_set_ftm_input(device, 2u, 0u, true), "set FTM2 channel 0 pin");
     expect(state, kinetis_set_ftm_input(device, 2u, 1u, true), "set FTM2 channel 1 pin");
-    expect(state, !device->timing.ftm[1].channel_input[1] &&
+    expect(state, device->timing.ftm[1].channel_input[1] &&
                       device->timing.ftm[2].channel_input[1],
-           "FTM2 channel 1 XOR route consumes all three pins");
+           "FTM2 channel 1 XOR route preserves the FTM1 channel 1 input");
     expect(state, kinetis_set_ftm_input(device, 2u, 0u, false), "clear FTM2 channel 0 pin");
     expect(state, !device->timing.ftm[2].channel_input[1],
            "FTM2 channel 1 XOR route follows every source pin");
+
+    write32(state, device, 0x4003a080u, 1u);
+    expect(state, kinetis_set_ftm_quadrature_input(device, 2u, 0u, true),
+           "MKV10 accepts the independent FTM2 phase A input");
+    kinetis_advance(device, 3u);
+    expect(state, device->timing.ftm[2].counter == 1u,
+           "independent FTM2 phase A advances quadrature decoding");
+    const uint16_t quadrature_count = device->timing.ftm[2].counter;
+    write32(state, device, TEST_SIM_SOPT4, 0u);
+    write32(state, device, 0x4003a00cu, 4u);
+    expect(state, kinetis_set_ftm_input(device, 2u, 0u, false) &&
+                      kinetis_set_ftm_input(device, 2u, 0u, true),
+           "MKV10 capture input changes while quadrature is enabled");
+    kinetis_advance(device, 3u);
+    expect(state, device->timing.ftm[2].counter == quadrature_count &&
+                      device->timing.ftm[2].channel_value[0] == quadrature_count &&
+                      (device->timing.ftm[2].channel_sc[0] & 0x80u) != 0u,
+           "FTM2 capture operates without perturbing independent quadrature phases");
+
+    write32(state, device, 0x40027008u, UINT16_MAX);
+    write32(state, device, 0x40027080u, 1u);
+    expect(state, kinetis_set_ftm_quadrature_input(device, 4u, 0u, true),
+           "MKV10 accepts the shared FTM4 phase A input");
+    kinetis_advance(device, 3u);
+    expect(state, device->timing.ftm[4].channel_filtered_input[0] &&
+                      device->timing.ftm[4].counter == 1u,
+           "FTM4 quadrature retains its shared channel input path");
 
     device->comparator_output[0] = true;
     device->comparator_output[1] = true;
@@ -814,11 +848,18 @@ static void test_ftm_crossbar(TestState* state, Kinetis* device) {
     expect(state, device->timing.ftm[1].fault_input[0] &&
                       device->timing.ftm[1].channel_input[0],
            "SOPT4 routes comparator 0 to FTM1 fault and capture inputs");
+    for (uint8_t instance = 1u; instance < 6u; instance++)
+        expect(state, device->timing.ftm[instance].fault_input[1],
+               "MKV10 routes comparator 1 permanently to FTM fault 1");
     device->comparator_output[0] = false;
+    device->comparator_output[1] = false;
     kinetis_sync_clock_gates(device);
     expect(state, !device->timing.ftm[1].fault_input[0] &&
                       !device->timing.ftm[1].channel_input[0],
            "internal FTM routes follow comparator levels");
+    for (uint8_t instance = 1u; instance < 6u; instance++)
+        expect(state, !device->timing.ftm[instance].fault_input[1],
+               "permanent FTM fault 1 routes follow comparator 1 levels");
 
     for (uint8_t instance = 0u; instance < 3u; instance++)
         device->timing.ftm[instance].hardware_trigger_pending_mask = 0u;

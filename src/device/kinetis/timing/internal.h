@@ -56,7 +56,8 @@ enum {
 
 bool kinetis_timing_internal_contains(const KinetisTiming* timing, KinetisPeripheralId peripheral,
                                       uint32_t access_address, uint8_t access_size);
-bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisFtmState* ftm, uint8_t channel);
+bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisTiming* timing, uint8_t instance,
+                                                    uint8_t channel);
 bool kinetis_timing_internal_ftm_bypass_buffers(const KinetisTiming* timing,
                                                 const KinetisFtmState* ftm);
 bool kinetis_timing_internal_ftm_location(const KinetisTiming* timing, uint32_t address,

@@ -67,6 +67,8 @@ typedef struct {
     bool channel_flag_read[8];
     bool channel_input[8];
     bool channel_filtered_input[8];
+    bool quadrature_input[2];
+    bool quadrature_filtered_input[2];
     bool channel_output[8];
     bool debug_output[8];
     bool channel_deadtime_output[8];
@@ -75,6 +77,7 @@ typedef struct {
     bool channel_value_pending[8];
     bool dual_capture_waiting_final[4];
     uint32_t channel_input_age[8];
+    uint32_t quadrature_input_age[2];
     uint32_t channel_deadtime_remaining[8];
     uint32_t fault_input_age[4];
     bool outmask_pending;
@@ -272,6 +275,8 @@ bool kinetis_timing_ewm_output(const KinetisTiming* timing);
 void kinetis_timing_watchdog_advance(KinetisTiming* timing, uint32_t elapsed_watchdog_ticks);
 bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
                                   bool input_high);
+bool kinetis_timing_set_ftm_quadrature_input(KinetisTiming* timing, uint8_t instance,
+                                             uint8_t phase, bool input_high);
 bool kinetis_timing_set_ftm_clock_input(KinetisTiming* timing, uint8_t input_index,
                                         bool input_high);
 bool kinetis_timing_set_ftm_fault(KinetisTiming* timing, uint8_t instance, uint8_t input_index,

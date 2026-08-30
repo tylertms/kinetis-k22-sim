@@ -117,7 +117,8 @@ int main(void) {
         mix(&census, ftm->channel_value[channel] ^ ((uint32_t)ftm->channel_output[channel] << 24u));
         mix(&census, kinetis_timing_internal_ftm_active_fault_mask(ftm));
         mix(&census, kinetis_timing_internal_ftm_output_compare_mode(ftm, channel));
-        mix(&census, kinetis_timing_internal_ftm_input_capture_mode(ftm, channel));
+        mix(&census,
+            kinetis_timing_internal_ftm_input_capture_mode(&timing, instance, channel));
     }
     KinetisTiming incomplete = timing;
     incomplete.profile = NULL;

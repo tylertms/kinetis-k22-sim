@@ -507,6 +507,10 @@ static void test_armv6_m_motor_interrupt_arbitration(TestState* state) {
     cortex_m4_set_irq_level(cpu, ADC1_IRQ, true);
     cortex_m4_set_irq_level(cpu, FTM3_IRQ, true);
     cortex_m4_set_irq_level(cpu, PDB_IRQ, true);
+    cortex_m4_set_irq(cpu, ADC1_IRQ, false);
+    cortex_m4_set_irq_level(cpu, ADC1_IRQ, true);
+    expect(state, cortex_m4_get_irq_pending(cpu, ADC1_IRQ),
+           "asserted inactive level restores cleared pending state");
 
     expect(state, cortex_m4_take_pending_exception(cpu), "take highest-priority motor interrupt");
     expect(state, (cpu->xpsr & 0x1ffu) == ADC0_IRQ + 16u,
@@ -515,6 +519,8 @@ static void test_armv6_m_motor_interrupt_arbitration(TestState* state) {
            "lower-priority motor interrupts do not preempt ADC0");
 
     cortex_m4_set_irq_level(cpu, ADC0_IRQ, true);
+    expect(state, !cortex_m4_get_irq_pending(cpu, ADC0_IRQ),
+           "repeated active level assertion does not queue a duplicate interrupt");
     expect(state, cortex_m4_exception_return(cpu, cpu->registers[14]),
            "continuously asserted ADC0 tail-chains");
     expect(state, (cpu->xpsr & 0x1ffu) == ADC0_IRQ + 16u,

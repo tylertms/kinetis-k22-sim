@@ -377,9 +377,12 @@ bool kinetis_serial_pop_transmit(KinetisSerial* serial, KinetisSerialEndpoint en
         return kinetis_serial_internal_fifo_pop(&spi->wire_transmit, value, NULL);
     }
     KinetisSerialI2c* i2c = endpoint_i2c(serial, endpoint);
-    if (i2c == NULL || !i2c->present)
+    if (i2c == NULL || !i2c->present || i2c->slave_transmit_pending)
         return false;
-    return kinetis_serial_internal_fifo_pop(&i2c->slave_transmit_fifo, value, NULL);
+    const bool transmitted =
+        kinetis_serial_internal_fifo_pop(&i2c->slave_transmit_fifo, value, NULL);
+    i2c->slave_transmit_pending = transmitted;
+    return transmitted;
 }
 
 bool kinetis_serial_pop_spi_transfer(KinetisSerial* serial, KinetisSerialEndpoint endpoint,
@@ -407,6 +410,14 @@ bool kinetis_serial_i2c_set_acknowledge(KinetisSerial* serial, KinetisSerialEndp
     if (i2c == NULL || !i2c->present)
         return false;
     i2c->acknowledge = acknowledge;
+    if (i2c->slave_addressed && i2c->slave_transmit && i2c->slave_transmit_pending) {
+        i2c->slave_transmit_pending = false;
+        i2c->registers[I2C_S] |= 0x82u;
+        if (acknowledge)
+            i2c->registers[I2C_S] &= 0xfeu;
+        else
+            i2c->registers[I2C_S] |= 1u;
+    }
     return true;
 }
 
@@ -424,6 +435,15 @@ bool kinetis_serial_i2c_detect_start(KinetisSerial* serial, KinetisSerialEndpoin
     KinetisSerialI2c* i2c = enabled_i2c(serial, endpoint);
     if (i2c == NULL)
         return false;
+    i2c->repeated_start = (i2c->registers[I2C_S] & 0x20u) != 0u;
+    if (!i2c->repeated_start)
+        i2c->extended_addressed = false;
+    i2c->slave_addressed = false;
+    i2c->slave_transmit = false;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_address_rejected = false;
+    i2c->registers[I2C_S] |= 0x20u;
     i2c->registers[I2C_FLT] |= 0x10u;
     if ((i2c->registers[I2C_FLT] & 0x20u) != 0u)
         i2c->registers[I2C_S] |= 2u;
@@ -443,6 +463,11 @@ bool kinetis_serial_i2c_detect_stop(KinetisSerial* serial, KinetisSerialEndpoint
     }
     i2c->slave_addressed = false;
     i2c->slave_transmit = false;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_addressed = false;
+    i2c->extended_address_rejected = false;
+    i2c->repeated_start = false;
     return true;
 }
 
@@ -459,6 +484,11 @@ bool kinetis_serial_i2c_lose_arbitration(KinetisSerial* serial, KinetisSerialEnd
     i2c->transfer_cycles = 0;
     i2c->slave_addressed = false;
     i2c->slave_transmit = false;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_addressed = false;
+    i2c->extended_address_rejected = false;
+    i2c->repeated_start = false;
     return true;
 }
 
@@ -482,17 +512,47 @@ bool kinetis_serial_i2c_slave_address(KinetisSerial* serial, KinetisSerialEndpoi
     const uint8_t smb = i2c->registers[I2C_SMB];
     const bool alert = (smb & 0x40u) != 0u && address == 0x0cu && is_read;
     const bool secondary = (smb & 0x20u) != 0u && address == (i2c->registers[I2C_A2] >> 1u);
+    const bool extended_mode = (control & 0x40u) != 0u;
+    const bool extended_primary = primary && extended_mode;
+    const bool extended_header_matches =
+        extended_mode && ((address >> 7u) & 6u) == (control & 6u) && !range &&
+        !general_call && !alert && !secondary;
+    if (extended_header_matches && !is_read && !i2c->extended_address_header_received &&
+        !i2c->extended_address_rejected) {
+        i2c->registers[I2C_D] = (uint8_t)(0xf0u | ((address >> 7u) & 6u));
+        i2c->registers[I2C_S] = (i2c->registers[I2C_S] & 0xb2u) | 0xa2u;
+        i2c->extended_address_header_received = true;
+        i2c->slave_addressed = false;
+        i2c->slave_transmit = false;
+        i2c->slave_transmit_pending = false;
+        return true;
+    }
+    if (extended_mode && !is_read && i2c->extended_address_header_received) {
+        i2c->extended_address_header_received = false;
+        if (!primary) {
+            i2c->extended_addressed = false;
+            i2c->extended_address_rejected = true;
+            return false;
+        }
+    }
+    if (extended_mode && !is_read && i2c->extended_address_rejected)
+        return false;
+    if (extended_primary && is_read &&
+        (!primary || !i2c->repeated_start || !i2c->extended_addressed))
+        return false;
     if (!primary && !range && !general_call && !alert && !secondary)
         return false;
-    const bool extended_primary = primary && (control & 0x40u) != 0u;
     i2c->registers[I2C_D] = !extended_primary
                                  ? (uint8_t)((address << 1u) | is_read)
                                  : is_read ? (uint8_t)(0xf1u | ((address >> 7u) & 6u))
                                            : (uint8_t)address;
-    i2c->registers[I2C_S] = (i2c->registers[I2C_S] & 0xf3u) | 0xe2u |
+    i2c->registers[I2C_S] = (i2c->registers[I2C_S] & 0xf2u) | 0xe2u |
                              (is_read ? 4u : 0u) | (range ? 8u : 0u);
     i2c->slave_addressed = true;
     i2c->slave_transmit = is_read;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_addressed = extended_primary;
     return true;
 }
 

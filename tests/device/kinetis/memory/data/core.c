@@ -62,6 +62,13 @@ static void bus_interrupt(void* context, KinetisDataInterrupt interrupt, bool as
     bus->interrupt[interrupt] = asserted;
 }
 
+static void bus_adc_complete(void* context, uint8_t instance, uint8_t pretrigger) {
+    TestBus* bus = context;
+    (void)instance;
+    (void)pretrigger;
+    bus->adc_complete_count++;
+}
+
 KinetisData* kinetis_data_test_create(TestState* state, TestBus* bus, KinetisProfile profile) {
     KinetisDataBus callbacks = {
         .context = bus,
@@ -70,6 +77,7 @@ KinetisData* kinetis_data_test_create(TestState* state, TestBus* bus, KinetisPro
         .flash_read = bus_read,
         .program = bus_write,
         .interrupt = bus_interrupt,
+        .adc_complete = bus_adc_complete,
     };
     KinetisData* data = kinetis_data_create(kinetis_profile_get(profile), callbacks);
     expect(state, data != NULL, "data != NULL");
@@ -734,6 +742,19 @@ void kinetis_data_test_test_adc(TestState* state) {
     kinetis_data_advance(data, 100u);
     expect(state, (kinetis_data_test_read_value(state, data, ADC0, 1u) & 0x80u) != 0u,
            "bus-clocked ADC resumes when its clock returns");
+
+    kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2u);
+    kinetis_data_test_write_value(state, data, ADC0 + 0x24u, 1u, 0x08u);
+    const uint32_t continuous_completion_count = bus.adc_complete_count;
+    kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);
+    kinetis_data_advance(data, 200u);
+    expect(state, bus.adc_complete_count == continuous_completion_count + 1u,
+           "continuous ADC completion acknowledges PDB only on a COCO rising edge");
+    kinetis_data_test_read_value(state, data, ADC0 + 0x10u, 2u);
+    kinetis_data_advance(data, 100u);
+    expect(state, bus.adc_complete_count == continuous_completion_count + 2u,
+           "reading the ADC result permits the next PDB acknowledgement");
+    kinetis_data_test_write_value(state, data, ADC0 + 0x24u, 1u, 0u);
 
     kinetis_data_test_write_value(state, data, ADC0 + 8u, 1u, 0x0fu);
     kinetis_data_test_write_value(state, data, ADC0, 1u, 7u);

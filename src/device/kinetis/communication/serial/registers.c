@@ -160,6 +160,11 @@ static void reset_i2c(KinetisSerialI2c* i2c, const KinetisDeviceProfile* profile
     i2c->read_pending = false;
     i2c->slave_addressed = false;
     i2c->slave_transmit = false;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_addressed = false;
+    i2c->extended_address_rejected = false;
+    i2c->repeated_start = false;
 }
 
 bool kinetis_serial_init(KinetisSerial* serial, const KinetisDeviceProfile* profile) {
@@ -636,6 +641,11 @@ static void i2c_stop(KinetisSerial* serial, KinetisSerialI2c* i2c) {
     i2c->transfer_cycles = 0;
     i2c->slave_addressed = false;
     i2c->slave_transmit = false;
+    i2c->slave_transmit_pending = false;
+    i2c->extended_address_header_received = false;
+    i2c->extended_addressed = false;
+    i2c->extended_address_rejected = false;
+    i2c->repeated_start = false;
     push_event(serial, i2c_endpoint(serial, i2c), KINETIS_SERIAL_EVENT_I2C_STOP, 0);
 }
 
@@ -659,6 +669,11 @@ bool kinetis_serial_internal_write_i2c(KinetisSerial* serial, KinetisSerialI2c* 
             i2c->registers[I2C_S] = 0;
             i2c->slave_addressed = false;
             i2c->slave_transmit = false;
+            i2c->slave_transmit_pending = false;
+            i2c->extended_address_header_received = false;
+            i2c->extended_addressed = false;
+            i2c->extended_address_rejected = false;
+            i2c->repeated_start = false;
         } else if ((register_value & 0x20u) != 0 && (previous_control & 0x20u) == 0) {
             i2c->registers[I2C_S] |= 0x20u;
             i2c->registers[I2C_FLT] |= 0x10u;

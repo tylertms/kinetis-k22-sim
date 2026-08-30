@@ -172,6 +172,8 @@ bool kinetis_set_ewm_input(Kinetis* device, bool input_high);
 bool kinetis_ewm_output(const Kinetis* device);
 bool kinetis_get_cmt_output(const Kinetis* device, bool* is_driven, bool* is_high);
 bool kinetis_set_ftm_input(Kinetis* device, uint8_t instance, uint8_t channel, bool input_high);
+bool kinetis_set_ftm_quadrature_input(Kinetis* device, uint8_t instance, uint8_t phase,
+                                      bool input_high);
 bool kinetis_set_ftm_clock_input(Kinetis* device, uint8_t input_index, bool input_high);
 bool kinetis_set_ftm_fault(Kinetis* device, uint8_t instance, uint8_t input_index, bool input_high);
 bool kinetis_trigger_ftm_hardware(Kinetis* device, uint8_t instance, uint8_t trigger);

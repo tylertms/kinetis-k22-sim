@@ -279,6 +279,13 @@ CortexM4ExceptionChain cortex_m4_exception_advanced_tail_chain(CortexM4* cpu,
     const bool returns_to_thread = (exception_return & (1u << 3)) != 0u;
     const uint16_t preemption_target =
         returns_to_thread ? 0u : cpu->active_exceptions[cpu->exception_depth - 2u];
+    if (current_exception >= 16u) {
+        const uint16_t irq = current_exception - 16u;
+        const uint32_t irq_mask = 1u << (irq & 31u);
+        if ((cpu->irq_level[irq / 32u] & irq_mask) != 0u) {
+            cpu->irq_pending[irq / 32u] |= irq_mask;
+        }
+    }
     uint16_t selected_exception = selected_pending(cpu, preemption_target, current_exception);
     if (selected_exception == 0u) {
         return CORTEX_M4_EXCEPTION_CHAIN_NONE;

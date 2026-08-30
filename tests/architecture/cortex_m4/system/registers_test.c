@@ -387,6 +387,16 @@ static void test_waiting(TestState* state, CortexM4* cpu) {
     expect(state, system_write(cpu, NVIC_ISPR, 4, 4) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
            "system_write(cpu, NVIC_ISPR, 4, 4) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED");
     expect(state, (cpu->irq_pending[0] & 6u) == 6u, "(cpu->irq_pending[0] & 6u) == 6u");
+    cortex_m4_set_irq_level(cpu, 3u, true);
+    expect(state, system_write(cpu, NVIC_ICPR, 4u, 1u << 3u) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
+           "clear pending accepts an asserted level interrupt");
+    expect(state, cortex_m4_get_irq_pending(cpu, 3u),
+           "clear pending preserves an asserted level interrupt");
+    cortex_m4_set_irq_level(cpu, 3u, false);
+    expect(state, system_write(cpu, NVIC_ICPR, 4u, 1u << 3u) == CORTEX_M4_SYSTEM_ACCESS_ACCEPTED,
+           "clear pending accepts a deasserted level interrupt");
+    expect(state, !cortex_m4_get_irq_pending(cpu, 3u),
+           "clear pending removes a deasserted level interrupt");
 
     cpu->system_pending = (1u << 3u) | (1u << 15u);
     cpu->system_priority[11] = 0x80u;

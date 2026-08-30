@@ -177,8 +177,12 @@ void cortex_m4_set_irq_level(CortexM4* cpu, uint16_t irq, bool asserted) {
     }
     const uint32_t irq_mask = 1u << (irq & 31u);
     if (asserted) {
+        const bool was_asserted = (cpu->irq_level[irq / 32] & irq_mask) != 0u;
         cpu->irq_level[irq / 32] |= irq_mask;
-        cortex_m4_set_irq(cpu, irq, true);
+        if (!was_asserted || (!cortex_m4_get_irq_pending(cpu, irq) &&
+                              !cortex_m4_get_irq_active(cpu, irq))) {
+            cortex_m4_set_irq(cpu, irq, true);
+        }
     } else {
         cpu->irq_level[irq / 32] &= ~irq_mask;
     }

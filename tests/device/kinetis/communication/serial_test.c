@@ -626,9 +626,29 @@ static void test_i2c_arbitration_disable_slave_and_reset(TestState* state) {
            kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_I2C2, &slave_transmitted_value),
            "kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_I2C2, &slave_transmitted_value)");
     expect(state, slave_transmitted_value == 0x9au, "slave_transmitted_value == 0x9au");
+    expect(state, kinetis_serial_i2c_set_acknowledge(&serial, KINETIS_SERIAL_I2C2, true),
+           "slave transmitter accepts master ACK");
+    expect(state, (read_register(state, &serial, I2C2_BASE + 3u, 1u) & 0x83u) == 0x82u,
+           "master ACK completes one slave transmit byte");
+    write_register(state, &serial, I2C2_BASE + 3u, 1u, 2u);
+    expect(state, kinetis_serial_i2c_set_acknowledge(&serial, KINETIS_SERIAL_I2C2, true),
+           "duplicate master ACK is accepted without an outstanding byte");
+    expect(state, (read_register(state, &serial, I2C2_BASE + 3u, 1u) & 2u) == 0u,
+           "duplicate master ACK does not complete another slave transmit byte");
+    write_register(state, &serial, I2C2_BASE + 4u, 1u, 0x8bu);
+    expect(state,
+           kinetis_serial_pop_transmit(&serial, KINETIS_SERIAL_I2C2, &slave_transmitted_value),
+           "slave transmitter publishes a second byte");
+    expect(state, slave_transmitted_value == 0x8bu, "slave_transmitted_value == 0x8bu");
+    expect(state, kinetis_serial_i2c_set_acknowledge(&serial, KINETIS_SERIAL_I2C2, false),
+           "slave transmitter accepts master NAK");
+    expect(state, (read_register(state, &serial, I2C2_BASE + 3u, 1u) & 0x83u) == 0x83u,
+           "master NAK completes the final slave transmit byte");
 
     expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C2, 0x29u, false),
            "kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C2, 0x29u, false)");
+    expect(state, (read_register(state, &serial, I2C2_BASE + 3u, 1u) & 0xc7u) == 0xc2u,
+           "a new slave address clears the preceding master NAK");
     expect(state, kinetis_serial_push_receive(&serial, KINETIS_SERIAL_I2C2, 0x6bu, 0),
            "kinetis_serial_push_receive(&serial, KINETIS_SERIAL_I2C2, 0x6bu, 0)");
     expect(state, read_register(state, &serial, I2C2_BASE + 4, 1) == 0x6bu,
@@ -1074,11 +1094,39 @@ static void test_mkv10_i2c_slave_matching(TestState* state) {
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
     write_register(state, &serial, I2C0_BASE + 5u, 1u, 0x40u);
     write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x24u);
+    expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
+           "MKV10 I2C detects the extended-address START");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u,
+                   read_register(state, &serial, I2C0_BASE + 6u, 1u));
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
     expect(state,
            kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x78u, false) &&
-               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x78u &&
-               !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0u, false),
-           "MKV10 I2C matches the official motor extended address without general call");
+               (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0xe6u) == 0xa2u &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xf0u,
+           "MKV10 I2C reports the first extended header without IAAS");
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    (void)read_register(state, &serial, I2C0_BASE + 4u, 1u);
+    expect(state,
+           kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x78u, false) &&
+               (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0xe6u) == 0xe2u &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x78u,
+           "MKV10 I2C matches the extended low address");
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0),
+           "MKV10 I2C stops the extended-address transfer");
+    expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0) &&
+                      kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0xf8u,
+                                                       false),
+           "MKV10 I2C matches the high bits of a wrong extended address");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u,
+                   read_register(state, &serial, I2C0_BASE + 6u, 1u));
+    write_register(state, &serial, I2C0_BASE + 3u, 1u, 2u);
+    (void)read_register(state, &serial, I2C0_BASE + 4u, 1u);
+    expect(state,
+           !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0xf8u, false) &&
+               !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x78u, false),
+           "wrong extended low address consumes the pending header match");
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0),
+           "MKV10 I2C stops the mismatched extended-address transfer");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
     write_register(state, &serial, I2C0_BASE + 5u, 1u, 0u);
     write_register(state, &serial, I2C0_BASE, 1u, 0x53u);
@@ -1165,18 +1213,51 @@ static void test_mkv10_i2c_slave_matching(TestState* state) {
                       read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0x61u,
            "I2C secondary address remains seven-bit while primary addressing is extended");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x80u);
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0) &&
+                      kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
+           "I2C begins a clean extended primary transaction");
     expect(state,
            !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u, true) &&
-               kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, true) &&
-               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xf3u,
-           "I2C extended primary address completes the 10-bit read sequence");
+               !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, true) &&
+               kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, false) &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xf2u &&
+               kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, false) &&
+               read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xa9u,
+           "I2C extended primary requires both write-address phases before reading");
+    expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0),
+           "I2C detects the repeated START for an extended read");
     write_register(state, &serial, I2C0_BASE + 2u, 1u, 0x90u);
     expect(state, kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x1a9u, true) &&
+                      read_register(state, &serial, I2C0_BASE + 4u, 1u) == 0xf3u &&
                       (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) != 0u,
            "I2C transmit address completes before its first data byte");
     write_register(state, &serial, I2C0_BASE + 4u, 1u, 0x5au);
     expect(state, (read_register(state, &serial, I2C0_BASE + 3u, 1u) & 0x80u) == 0u,
            "I2C transmit data write clears transfer complete");
+
+    write_register(state, &serial, I2C0_BASE + 5u, 1u, 0u);
+    write_register(state, &serial, I2C0_BASE, 1u, 0x52u);
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0),
+           "I2C stops the prior extended transmit transaction");
+    write_register(state, &serial, I2C0_BASE + 6u, 1u, 0x64u);
+    expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0) &&
+                      kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x29u,
+                                                       false),
+           "I2C starts a matched write before an address-changing repeated START");
+    const size_t slave_receive_count = serial.i2c[0].slave_receive.count;
+    const size_t wire_receive_count = serial.i2c[0].receive.count;
+    expect(state, kinetis_serial_i2c_detect_start(&serial, KINETIS_SERIAL_I2C0) &&
+                      !kinetis_serial_i2c_slave_address(&serial, KINETIS_SERIAL_I2C0, 0x2au,
+                                                        false) &&
+                      kinetis_serial_push_receive(&serial, KINETIS_SERIAL_I2C0, 0x6bu, 0u),
+           "different repeated-START address releases the previous slave role");
+    expect(state,
+           serial.i2c[0].slave_receive.count == slave_receive_count &&
+               serial.i2c[0].receive.count == wire_receive_count + 1u,
+           "unmatched repeated-START data remains ordinary wire traffic");
+    expect(state, kinetis_serial_i2c_detect_stop(&serial, KINETIS_SERIAL_I2C0) &&
+                      (read_register(state, &serial, I2C0_BASE + 6u, 1u) & 0x40u) == 0u,
+           "unmatched repeated-START stop does not latch STOPF");
 }
 
 int main(void) {

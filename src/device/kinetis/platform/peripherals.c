@@ -541,13 +541,17 @@ static void mkv10_refresh_ftm_comparator_routes(Kinetis* device) {
         if (instance == 0u && (mux & 2u) != 0u)
             kinetis_timing_internal_set_ftm_routed_fault(&device->timing, 0u, 1u,
                                                           device->comparator_output[1]);
+        if (instance != 0u)
+            kinetis_timing_internal_set_ftm_routed_fault(&device->timing, instance, 1u,
+                                                          device->comparator_output[1]);
         if (local != 0u) {
             const uint8_t shift = local == 1u ? 18u : 20u;
             const uint8_t source = (uint8_t)((mux >> shift) & 3u);
-            kinetis_timing_internal_set_ftm_routed_input(
-                &device->timing, instance, 0u,
-                source == 1u ? device->comparator_output[0]
-                             : source == 2u ? device->comparator_output[1] : false);
+            if (source != 0u)
+                kinetis_timing_internal_set_ftm_routed_input(
+                    &device->timing, instance, 0u,
+                    source == 1u ? device->comparator_output[0]
+                                 : source == 2u ? device->comparator_output[1] : false);
         }
     }
 }

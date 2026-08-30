@@ -146,6 +146,11 @@ typedef struct {
     bool read_pending;
     bool slave_addressed;
     bool slave_transmit;
+    bool slave_transmit_pending;
+    bool extended_address_header_received;
+    bool extended_addressed;
+    bool extended_address_rejected;
+    bool repeated_start;
 } KinetisSerialI2c;
 
 typedef struct {

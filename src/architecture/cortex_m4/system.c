@@ -728,7 +728,9 @@ CortexM4SystemAccess cortex_m4_system_write(CortexM4* cpu, uint32_t address, uin
         const uint16_t first_irq = (uint16_t)(((aligned - NVIC_ICPR) / 4u) * 32u);
         const uint32_t bits = access_value(address, size, value);
         for (uint8_t bit = 0; bit < 32 && first_irq + bit < cpu->external_irq_count; bit++) {
-            if ((bits & (1u << bit)) != 0) {
+            const uint32_t irq_mask = 1u << bit;
+            if ((bits & irq_mask) != 0u &&
+                (cpu->irq_level[(first_irq + bit) / 32u] & irq_mask) == 0u) {
                 cortex_m4_system_set_pending(cpu, first_irq + bit + 16u, false);
             }
         }

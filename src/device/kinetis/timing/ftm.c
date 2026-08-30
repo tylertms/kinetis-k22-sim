@@ -69,6 +69,11 @@ static bool is_ftm_quadrature_enabled(const KinetisFtmState* ftm) {
     return ftm->quadrature_capable && (ftm->registers[11] & 1u) != 0u;
 }
 
+static bool ftm_has_independent_quadrature(const KinetisTiming* timing, uint8_t instance) {
+    return timing->profile->id == KINETIS_PROFILE_MKV10Z1287 &&
+           (instance == 1u || instance == 2u || instance == 5u);
+}
+
 static uint8_t ftm_debug_mode(const KinetisFtmState* ftm) {
     return (uint8_t)((ftm->registers[12] >> 6u) & 3u);
 }
@@ -148,7 +153,6 @@ void kinetis_timing_internal_refresh_ftm_pin_routes(KinetisTiming* timing) {
         (timing->sim_sopt4 & (1u << 22u)) != 0u) {
         const bool input = timing->ftm_pin_input[2][1] != timing->ftm_pin_input[2][0] !=
                            timing->ftm_pin_input[1][1];
-        kinetis_timing_internal_set_ftm_routed_input(timing, 1u, 1u, false);
         kinetis_timing_internal_set_ftm_routed_input(timing, 2u, 1u, input);
     }
     for (uint8_t instance = 0u; instance < KINETIS_FTM_COUNT; instance++) {
@@ -157,9 +161,8 @@ void kinetis_timing_internal_refresh_ftm_pin_routes(KinetisTiming* timing) {
             if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && input == 0u) {
                 const uint8_t bit = instance % 3u == 0u ? 0u : (uint8_t)(instance % 3u + 1u);
                 pin_route = (ftm_mux_register(timing, instance) & (1u << bit)) == 0u;
-            } else if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && instance == 0u &&
-                       input == 1u) {
-                pin_route = (timing->sim_sopt4 & 2u) == 0u;
+            } else if (timing->profile->id == KINETIS_PROFILE_MKV10Z1287 && input == 1u) {
+                pin_route = instance == 0u && (timing->sim_sopt4 & 2u) == 0u;
             }
             if (pin_route)
                 kinetis_timing_internal_set_ftm_routed_fault(
@@ -181,6 +184,22 @@ bool kinetis_timing_set_ftm_input(KinetisTiming* timing, uint8_t instance, uint8
         kinetis_timing_internal_refresh_ftm_pin_routes(timing);
     else
         kinetis_timing_internal_set_ftm_routed_input(timing, instance, channel, input_high);
+    return true;
+}
+
+bool kinetis_timing_set_ftm_quadrature_input(KinetisTiming* timing, uint8_t instance,
+                                             uint8_t phase, bool input_high) {
+    if (timing == NULL || timing->profile == NULL || instance >= KINETIS_FTM_COUNT || phase >= 2u)
+        return false;
+    KinetisFtmState* ftm = &timing->ftm[instance];
+    if (!ftm->quadrature_capable)
+        return false;
+    if (!ftm_has_independent_quadrature(timing, instance))
+        return kinetis_timing_set_ftm_input(timing, instance, phase, input_high);
+    if (ftm->quadrature_input[phase] != input_high) {
+        ftm->quadrature_input[phase] = input_high;
+        ftm->quadrature_input_age[phase] = 0u;
+    }
     return true;
 }
 
@@ -797,20 +816,37 @@ bool kinetis_timing_set_ftm_clock_input(KinetisTiming* timing, uint8_t input_ind
     return true;
 }
 
-static uint32_t ftm_input_threshold(const KinetisFtmState* ftm, uint8_t channel) {
+static uint32_t ftm_channel_input_threshold(const KinetisFtmState* ftm, uint8_t channel) {
     if (channel >= 4u)
         return 3u;
     const uint8_t filter = (uint8_t)((ftm->registers[9] >> (channel * 4u)) & 15u);
-    if (is_ftm_quadrature_enabled(ftm) && channel < 2u &&
-        (ftm->registers[11] & (1u << (7u - channel))) == 0u)
-        return 3u;
     return filter == 0u ? 3u : 4u + (uint32_t)filter * 4u;
 }
 
-bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisFtmState* ftm, uint8_t channel) {
+static uint32_t ftm_quadrature_input_threshold(const KinetisFtmState* ftm, uint8_t phase) {
+    if ((ftm->registers[11] & (1u << (7u - phase))) == 0u)
+        return 3u;
+    const uint8_t filter = (uint8_t)((ftm->registers[9] >> (phase * 4u)) & 15u);
+    return filter == 0u ? 3u : 4u + (uint32_t)filter * 4u;
+}
+
+static uint32_t ftm_routed_input_threshold(const KinetisTiming* timing, uint8_t instance,
+                                           uint8_t channel) {
+    const KinetisFtmState* ftm = &timing->ftm[instance];
+    if (!ftm_has_independent_quadrature(timing, instance) &&
+        is_ftm_quadrature_enabled(ftm) && channel < 2u)
+        return ftm_quadrature_input_threshold(ftm, channel);
+    return ftm_channel_input_threshold(ftm, channel);
+}
+
+bool kinetis_timing_internal_ftm_input_capture_mode(const KinetisTiming* timing, uint8_t instance,
+                                                    uint8_t channel) {
+    const KinetisFtmState* ftm = &timing->ftm[instance];
     const uint8_t pair_shift = (uint8_t)((channel / 2u) * 8u);
     const uint32_t pair = ftm->registers[4] >> pair_shift;
-    return !is_ftm_quadrature_enabled(ftm) && (ftm->sc & (1u << 5u)) == 0u &&
+    return (!is_ftm_quadrature_enabled(ftm) ||
+            ftm_has_independent_quadrature(timing, instance)) &&
+           (ftm->sc & (1u << 5u)) == 0u &&
            (ftm->channel_sc[channel] & 0x30u) == 0u && (ftm->channel_sc[channel] & 0x0cu) != 0u &&
            (pair & 5u) == 0u;
 }
@@ -897,13 +933,16 @@ static void ftm_quadrature_step(KinetisTiming* timing, uint8_t instance, bool in
 static void ftm_quadrature_transition(KinetisTiming* timing, uint8_t instance, uint8_t channel,
                                       bool previous, bool current) {
     KinetisFtmState* ftm = &timing->ftm[instance];
+    const bool* inputs = ftm_has_independent_quadrature(timing, instance)
+                             ? ftm->quadrature_filtered_input
+                             : ftm->channel_filtered_input;
     const bool polarity = (ftm->registers[11] & (1u << (5u - channel))) != 0u;
     const bool before = previous != polarity;
     const bool after = current != polarity;
     if (before == after)
         return;
-    const bool phase_a = ftm->channel_filtered_input[0] != ((ftm->registers[11] & 0x20u) != 0u);
-    const bool phase_b = ftm->channel_filtered_input[1] != ((ftm->registers[11] & 0x10u) != 0u);
+    const bool phase_a = inputs[0] != ((ftm->registers[11] & 0x20u) != 0u);
+    const bool phase_b = inputs[1] != ((ftm->registers[11] & 0x10u) != 0u);
     if ((ftm->registers[11] & 8u) != 0u) {
         if (channel == 0u && !before && after)
             ftm_quadrature_step(timing, instance, phase_b);
@@ -916,7 +955,8 @@ static void ftm_quadrature_transition(KinetisTiming* timing, uint8_t instance, u
 static void ftm_capture_input(KinetisTiming* timing, uint8_t instance, uint8_t channel,
                               bool previous, bool current) {
     KinetisFtmState* ftm = &timing->ftm[instance];
-    if (is_ftm_quadrature_enabled(ftm) && channel < 2u) {
+    if (!ftm_has_independent_quadrature(timing, instance) &&
+        is_ftm_quadrature_enabled(ftm) && channel < 2u) {
         ftm_quadrature_transition(timing, instance, channel, previous, current);
         return;
     }
@@ -927,7 +967,7 @@ static void ftm_capture_input(KinetisTiming* timing, uint8_t instance, uint8_t c
     const uint8_t edges = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
     const bool edge_selected = current ? (edges & 1u) != 0u : (edges & 2u) != 0u;
     if (previous == current || !edge_selected ||
-        !kinetis_timing_internal_ftm_input_capture_mode(ftm, channel))
+        !kinetis_timing_internal_ftm_input_capture_mode(timing, instance, channel))
         return;
     ftm->channel_value[channel] = ftm->counter;
     ftm_channel_event(timing, instance, channel);
@@ -1200,12 +1240,24 @@ void kinetis_timing_internal_advance_ftm(KinetisTiming* timing, uint8_t instance
         for (uint8_t channel = 0u; channel < channels; channel++) {
             if (ftm->channel_input[channel] == ftm->channel_filtered_input[channel])
                 continue;
-            const uint32_t threshold = ftm_input_threshold(ftm, channel);
+            const uint32_t threshold = ftm_routed_input_threshold(timing, instance, channel);
             const uint32_t until_event = ftm->channel_input_age[channel] >= threshold
                                              ? 0u
                                              : threshold - ftm->channel_input_age[channel];
             if (until_event < segment)
                 segment = until_event;
+        }
+        if (ftm_has_independent_quadrature(timing, instance) && is_ftm_quadrature_enabled(ftm)) {
+            for (uint8_t phase = 0u; phase < 2u; phase++) {
+                if (ftm->quadrature_input[phase] == ftm->quadrature_filtered_input[phase])
+                    continue;
+                const uint32_t threshold = ftm_quadrature_input_threshold(ftm, phase);
+                const uint32_t until_event = ftm->quadrature_input_age[phase] >= threshold
+                                                 ? 0u
+                                                 : threshold - ftm->quadrature_input_age[phase];
+                if (until_event < segment)
+                    segment = until_event;
+            }
         }
         ftm_advance_fault_inputs(timing, instance, segment);
         advance_ftm_counter(timing, instance, segment);
@@ -1215,13 +1267,29 @@ void kinetis_timing_internal_advance_ftm(KinetisTiming* timing, uint8_t instance
             if (ftm->channel_input[channel] == ftm->channel_filtered_input[channel])
                 continue;
             ftm->channel_input_age[channel] += segment;
-            if (ftm->channel_input_age[channel] < ftm_input_threshold(ftm, channel))
+            if (ftm->channel_input_age[channel] <
+                ftm_routed_input_threshold(timing, instance, channel))
                 continue;
             const bool previous = ftm->channel_filtered_input[channel];
             ftm->channel_filtered_input[channel] = ftm->channel_input[channel];
             ftm->channel_input_age[channel] = 0u;
             ftm_capture_input(timing, instance, channel, previous,
                               ftm->channel_filtered_input[channel]);
+        }
+        if (ftm_has_independent_quadrature(timing, instance) && is_ftm_quadrature_enabled(ftm)) {
+            for (uint8_t phase = 0u; phase < 2u; phase++) {
+                if (ftm->quadrature_input[phase] == ftm->quadrature_filtered_input[phase])
+                    continue;
+                ftm->quadrature_input_age[phase] += segment;
+                if (ftm->quadrature_input_age[phase] <
+                    ftm_quadrature_input_threshold(ftm, phase))
+                    continue;
+                const bool previous = ftm->quadrature_filtered_input[phase];
+                ftm->quadrature_filtered_input[phase] = ftm->quadrature_input[phase];
+                ftm->quadrature_input_age[phase] = 0u;
+                ftm_quadrature_transition(timing, instance, phase, previous,
+                                          ftm->quadrature_filtered_input[phase]);
+            }
         }
     }
 }
