@@ -203,6 +203,7 @@ static void test_binary(TestState* state, Kinetis* device) {
 }
 
 static void test_symbol(TestState* state) {
+    static const char symbol_path[] = "kinetis_firmware_symbol_test.elf";
     uint8_t image[SYMBOL_IMAGE_SIZE];
     initialize_symbol_image(image);
     uint32_t address = UINT32_MAX;
@@ -213,6 +214,15 @@ static void test_symbol(TestState* state) {
            "!cortex_m4_elf_symbol_data(image, sizeof(image), missing, &address)");
     expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address),
            "!cortex_m4_elf_symbol_data(image, sizeof(image), NULL, &address)");
+    expect(state, write_file(symbol_path, image, sizeof(image)), "write symbol ELF file");
+    expect(state, cortex_m4_elf_symbol(symbol_path, "test", &address),
+           "cortex_m4_elf_symbol(symbol_path, test, &address)");
+    expect(state, address == 0x12345678u, "file symbol address == 0x12345678u");
+    expect(state, !cortex_m4_elf_symbol(symbol_path, "missing", &address),
+           "file symbol lookup rejects a missing name");
+    expect(state, !cortex_m4_elf_symbol("kinetis_missing_symbol.elf", "test", &address),
+           "file symbol lookup rejects a missing file");
+    (void)remove(symbol_path);
 
     image[0] = 0u;
     expect(state, !cortex_m4_elf_symbol_data(image, sizeof(image), "test", &address),

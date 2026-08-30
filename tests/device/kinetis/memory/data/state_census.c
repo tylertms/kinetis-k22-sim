@@ -87,6 +87,8 @@ void kinetis_data_test_test_state_census(TestState* state) {
     KinetisData* data = kinetis_data_test_create(state, &bus, KINETIS_PROFILE_MK22FN51212);
     if (data == NULL)
         return;
+    kinetis_data_set_clocks(data, 120000000u, 60000000u, 4000000u, 4000000u, true,
+                            KINETIS_DATA_STOP_NONE);
     for (uint32_t iteration = 0u; iteration < 50000u; iteration++) {
         const uint32_t random = next_random(&census);
         randomize_state(data, &census, random);
@@ -122,7 +124,7 @@ void kinetis_data_test_test_state_census(TestState* state) {
     }
     const bool census_matches =
         census.reads == 19524u && census.writes == 19140u && census.signals == 66372u &&
-        census.fingerprint == UINT64_C(10162107594302033538);
+        census.fingerprint == UINT64_C(6297896532637160248);
     if (!census_matches)
         fprintf(stderr,
                 "[census] reads=%" PRIu32 " writes=%" PRIu32 " signals=%" PRIu32

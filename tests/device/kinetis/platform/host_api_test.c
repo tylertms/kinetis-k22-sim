@@ -246,6 +246,14 @@ static void test_serial_api(TestState* state, Kinetis* device) {
            "I2C stop rejects a null device");
     expect(state, kinetis_i2c_lose_arbitration(device, KINETIS_SERIAL_I2C0),
            "kinetis_i2c_lose_arbitration(device, KINETIS_SERIAL_I2C0)");
+    serial_write(state, device, I2C0, 1u, 0x52u);
+    serial_write(state, device, I2C0 + 2u, 1u, 0xc0u);
+    expect(state, kinetis_i2c_address(device, KINETIS_SERIAL_I2C0, 0x29u, false),
+           "kinetis_i2c_address(device, KINETIS_SERIAL_I2C0, 0x29u, false)");
+    expect(state, !kinetis_i2c_address(device, KINETIS_SERIAL_I2C0, 0x2au, false),
+           "!kinetis_i2c_address(device, KINETIS_SERIAL_I2C0, 0x2au, false)");
+    expect(state, !kinetis_i2c_address(device, KINETIS_SERIAL_UART0, 0x29u, false),
+           "!kinetis_i2c_address(device, KINETIS_SERIAL_UART0, 0x29u, false)");
     expect(state, !kinetis_i2c_lose_arbitration(device, KINETIS_SERIAL_UART0),
            "!kinetis_i2c_lose_arbitration(device, KINETIS_SERIAL_UART0)");
     expect(state, kinetis_i2c_receive(device, KINETIS_SERIAL_I2C0, 0x6bu),

@@ -479,26 +479,38 @@ static bool ftm_pair_mode_disabled(const KinetisFtmState* ftm, uint8_t channel) 
     return ((ftm->registers[4] >> pair_shift) & 5u) == 0u;
 }
 
+static uint32_t ftm_up_count_position(const KinetisFtmState* ftm, uint16_t value) {
+    return (uint16_t)(value - ftm->initial);
+}
+
+static uint32_t ftm_up_count_period(const KinetisFtmState* ftm) {
+    return ftm_up_count_position(ftm, ftm->modulo) + 1u;
+}
+
+static bool ftm_up_count_contains(const KinetisFtmState* ftm, uint16_t value) {
+    return ftm_up_count_position(ftm, value) < ftm_up_count_period(ftm);
+}
+
 static void ftm_combine_pwm_advance(KinetisFtmState* ftm, uint8_t channel) {
     if ((channel & 1u) != 0u || !is_ftm_combine_mode(ftm, channel))
         return;
     const uint8_t edge_mode = (uint8_t)((ftm->channel_sc[channel] >> 2u) & 3u);
     if (edge_mode == 0u)
         return;
-    const uint32_t first_channel_compare = ftm->channel_value[channel];
-    const uint32_t second_channel_compare = ftm->channel_value[channel + 1u];
-    const bool first_compare_valid =
-        first_channel_compare >= ftm->initial && first_channel_compare <= ftm->modulo;
-    const bool second_compare_valid =
-        second_channel_compare >= ftm->initial && second_channel_compare <= ftm->modulo;
+    const uint16_t first_channel_compare = ftm->channel_value[channel];
+    const uint16_t second_channel_compare = ftm->channel_value[channel + 1u];
+    const uint32_t first_position = ftm_up_count_position(ftm, first_channel_compare);
+    const uint32_t second_position = ftm_up_count_position(ftm, second_channel_compare);
+    const uint32_t counter_position = ftm_up_count_position(ftm, ftm->counter);
+    const bool first_compare_valid = ftm_up_count_contains(ftm, first_channel_compare);
+    const bool second_compare_valid = ftm_up_count_contains(ftm, second_channel_compare);
     bool output_active = false;
     if (first_compare_valid) {
         if (second_compare_valid)
-            output_active = first_channel_compare < second_channel_compare &&
-                            ftm->counter >= first_channel_compare &&
-                            ftm->counter < second_channel_compare;
+            output_active = first_position < second_position && counter_position >= first_position &&
+                            counter_position < second_position;
         else
-            output_active = ftm->counter >= first_channel_compare;
+            output_active = counter_position >= first_position;
     }
     ftm->channel_output[channel] = edge_mode == 2u ? output_active : !output_active;
 }
@@ -545,11 +557,12 @@ static void ftm_edge_aligned_pwm_advance(KinetisFtmState* ftm, uint8_t channel, 
     if (edges == 0u)
         return;
     const bool high_true = edges == 2u;
-    const uint32_t compare = ftm->channel_value[channel];
+    const uint16_t compare = ftm->channel_value[channel];
     if (overflows != 0u) {
-        const bool active = compare < ftm->initial || compare > ftm->modulo
-                                ? true
-                                : compare != ftm->initial && ftm->counter < compare;
+        const uint32_t compare_position = ftm_up_count_position(ftm, compare);
+        const uint32_t counter_position = ftm_up_count_position(ftm, ftm->counter);
+        const bool active = !ftm_up_count_contains(ftm, compare) ||
+                            (compare_position != 0u && counter_position < compare_position);
         ftm->channel_output[channel] = high_true ? active : !active;
     } else if (matches != 0u) {
         ftm->channel_output[channel] = !high_true;
@@ -691,23 +704,26 @@ static void advance_ftm_ticks(KinetisTiming* timing, uint8_t instance, uint64_t 
     }
     const uint8_t channels = kinetis_timing_internal_ftm_channel_count(timing, instance);
     ftm_apply_counter_change_values(ftm, channels);
-    const uint32_t first = ftm->initial;
-    const uint32_t last = ftm->modulo >= first ? ftm->modulo : 0xffffu;
-    const uint32_t period = last - first + 1u;
-    const uint32_t start = ftm->counter < first || ftm->counter > last ? first : ftm->counter;
-    const uint64_t relative = (uint64_t)(start - first) + ticks;
+    const uint32_t period = ftm_up_count_period(ftm);
+    const uint32_t counter_position = ftm_up_count_position(ftm, ftm->counter);
+    const uint32_t start_position = counter_position < period ? counter_position : 0u;
+    const uint64_t relative = (uint64_t)start_position + ticks;
     const uint64_t overflows = relative / period;
     uint64_t matches[8] = {0};
     uint8_t match_mask = 0u;
     for (uint8_t channel = 0; channel < channels; channel++) {
-        const uint32_t compare = ftm->channel_value[channel];
-        const uint32_t distance = compare > start ? compare - start : period - (start - compare);
+        const uint16_t compare = ftm->channel_value[channel];
+        const uint32_t compare_position = ftm_up_count_position(ftm, compare);
+        const uint32_t distance = compare_position > start_position
+                                      ? compare_position - start_position
+                                      : period - (start_position - compare_position);
         const bool output_compare = kinetis_timing_internal_ftm_output_compare_mode(ftm, channel);
         const bool edge_aligned = ftm_edge_aligned_pwm_mode(ftm, channel);
         const bool combined = is_ftm_combine_mode(ftm, channel);
-        const bool valid_compare = output_compare ? compare >= first && compare <= last
-                                                  : compare > first && compare <= last;
-        const bool combine_compare = combined && compare >= first && compare <= last;
+        const bool valid_compare =
+            output_compare ? compare_position < period
+                           : compare_position != 0u && compare_position < period;
+        const bool combine_compare = combined && compare_position < period;
         if ((output_compare || edge_aligned || combine_compare) &&
             (valid_compare || combine_compare) && ticks >= distance) {
             matches[channel] = 1u + (ticks - distance) / period;
@@ -715,7 +731,7 @@ static void advance_ftm_ticks(KinetisTiming* timing, uint8_t instance, uint64_t 
             ftm_channel_event(timing, instance, channel);
         }
     }
-    ftm->counter = (uint16_t)(first + relative % period);
+    ftm->counter = (uint16_t)(ftm->initial + relative % period);
     ftm_overflow(timing, instance, overflows);
     ftm_fault_cycle_boundary(timing, instance, overflows != 0u);
     if (overflows != 0u && (ftm->registers[6] & (1u << 6u)) != 0u)

@@ -1,5 +1,38 @@
 #include "device/kinetis/timing/support.h"
 
+static void expect_pdb_back_to_back_mapping(TestState* state, KinetisTiming* timing,
+                                            Observations* observations, uint8_t adc_instance,
+                                            uint8_t adc_pretrigger, uint8_t expected_channel,
+                                            uint8_t expected_pretrigger) {
+    memset(timing->pdb_adc_locks, 0, sizeof(timing->pdb_adc_locks));
+    memset(timing->pdb_back_to_back_pending, 0, sizeof(timing->pdb_back_to_back_pending));
+    memset(timing->pdb_back_to_back_cycles, 0, sizeof(timing->pdb_back_to_back_cycles));
+    memset(timing->pdb_channel_trigger_pending, 0, sizeof(timing->pdb_channel_trigger_pending));
+    memset(timing->pdb_channel_trigger_cycles, 0, sizeof(timing->pdb_channel_trigger_cycles));
+    timing->pdb_registers[0][0x10u >> 2u] = 0x30003u;
+    timing->pdb_registers[0][0x38u >> 2u] = 0x30003u;
+    timing->pdb_sc[0] = 0x80u;
+    timing->pdb_mod[0] = UINT16_MAX;
+    timing->pdb_counter[0] = 0u;
+    timing->pdb_prescaler_cycles[0] = 0u;
+    timing->pdb_bus_remainder[0] = 0u;
+    timing->pdb_running[0] = true;
+    timing->pdb_bypass_cycles[0] = 0u;
+
+    const uint32_t triggers_before = observations->adc_triggers;
+    kinetis_timing_adc_complete(timing, adc_instance, adc_pretrigger);
+    expect(state,
+           timing->pdb_back_to_back_pending[0][expected_channel] ==
+                   (1u << expected_pretrigger) &&
+               timing->pdb_back_to_back_pending[0][expected_channel ^ 1u] == 0u,
+           "ADC acknowledgement selects one PDB back-to-back ring pretrigger");
+    kinetis_timing_internal_advance_pdb(
+        timing, 0u,
+        kinetis_timing_test_cycles_for_ticks(timing, 3u, timing->bus_clock_hz));
+    expect(state, observations->adc_triggers == triggers_before + 1u,
+           "one ADC acknowledgement triggers one back-to-back pretrigger");
+}
+
 void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
                                   Observations* observations) {
     const uint32_t original_core_clock_hz = timing->core_clock_hz;
@@ -101,6 +134,11 @@ void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
     expect(state, observations->adc_triggers == back_to_back_before + 2u,
            "PDB back-to-back trigger follows ADC acknowledgement");
 
+    expect_pdb_back_to_back_mapping(state, timing, observations, 0u, 0u, 0u, 1u);
+    expect_pdb_back_to_back_mapping(state, timing, observations, 0u, 1u, 1u, 0u);
+    expect_pdb_back_to_back_mapping(state, timing, observations, 1u, 0u, 1u, 1u);
+    expect_pdb_back_to_back_mapping(state, timing, observations, 1u, 1u, 0u, 0u);
+
     kinetis_timing_test_expect_write(state, timing, PDB_SC, 4, 0u);
     kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x150u, 4, 3u);
     kinetis_timing_test_expect_write(state, timing, PDB_SC + 0x154u, 4, 1u);
@@ -165,8 +203,55 @@ void kinetis_timing_test_test_pdb(TestState* state, KinetisTiming* timing,
     expect(state, !observations->irq[52], "!observations->irq[52]");
 }
 
+static void test_ftm_signed_up_count(TestState* state) {
+    KinetisTiming timing;
+    Observations observations = {0};
+    expect(state,
+           kinetis_timing_init(&timing, kinetis_profile_get(KINETIS_PROFILE_MKV10Z1287), 8000000u,
+                               32768u, kinetis_timing_test_signals(&observations)),
+           "signed FTM timing state initializes");
+    kinetis_timing_test_disable_watchdog_fixture(&timing);
+    kinetis_timing_test_expect_write(state, &timing, SIM_SCGC6, 4,
+                                     timing.sim_scgc6 | (1u << 24u));
+    kinetis_timing_test_expect_write(state, &timing, FTM0_MODE, 4, 5u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNTIN, 4, 0xf736u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_MOD, 4, 0x08c9u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0V, 4, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4, 0x10u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4, 8u);
+    kinetis_timing_advance(&timing, 2249u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4, 0xffffu);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C0SC, 4, 0x10u);
+    kinetis_timing_advance(&timing, 1u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4, 0u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_C0SC, 4, 0x90u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4, 0x10u);
+    kinetis_timing_advance(&timing, 2249u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4, 0x08c9u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_SC, 4, 8u);
+    kinetis_timing_advance(&timing, 1u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_CNT, 4, 0xf736u);
+    kinetis_timing_test_expect_read(state, &timing, FTM0_SC, 4, 0x88u);
+
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_C0SC, 4, 0x28u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_CNT, 4, 0u);
+    kinetis_timing_test_expect_write(state, &timing, FTM0_SC, 4, 8u);
+    kinetis_timing_advance(&timing, 4500u);
+    bool output = false;
+    expect(state, kinetis_timing_get_ftm_output(&timing, 0u, 0u, &output),
+           "signed edge-aligned PWM output is available");
+    expect(state, output, "signed edge-aligned PWM activates at CNTIN");
+    kinetis_timing_advance(&timing, 2250u);
+    expect(state, kinetis_timing_get_ftm_output(&timing, 0u, 0u, &output),
+           "signed edge-aligned PWM output remains available");
+    expect(state, !output, "signed edge-aligned PWM deactivates at its compare value");
+}
+
 void kinetis_timing_test_test_ftm(TestState* state, KinetisTiming* timing,
                                   Observations* observations) {
+    test_ftm_signed_up_count(state);
     kinetis_timing_test_expect_write(state, timing, SIM_SCGC6, 4, timing->sim_scgc6 | (1u << 24u));
     kinetis_timing_test_expect_write(state, timing, FTM0_MOD, 4, 3u);
     kinetis_timing_test_expect_write(state, timing, FTM0_C0V, 4, 2u);

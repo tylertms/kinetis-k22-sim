@@ -294,6 +294,18 @@ bool kinetis_i2c_detect_stop(Kinetis* device, KinetisSerialEndpoint endpoint) {
     return i2c_detect_bus_event(device, endpoint, false);
 }
 
+bool kinetis_i2c_address(Kinetis* device, KinetisSerialEndpoint endpoint, uint16_t address,
+                         bool read) {
+    if (!kinetis_internal_serial_endpoint_available(device, endpoint) ||
+        endpoint < KINETIS_SERIAL_I2C0 || endpoint > KINETIS_SERIAL_I2C2) {
+        return false;
+    }
+    const bool matched = kinetis_serial_i2c_slave_address(
+        &device->serial, (KinetisSerialEndpoint)endpoint, address, read);
+    kinetis_internal_refresh_serial_signals(device);
+    return matched;
+}
+
 bool kinetis_i2c_lose_arbitration(Kinetis* device, KinetisSerialEndpoint endpoint) {
     if (!kinetis_internal_serial_endpoint_available(device, endpoint) ||
         endpoint < KINETIS_SERIAL_I2C0 || endpoint > KINETIS_SERIAL_I2C2) {

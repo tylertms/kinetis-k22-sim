@@ -2,6 +2,9 @@
 
 #include "test.h"
 
+#include <inttypes.h>
+#include <stdio.h>
+
 typedef struct {
     uint32_t cases;
     uint32_t signals;
@@ -123,9 +126,12 @@ int main(void) {
     mix(&census, kinetis_timing_set_ftm_fault(&incomplete, 0u, 0u, false));
     mix(&census, kinetis_timing_trigger_ftm_hardware(&incomplete, 0u, 0u));
     mix(&census, kinetis_timing_get_ftm_output(&incomplete, 0u, 0u, &output));
-    expect(&state,
-           census.cases == 100000u && census.signals == 400000u &&
-               census.fingerprint == UINT64_C(8080721376136176376),
-           "FTM state census matches");
+    const bool census_matches = census.cases == 100000u && census.signals == 400000u &&
+                                census.fingerprint == UINT64_C(13147807567287714954);
+    if (!census_matches)
+        fprintf(stderr,
+                "[census] cases=%" PRIu32 " signals=%" PRIu32 " fingerprint=%" PRIu64 "\n",
+                census.cases, census.signals, census.fingerprint);
+    expect(&state, census_matches, "FTM state census matches");
     return test_finish(&state);
 }

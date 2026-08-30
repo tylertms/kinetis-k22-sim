@@ -404,6 +404,17 @@ bool cortex_m4_load_binary(Kinetis* device, const char* path, uint32_t load_addr
     return loaded;
 }
 
+bool cortex_m4_elf_symbol(const char* path, const char* name, uint32_t* address) {
+    uint8_t* image_data = NULL;
+    size_t image_size = 0u;
+    if (!load_file(path, &image_data, &image_size)) {
+        return false;
+    }
+    const bool found = cortex_m4_elf_symbol_data(image_data, image_size, name, address);
+    free(image_data);
+    return found;
+}
+
 CortexM4Coverage* cortex_m4_coverage_create_elf(const char* path) {
     uint8_t* image_data = NULL;
     size_t image_size = 0u;

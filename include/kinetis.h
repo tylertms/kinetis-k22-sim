@@ -197,6 +197,8 @@ bool kinetis_i2c_transfer(Kinetis* device, KinetisSerialEndpoint endpoint,
 bool kinetis_i2c_acknowledge(Kinetis* device, KinetisSerialEndpoint endpoint, bool acknowledge);
 bool kinetis_i2c_detect_start(Kinetis* device, KinetisSerialEndpoint endpoint);
 bool kinetis_i2c_detect_stop(Kinetis* device, KinetisSerialEndpoint endpoint);
+bool kinetis_i2c_address(Kinetis* device, KinetisSerialEndpoint endpoint, uint16_t address,
+                         bool read);
 bool kinetis_i2c_lose_arbitration(Kinetis* device, KinetisSerialEndpoint endpoint);
 bool kinetis_i2c_receive(Kinetis* device, KinetisSerialEndpoint endpoint, uint8_t value);
 bool kinetis_usb_token(Kinetis* device, uint8_t endpoint, uint8_t token, bool transmit);

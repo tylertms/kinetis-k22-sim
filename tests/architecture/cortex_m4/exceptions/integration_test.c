@@ -481,6 +481,53 @@ static void test_tail_chain_return(TestState* state) {
     cortex_m4_destroy(cpu);
 }
 
+static void test_armv6_m_motor_interrupt_arbitration(TestState* state) {
+    enum {
+        ADC0_IRQ = 15u,
+        ADC1_IRQ = 16u,
+        FTM3_IRQ = 22u,
+        PDB_IRQ = 29u,
+    };
+    ExceptionBus bus = {0};
+    CortexM4* cpu = create_cpu(state, &bus);
+    expect(state, cortex_m4_configure_architecture(cpu, CORTEX_M4_ARCHITECTURE_ARMV6_M),
+           "configure ARMv6-M motor interrupt processor");
+    expect(state, cortex_m4_configure_implementation(cpu, 32u, 2u, 0u),
+           "configure two-bit motor interrupt priorities");
+    cpu->irq_enabled[0] = (1u << ADC0_IRQ) | (1u << ADC1_IRQ) | (1u << FTM3_IRQ) | (1u << PDB_IRQ);
+    cpu->irq_priority[ADC0_IRQ] = 0x00u;
+    cpu->irq_priority[ADC1_IRQ] = 0x80u;
+    cpu->irq_priority[FTM3_IRQ] = 0x40u;
+    cpu->irq_priority[PDB_IRQ] = 0x80u;
+    write_vector(&bus, ADC0_IRQ + 16u, 0x301u);
+    write_vector(&bus, ADC1_IRQ + 16u, 0x321u);
+    write_vector(&bus, FTM3_IRQ + 16u, 0x341u);
+    write_vector(&bus, PDB_IRQ + 16u, 0x361u);
+    cortex_m4_set_irq_level(cpu, ADC0_IRQ, true);
+    cortex_m4_set_irq_level(cpu, ADC1_IRQ, true);
+    cortex_m4_set_irq_level(cpu, FTM3_IRQ, true);
+    cortex_m4_set_irq_level(cpu, PDB_IRQ, true);
+
+    expect(state, cortex_m4_take_pending_exception(cpu), "take highest-priority motor interrupt");
+    expect(state, (cpu->xpsr & 0x1ffu) == ADC0_IRQ + 16u,
+           "ADC0 wins simultaneous motor interrupts");
+    expect(state, !cortex_m4_take_pending_exception(cpu),
+           "lower-priority motor interrupts do not preempt ADC0");
+
+    cortex_m4_set_irq_level(cpu, ADC0_IRQ, true);
+    expect(state, cortex_m4_exception_return(cpu, cpu->registers[14]),
+           "continuously asserted ADC0 tail-chains");
+    expect(state, (cpu->xpsr & 0x1ffu) == ADC0_IRQ + 16u,
+           "continuously asserted ADC0 retains execution priority");
+
+    cortex_m4_set_irq_level(cpu, ADC0_IRQ, false);
+    expect(state, cortex_m4_exception_return(cpu, cpu->registers[14]),
+           "deasserted ADC0 releases the pending motor interrupts");
+    expect(state, (cpu->xpsr & 0x1ffu) == FTM3_IRQ + 16u,
+           "FTM3 wins over continuously pending ADC1 and PDB");
+    cortex_m4_destroy(cpu);
+}
+
 int main(void) {
     TestState state = {0};
     test_fault_lockup(&state);
@@ -497,5 +544,6 @@ int main(void) {
     test_fp_return_read_failures(&state);
     test_mpu_return_failure(&state);
     test_tail_chain_return(&state);
+    test_armv6_m_motor_interrupt_arbitration(&state);
     return test_finish(&state);
 }

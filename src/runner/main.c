@@ -15,21 +15,15 @@ typedef struct {
 } InitialWrite;
 
 typedef struct {
-    CortexM4* cpu;
     uint32_t addresses[16];
     uint32_t opcodes[16];
     size_t count;
-    bool frozen;
 } ExecutionTrace;
 
 static void record_trace(void* context, uint32_t address, uint32_t opcode, bool executed) {
     ExecutionTrace* trace = context;
-    if (trace->frozen || !executed)
+    if (!executed)
         return;
-    if ((cortex_m4_get_xpsr(trace->cpu) & 0x1ffu) != 0u) {
-        trace->frozen = true;
-        return;
-    }
     const size_t index = trace->count % (sizeof(trace->addresses) / sizeof(trace->addresses[0]));
     trace->addresses[index] = address;
     trace->opcodes[index] = opcode;
@@ -222,7 +216,7 @@ int main(int argc, char** argv) {
         kinetis_destroy(device);
         return EXIT_FAILURE;
     }
-    ExecutionTrace trace = {.cpu = kinetis_cpu(device)};
+    ExecutionTrace trace = {0};
     cortex_m4_set_trace(kinetis_cpu(device), record_trace, &trace);
     const CortexM4Result result = cortex_m4_run(kinetis_cpu(device), limits);
     const uint32_t fault_status = cortex_m4_get_fault_status(kinetis_cpu(device));
@@ -276,7 +270,7 @@ int main(int argc, char** argv) {
     CortexM4CoverageResult coverage_result = {0};
     if (coverage != NULL) {
         coverage_result = cortex_m4_coverage_result(coverage);
-        printf("coverage instructions=%zu/%zu %.2f%% branches=%zu/%zu %.2f%%\n",
+        printf("coverage instructions=%zu/%zu %.2f%% branch-sites=%zu/%zu %.2f%%\n",
                coverage_result.covered_instructions, coverage_result.total_instructions,
                coverage_result.instruction_coverage_percent, coverage_result.covered_branch_sites,
                coverage_result.total_branch_sites, coverage_result.branch_coverage_percent);
@@ -285,7 +279,7 @@ int main(int argc, char** argv) {
     }
     kinetis_destroy(device);
     const bool failed =
-        fault_status != 0 || result.stop == CORTEX_M4_STOP_CLOCK ||
+        fault_status != 0 || active_exception == 3u || result.stop == CORTEX_M4_STOP_CLOCK ||
         result.stop == CORTEX_M4_STOP_UNSUPPORTED || result.stop == CORTEX_M4_STOP_BUS_FAULT ||
         result.stop == CORTEX_M4_STOP_USAGE_FAULT || result.stop == CORTEX_M4_STOP_LOCKUP;
     const bool coverage_failed =

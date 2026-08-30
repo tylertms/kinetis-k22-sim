@@ -581,7 +581,8 @@ void kinetis_timing_adc_complete(KinetisTiming* timing, uint8_t instance, uint8_
         timing->pdb_adc_locks[pdb_instance][instance] &= (uint8_t)~(1u << pretrigger);
         const uint32_t channel_base = 0x10u + (uint32_t)acknowledgement * 0x28u;
         const uint32_t control = timing->pdb_registers[pdb_instance][channel_base >> 2u];
-        const uint8_t pending = (uint8_t)(control & (control >> 16u) & 3u);
+        const uint8_t pending =
+            (uint8_t)(control & (control >> 16u) & (1u << (pretrigger ^ 1u)));
         if (pending != 0u) {
             timing->pdb_back_to_back_pending[pdb_instance][acknowledgement] |= pending;
             timing->pdb_back_to_back_cycles[pdb_instance][acknowledgement] = 2u;
