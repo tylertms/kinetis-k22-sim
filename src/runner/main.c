@@ -64,7 +64,7 @@ static void print_usage(const char* program) {
             "[--package CODE] [--binary-address ADDRESS] "
             "[--max-instructions COUNT] "
             "[--max-cycles COUNT] [--stop-address ADDRESS] "
-            "[--write32 ADDRESS:VALUE] [--coverage] "
+            "[--write32 ADDRESS:VALUE] [--coverage] [--expect-instruction-limit] "
             "[--minimum-instructions-covered COUNT] [--minimum-branches-covered COUNT]\n",
             program);
 }
@@ -81,6 +81,7 @@ int main(int argc, char** argv) {
     uint64_t stop_address = 0;
     bool stop_address_set = false;
     bool coverage_requested = false;
+    bool expect_instruction_limit = false;
     KinetisProfile profile = KINETIS_PROFILE_COUNT;
     bool profile_set = false;
     KinetisPackage package = KINETIS_PACKAGE_DEFAULT;
@@ -92,6 +93,11 @@ int main(int argc, char** argv) {
     for (int argument_index = 2; argument_index < argc;) {
         if (strcmp(argv[argument_index], "--coverage") == 0) {
             coverage_requested = true;
+            argument_index++;
+            continue;
+        }
+        if (strcmp(argv[argument_index], "--expect-instruction-limit") == 0) {
+            expect_instruction_limit = true;
             argument_index++;
             continue;
         }
@@ -285,7 +291,13 @@ int main(int argc, char** argv) {
     const bool coverage_failed =
         coverage_result.covered_instructions < minimum_instructions_covered ||
         coverage_result.covered_branch_sites < minimum_branches_covered;
+    const bool instruction_limit_reached = result.stop == CORTEX_M4_STOP_LIMIT &&
+                                           limits.instruction_limit != 0u &&
+                                           result.instructions >= limits.instruction_limit;
+    const bool instruction_limit_mismatch =
+        instruction_limit_reached != expect_instruction_limit ||
+        (result.stop == CORTEX_M4_STOP_LIMIT && !instruction_limit_reached);
     if (coverage_failed)
         fprintf(stderr, "coverage minimum not reached\n");
-    return failed || coverage_failed ? EXIT_FAILURE : EXIT_SUCCESS;
+    return failed || coverage_failed || instruction_limit_mismatch ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -589,6 +589,40 @@ test(
   suite: ['runner', 'system'],
 )
 test(
+  'kinetis_firmware_runner_unexpected_instruction_limit_test',
+  kinetis_firmware_runner,
+  args: [
+    runner_images[0],
+    '--profile',
+    'MKV30F12810',
+    '--reset-address',
+    '0',
+    '--binary-address',
+    '0',
+    '--max-instructions',
+    '1',
+  ],
+  expected_fail: true,
+  suite: ['runner', 'system'],
+)
+test(
+  'kinetis_firmware_runner_expected_instruction_limit_test',
+  kinetis_firmware_runner,
+  args: [
+    runner_images[0],
+    '--profile',
+    'MKV30F12810',
+    '--reset-address',
+    '0',
+    '--binary-address',
+    '0',
+    '--max-instructions',
+    '1',
+    '--expect-instruction-limit',
+  ],
+  suite: ['runner', 'system'],
+)
+test(
   'kinetis_firmware_runner_fault_test',
   kinetis_firmware_runner,
   args: [
