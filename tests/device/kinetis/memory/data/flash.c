@@ -21,10 +21,10 @@ void kinetis_data_test_test_flash_flex_copy(TestState* state) {
     kinetis_data_test_write_value(state, data, FTFA, 1, 0x80u);
     expect(state, kinetis_data_test_read_value(state, data, FTFA, 1) == 0,
            "kinetis_data_test_read_value(state, data, FTFA, 1) == 0");
-    expect(state, kinetis_data_test_load(bus.flash, 0x1000, 4) == 0x78563412u,
-           "kinetis_data_test_load(bus.flash, 0x1000, 4) == 0x78563412u");
-    expect(state, kinetis_data_test_load(bus.flash, 0x1004, 4) == 0xf0debc9au,
-           "kinetis_data_test_load(bus.flash, 0x1004, 4) == 0xf0debc9au");
+    expect(state, kinetis_data_test_load(bus.flash, 0x1000, 4) == 0x12345678u,
+           "kinetis_data_test_load(bus.flash, 0x1000, 4) == 0x12345678u");
+    expect(state, kinetis_data_test_load(bus.flash, 0x1004, 4) == 0x9abcdef0u,
+           "kinetis_data_test_load(bus.flash, 0x1004, 4) == 0x9abcdef0u");
     kinetis_data_advance(data, 40);
     expect(state, kinetis_data_test_read_value(state, data, FTFA, 1) == 0x80u,
            "kinetis_data_test_read_value(state, data, FTFA, 1) == 0x80u");
@@ -273,17 +273,17 @@ void kinetis_data_test_test_flash_commands_and_failures(TestState* state) {
 
     kinetis_data_test_store(bus.flash, 0x2000u, 4, 0x12345678u);
     kinetis_data_test_write_fccob(state, data, 4u, 1u);
-    kinetis_data_test_write_fccob(state, data, 8u, 0x78u);
-    kinetis_data_test_write_fccob(state, data, 9u, 0x56u);
-    kinetis_data_test_write_fccob(state, data, 10u, 0x34u);
-    kinetis_data_test_write_fccob(state, data, 11u, 0x12u);
+    kinetis_data_test_write_fccob(state, data, 8u, 0x12u);
+    kinetis_data_test_write_fccob(state, data, 9u, 0x34u);
+    kinetis_data_test_write_fccob(state, data, 10u, 0x56u);
+    kinetis_data_test_write_fccob(state, data, 11u, 0x78u);
     kinetis_data_test_flash_command(state, data, 0x02u, 0x2000u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) == 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) == 0u");
-    kinetis_data_test_write_fccob(state, data, 8u, 0x87u);
-    kinetis_data_test_write_fccob(state, data, 9u, 0x65u);
-    kinetis_data_test_write_fccob(state, data, 10u, 0x43u);
-    kinetis_data_test_write_fccob(state, data, 11u, 0x21u);
+    kinetis_data_test_write_fccob(state, data, 8u, 0x21u);
+    kinetis_data_test_write_fccob(state, data, 9u, 0x43u);
+    kinetis_data_test_write_fccob(state, data, 10u, 0x65u);
+    kinetis_data_test_write_fccob(state, data, 11u, 0x87u);
     kinetis_data_test_flash_command(state, data, 0x02u, 0x2000u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) != 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1) & 1u) != 0u");
@@ -358,10 +358,10 @@ void kinetis_data_test_test_flash_commands_and_failures(TestState* state) {
     data = kinetis_data_test_create_without_program(state, &bus, KINETIS_PROFILE_MK22FN51212);
     kinetis_data_test_write_fccob(state, data, 0u, 0x06u);
     kinetis_data_test_set_flash_address(state, data, 0x1000u);
-    kinetis_data_test_write_fccob(state, data, 4u, 0x78u);
-    kinetis_data_test_write_fccob(state, data, 5u, 0x56u);
-    kinetis_data_test_write_fccob(state, data, 6u, 0x34u);
-    kinetis_data_test_write_fccob(state, data, 7u, 0x12u);
+    kinetis_data_test_write_fccob(state, data, 4u, 0x12u);
+    kinetis_data_test_write_fccob(state, data, 5u, 0x34u);
+    kinetis_data_test_write_fccob(state, data, 6u, 0x56u);
+    kinetis_data_test_write_fccob(state, data, 7u, 0x78u);
     launch_flash(state, data, 40u);
     expect(state, kinetis_data_test_load(bus.flash, 0x1000u, 4) == 0x12345678u,
            "kinetis_data_test_load(bus.flash, 0x1000u, 4) == 0x12345678u");
@@ -386,8 +386,8 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     const uint8_t longword[4] = {0x11u, 0x22u, 0x33u, 0x44u};
     kinetis_data_test_set_flash_data(state, data, longword, sizeof(longword));
     kinetis_data_test_flash_command(state, data, 0x06u, 0x2000u, 40u);
-    expect(state, kinetis_data_test_load(bus.flash, 0x2000u, 4u) == 0x44332211u,
-           "kinetis_data_test_load(bus.flash, 0x2000u, 4u) == 0x44332211u");
+    expect(state, kinetis_data_test_load(bus.flash, 0x2000u, 4u) == 0x11223344u,
+           "kinetis_data_test_load(bus.flash, 0x2000u, 4u) == 0x11223344u");
     kinetis_data_test_flash_command(state, data, 0x06u, 0x2000u, 40u);
     expect(state, (kinetis_data_test_read_value(state, data, FTFA, 1u) & 1u) != 0u,
            "(kinetis_data_test_read_value(state, data, FTFA, 1u) & 1u) != 0u");
@@ -555,10 +555,10 @@ void kinetis_data_test_test_flash_command_semantics(TestState* state) {
     const uint8_t phrase[8] = {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u};
     kinetis_data_test_set_flash_data(state, data, phrase, sizeof(phrase));
     kinetis_data_test_flash_command(state, data, 0x07u, 0x800000u, 40u);
-    expect(state, kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == 0x04030201u,
-           "kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == 0x04030201u");
-    expect(state, kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x08070605u,
-           "kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x08070605u");
+    expect(state, kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == 0x01020304u,
+           "kinetis_data_test_read_value(state, data, 0x10000000u, 4u) == 0x01020304u");
+    expect(state, kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x05060708u,
+           "kinetis_data_test_read_value(state, data, 0x10000004u, 4u) == 0x05060708u");
     kinetis_data_destroy(data);
 
     memset(&bus, 0, sizeof(bus));

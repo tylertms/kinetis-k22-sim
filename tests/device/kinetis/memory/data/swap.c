@@ -338,10 +338,10 @@ static void test_flash_partition_codes(TestState* state) {
             expect(
                 state,
                 kinetis_data_test_read_value(state, data, 0x10000000u + cases[index].data_size - 8u,
-                                             4u) == 0x07050301u,
+                                             4u) == 0x01030507u,
                 "kinetis_data_test_read_value(state, data, 0x10000000u + cases[index].data_size - "
                 "8u, 4u) "
-                "== 0x07050301u");
+                "== 0x01030507u");
             kinetis_data_test_clear_flash_status(state, data);
             kinetis_data_test_flash_command(state, data, 0x07u, 0x800000u + cases[index].data_size,
                                             40u);

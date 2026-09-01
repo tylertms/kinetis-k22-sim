@@ -76,7 +76,11 @@ int main(void) {
 
     execute(&state, device, 0xb208u, 0, 0x00008001u, 0);
     expect(&state, result(device) == 0xffff8001u, "result(device) == 0xffff8001u");
+    execute(&state, device, 0xb208u, 0, 0x12348001u, 0);
+    expect(&state, result(device) == 0xffff8001u, "result(device) == 0xffff8001u");
     execute(&state, device, 0xb248u, 0, 0x00000081u, 0);
+    expect(&state, result(device) == 0xffffff81u, "result(device) == 0xffffff81u");
+    execute(&state, device, 0xb248u, 0, 0x12345681u, 0);
     expect(&state, result(device) == 0xffffff81u, "result(device) == 0xffffff81u");
     execute(&state, device, 0xb288u, 0, 0x12345678u, 0);
     expect(&state, result(device) == 0x5678u, "result(device) == 0x5678u");

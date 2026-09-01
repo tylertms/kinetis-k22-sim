@@ -286,7 +286,8 @@ static bool package_serial_extension(KinetisPeripheralId id) {
 
 bool kinetis_internal_manifest_extension(KinetisPeripheralId id) {
     return package_serial_extension(id) || id == KINETIS_PERIPHERAL_SDHC ||
-           id == KINETIS_PERIPHERAL_DAC1;
+           id == KINETIS_PERIPHERAL_DAC1 || id == KINETIS_PERIPHERAL_FTFA ||
+           id == KINETIS_PERIPHERAL_FTFE;
 }
 
 KinetisPeripheralId kinetis_internal_serial_endpoint_peripheral(KinetisSerialEndpoint endpoint) {

@@ -1353,6 +1353,10 @@ static void test_flash_access_control(TestState* state) {
     if (device == NULL)
         return;
     KinetisData* data = device->data;
+    write32(state, device, FTFA + 4u, 0x11223344u);
+    expect(state, data->flash[4] == 0x44u && data->flash[5] == 0x33u &&
+                      data->flash[6] == 0x22u && data->flash[7] == 0x11u,
+           "MKV10 accepts packed FCCOB writes used by the MCUX flash driver");
     for (uint32_t offset = 0x1cu; offset <= 0x1fu; offset++)
         expect(state, data_read8(state, data, FTFA + offset) == 0xffu,
                "MKV10 XACC reset value comes from erased IFR records");

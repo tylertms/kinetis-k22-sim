@@ -8,6 +8,7 @@ uint32_t cortex_m4_internal_visible_pc32(const CortexM4* cpu) { return cpu->regi
 
 int32_t cortex_m4_internal_sign_extend(uint32_t value, uint8_t width) {
     const uint32_t sign = 1u << (width - 1u);
+    value &= UINT32_MAX >> (32u - width);
     return (int32_t)((value ^ sign) - sign);
 }
 

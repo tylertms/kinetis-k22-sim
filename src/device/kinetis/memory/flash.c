@@ -136,10 +136,10 @@ static bool flash_program_words(KinetisData* data, uint32_t address, uint8_t wor
                                 bool* verify_failure) {
     for (uint8_t word_index = 0; word_index < words; word_index++) {
         const uint8_t offset = (uint8_t)(4u + word_index * 4u);
-        const uint32_t program_word = (uint32_t)flash_fccob(data, offset) |
-                                      ((uint32_t)flash_fccob(data, offset + 1u) << 8u) |
-                                      ((uint32_t)flash_fccob(data, offset + 2u) << 16u) |
-                                      ((uint32_t)flash_fccob(data, offset + 3u) << 24u);
+        const uint32_t program_word = (uint32_t)flash_fccob(data, offset + 3u) |
+                                      ((uint32_t)flash_fccob(data, offset + 2u) << 8u) |
+                                      ((uint32_t)flash_fccob(data, offset + 1u) << 16u) |
+                                      ((uint32_t)flash_fccob(data, offset) << 24u);
         uint32_t existing_word = 0;
         if (!flash_memory_load(data, address + (uint32_t)word_index * 4u, 4u, &existing_word))
             return false;
@@ -657,8 +657,8 @@ static void flash_execute(KinetisData* data) {
         uint32_t actual = 0;
         const uint8_t margin = flash_fccob(data, 4u);
         const uint32_t expected =
-            (uint32_t)flash_fccob(data, 8u) | ((uint32_t)flash_fccob(data, 9u) << 8u) |
-            ((uint32_t)flash_fccob(data, 10u) << 16u) | ((uint32_t)flash_fccob(data, 11u) << 24u);
+            (uint32_t)flash_fccob(data, 11u) | ((uint32_t)flash_fccob(data, 10u) << 8u) |
+            ((uint32_t)flash_fccob(data, 9u) << 16u) | ((uint32_t)flash_fccob(data, 8u) << 24u);
         bool data_flash = false;
         uint32_t offset = 0;
         valid = margin >= 1u && margin <= 2u && (address & 3u) == 0u &&

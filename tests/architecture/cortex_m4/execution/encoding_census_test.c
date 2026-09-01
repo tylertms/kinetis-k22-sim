@@ -163,7 +163,7 @@ int main(int argc, char** argv) {
     const bool thumb16_matches =
         thumb16.examined_count == 196608u && thumb16.permitted_count == 185351u &&
         thumb16.executed_count == 146023u &&
-        thumb16.fingerprint == UINT64_C(1911476509732320621);
+        thumb16.fingerprint == UINT64_C(8433272003838538605);
     if (!thumb16_matches) {
         fprintf(stderr,
                 "[census] thumb16 examined=%" PRIu64 " permitted=%" PRIu64 " executed=%" PRIu64

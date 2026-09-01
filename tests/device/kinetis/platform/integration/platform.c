@@ -117,7 +117,7 @@ void kinetis_integration_test_expect_integrated_flash_command(TestState* state, 
     expect(state, kinetis_integration_test_read32(device, target_address, &read_value),
            "kinetis_integration_test_read32(device, target_address, &read_value)");
     expect(state, read_value == UINT32_MAX, "read_value == UINT32_MAX");
-    const uint8_t command[8] = {0x06u, 0x00u, 0x10u, 0x00u, 0x78u, 0x56u, 0x34u, 0x12u};
+    const uint8_t command[8] = {0x06u, 0x00u, 0x10u, 0x00u, 0x12u, 0x34u, 0x56u, 0x78u};
     for (uint8_t command_index = 0u; command_index < sizeof(command); command_index++)
         expect(state,
                kinetis_integration_test_cpu_write8(device, flash_fccob_address(command_index),
